@@ -1,0 +1,47 @@
+# Monorepo root ignore for tripblogger_api + tripblogger_app
+
+# Dependencies
+**/node_modules/
+
+# Environment files (keep examples)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+**/logs/
+**/*.log
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/pnpm-debug.log*
+
+# Build outputs
+**/dist/
+**/build/
+**/coverage/
+**/.turbo/
+**/.cache/
+**/.eslintcache
+
+# TypeScript
+**/*.tsbuildinfo
+
+# Expo / React Native
+**/.expo/
+**/.expo-shared/
+**/web-build/
+**/.metro-health-check*
+**/android/
+**/ios/
+
+# OS / Editor
+**/.DS_Store
+**/Thumbs.db
+**/.idea/
+**/.vscode/
+
+# Runtime / temp files
+**/tmp/
+**/temp/
+**/*.tmp
