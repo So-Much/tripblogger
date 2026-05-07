@@ -24,8 +24,8 @@ import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
 
 const loginSchema = z.object({
-  username: z.string().min(3, 'Username tối thiểu 3 ký tự'),
-  password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
+  username: z.string().min(3, 'Username must be at least 3 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -59,7 +59,7 @@ export function LoginScreen() {
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {
-      setSubmitError(formatApiError(error, 'Đăng nhập thất bại'));
+      setSubmitError(formatApiError(error, t('loginFailed')));
     }
   });
 
@@ -71,7 +71,7 @@ export function LoginScreen() {
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {
-      setSubmitError(formatApiError(error, 'Google sign-in thất bại'));
+      setSubmitError(formatApiError(error, t('googleSignInFailed')));
     }
   };
 
@@ -145,7 +145,7 @@ export function LoginScreen() {
 
               <Pressable style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
                 <ThemedText type="defaultSemiBold" style={styles.signInText}>
-                  {loginMutation.isPending ? 'Signing in…' : 'Sign in'}
+                  {loginMutation.isPending ? t('signingIn') : t('signIn')}
                 </ThemedText>
               </Pressable>
 
@@ -154,11 +154,11 @@ export function LoginScreen() {
               </Pressable>
 
               <Pressable onPress={() => router.push('/register')}>
-                <ThemedText style={[styles.skip, { color: muted }]}>Chưa có tài khoản? Đăng ký</ThemedText>
+                <ThemedText style={[styles.skip, { color: muted }]}>{t('noAccountRegister')}</ThemedText>
               </Pressable>
 
               <Pressable onPress={() => router.replace('/')}>
-                <ThemedText style={[styles.skip, { color: muted }]}>Tiếp tục không đăng nhập</ThemedText>
+                <ThemedText style={[styles.skip, { color: muted }]}>{t('continueWithoutLogin')}</ThemedText>
               </Pressable>
 
               <Pressable

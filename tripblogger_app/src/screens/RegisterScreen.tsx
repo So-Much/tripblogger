@@ -23,12 +23,12 @@ import { useI18n } from '@/src/i18n';
 
 const registerSchema = z
   .object({
-    username: z.string().min(3, 'Username tối thiểu 3 ký tự'),
-    password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
-    confirmPassword: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
+    username: z.string().min(3, 'Username must be at least 3 characters'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string().min(8, 'Password must be at least 8 characters'),
   })
   .refine((v) => v.password === v.confirmPassword, {
-    message: 'Mật khẩu nhập lại không khớp',
+    message: 'Passwords do not match',
     path: ['confirmPassword'],
   });
 
@@ -64,7 +64,7 @@ export function RegisterScreen() {
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {
-      setSubmitError(formatApiError(error, 'Đăng ký thất bại'));
+      setSubmitError(formatApiError(error, t('registerFailed')));
     }
   });
 
@@ -152,12 +152,12 @@ export function RegisterScreen() {
 
               <Pressable style={[styles.signUpButton, { backgroundColor: cta }]} onPress={onSubmit}>
                 <ThemedText type="defaultSemiBold" style={styles.signUpText}>
-                  {registerMutation.isPending ? 'Creating account…' : 'Create account'}
+                  {registerMutation.isPending ? t('creatingAccount') : t('createAccount')}
                 </ThemedText>
               </Pressable>
 
               <Pressable onPress={() => router.push('/login')}>
-                <ThemedText style={[styles.switchText, { color: muted }]}>Đã có tài khoản? Đăng nhập</ThemedText>
+                <ThemedText style={[styles.switchText, { color: muted }]}>{t('hasAccountLogin')}</ThemedText>
               </Pressable>
               <Pressable
                 style={styles.homeLinkRow}

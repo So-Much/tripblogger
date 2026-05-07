@@ -7,9 +7,11 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
 import { useAuthStore } from '@/src/store/auth.store';
+import { useI18n } from '@/src/i18n';
 
 export function ProfileScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const me = useAuthStore((s) => s.me);
   const isMember = me?.role === 'MEMBER';
   const logout = useAuthStore((s) => s.logout);
@@ -27,7 +29,7 @@ export function ProfileScreen() {
         followers: '12.4k',
         following: '620',
         posts: '89',
-        bio: 'Thành viên TripBlogger.',
+        bio: t('profileMemberBio'),
       }
     : {
         displayName: 'Member',
@@ -35,7 +37,7 @@ export function ProfileScreen() {
         followers: '—',
         following: '—',
         posts: '—',
-        bio: 'Đang tải hồ sơ…',
+        bio: t('profileLoadingBio'),
       };
 
   return (
@@ -66,7 +68,7 @@ export function ProfileScreen() {
             <IconSymbol name="chevron.left" color={accent} size={24} />
           </Pressable>
           <ThemedText type="subtitle" style={{ flex: 1, textAlign: 'center', marginRight: 40 }}>
-            Hồ sơ
+            {t('profileTitle')}
           </ThemedText>
         </View>
 
@@ -75,7 +77,7 @@ export function ProfileScreen() {
             <ProfileSummaryCard profile={profile} />
 
             <ThemedText style={{ color: muted, fontSize: 14, lineHeight: 20 }}>
-              Quản lý đơn hàng, ví, voucher và cài đặt bảo mật sẽ được bổ sung ở các bước tiếp theo.
+              {t('profileMoreFeaturesHint')}
             </ThemedText>
 
             <Pressable
@@ -86,7 +88,7 @@ export function ProfileScreen() {
               }}
             >
               <ThemedText type="defaultSemiBold" style={styles.logoutText}>
-                Đăng xuất
+                {t('logout')}
               </ThemedText>
             </Pressable>
           </>
@@ -94,21 +96,21 @@ export function ProfileScreen() {
           <View style={[styles.guestCard, { borderColor: border, backgroundColor: card }]}>
             <IconSymbol name="person.crop.circle.fill" color={accent} size={48} />
             <ThemedText type="subtitle" style={styles.guestTitle}>
-              Đăng nhập để mở Profile cá nhân
+              {t('profileGuestCtaTitle')}
             </ThemedText>
             <ThemedText style={{ color: muted, textAlign: 'center' }}>
-              Khi đăng nhập bạn sẽ xem được hồ sơ cá nhân và các tiện ích member.
+              {t('profileGuestCtaSubtitle')}
             </ThemedText>
             <Pressable style={[styles.authButton, { backgroundColor: accent }]} onPress={() => router.push('/login')}>
               <ThemedText type="defaultSemiBold" style={styles.authButtonText}>
-                Đăng nhập
+                {t('login')}
               </ThemedText>
             </Pressable>
             <Pressable
               style={[styles.authOutlineButton, { borderColor: border }]}
               onPress={() => router.push('/register')}
             >
-              <ThemedText type="defaultSemiBold">Tạo tài khoản mới</ThemedText>
+              <ThemedText type="defaultSemiBold">{t('createAccount')}</ThemedText>
             </Pressable>
           </View>
         )}

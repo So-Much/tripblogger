@@ -17,11 +17,14 @@ import { FEED_POSTS } from '@/src/mocks/feed.mock';
 import { FEED_STORIES } from '@/src/mocks/stories.mock';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
+import { useAuthStore } from '@/src/store/auth.store';
 
 export function HomeScreen() {
   const router = useRouter();
-  const meQuery = useMeQuery();
+  useMeQuery();
   const { t } = useI18n();
+  const me = useAuthStore((s) => s.me);
+  const hasAccessToken = Boolean(useAuthStore((s) => s.tokens?.accessToken));
   const cta = useThemeColor({}, 'cta');
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
@@ -30,13 +33,13 @@ export function HomeScreen() {
   const text = useThemeColor({}, 'text');
   const insets = useSafeAreaInsets();
 
-  const isMember = meQuery.data?.role === 'MEMBER';
+  const isMember = hasAccessToken && me?.role === 'MEMBER';
 
   const memberProfile =
-    isMember && meQuery.data?.profile
+    isMember && me?.profile
       ? {
-          displayName: meQuery.data.profile.displayName ?? meQuery.data.profile.username,
-          handle: `@${meQuery.data.profile.username}`,
+          displayName: me.profile.displayName ?? me.profile.username,
+          handle: `@${me.profile.username}`,
           followers: '12.4k',
           following: '620',
           posts: '89',
@@ -90,10 +93,10 @@ export function HomeScreen() {
 
         <View style={[styles.welcomeCard, { borderColor: border, backgroundColor: card }]}>
           <ThemedText type="defaultSemiBold" style={[styles.welcomeTitle, { color: text }]}>
-            {isMember ? 'Ready for your next trip?' : 'Discover travel inspiration today'}
+            {isMember ? t('homeHeroTitleMember') : t('homeHeroTitleGuest')}
           </ThemedText>
           <ThemedText style={{ color: muted }}>
-            {isMember ? 'New stories and hotel deals updated daily.' : 'Browse posts, save ideas, and sign in when you are ready.'}
+            {isMember ? t('homeHeroSubtitleMember') : t('homeHeroSubtitleGuest')}
           </ThemedText>
           {!isMember ? (
             <View style={styles.guestActions}>

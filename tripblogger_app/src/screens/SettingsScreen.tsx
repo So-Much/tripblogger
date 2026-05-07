@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -67,6 +67,14 @@ export function SettingsScreen() {
   const initialAvatar = useMemo(() => (me?.profile ? me.profile.avatarUrl ?? '' : ''), [me?.profile]);
   const [displayName, setDisplayName] = useState(initialDisplay);
   const [avatarUrl, setAvatarUrl] = useState(initialAvatar);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showAvatarEditor, setShowAvatarEditor] = useState(false);
+  const avatarGlyph = (isMember ? displayName || me?.profile?.username : 'G').trim().charAt(0).toUpperCase();
+
+  useEffect(() => {
+    setDisplayName(initialDisplay);
+    setAvatarUrl(initialAvatar);
+  }, [initialDisplay, initialAvatar]);
 
   const saveProfile = () => {
     if (!me?.profile) return;
@@ -78,6 +86,8 @@ export function SettingsScreen() {
         avatarUrl: avatarUrl.trim() || null,
       },
     });
+    setIsEditingProfile(false);
+    setShowAvatarEditor(false);
   };
 
   return (
@@ -97,50 +107,91 @@ export function SettingsScreen() {
           {t('settingsTitle')}
         </ThemedText>
         <ThemedText style={{ color: muted }}>{t('settingsSubtitle')}</ThemedText>
-        <View style={[styles.accountBadge, { borderColor: border, backgroundColor: card }]}>
-          <ThemedText type="defaultSemiBold">{isMember ? (me?.profile?.displayName ?? me?.profile?.username) : 'Guest mode'}</ThemedText>
-          <ThemedText style={{ color: muted }}>
-            {isMember ? `@${me?.profile?.username}` : 'Sign in to sync profile and preferences'}
-          </ThemedText>
-        </View>
-
-        <SectionCard>
-          <ThemedText type="subtitle">{t('profileSection')}</ThemedText>
+        <View style={[styles.profileHeaderCard, { borderColor: border, backgroundColor: card }]}>
           {isMember ? (
-            <View style={styles.block}>
-              <ThemedText style={{ color: muted }}>{t('displayName')}</ThemedText>
-              <TextInput
-                value={displayName}
-                onChangeText={setDisplayName}
-                style={[styles.input, { borderColor: border, color: text }]}
-                placeholder={me?.profile?.username ?? ''}
-                placeholderTextColor={muted}
-              />
-              <ThemedText style={{ color: muted }}>{t('avatarUrl')}</ThemedText>
-              <TextInput
-                value={avatarUrl}
-                onChangeText={setAvatarUrl}
-                style={[styles.input, { borderColor: border, color: text }]}
-                placeholderTextColor={muted}
-                autoCapitalize="none"
-              />
-              <Pressable style={[styles.ctaButton, { backgroundColor: cta }]} onPress={saveProfile}>
-                <ThemedText type="defaultSemiBold" style={styles.ctaText}>
-                  {t('saveProfile')}
-                </ThemedText>
+            <>
+              <Pressable
+                style={[styles.avatarCircle, { borderColor: border }]}
+                onPress={() => isEditingProfile && setShowAvatarEditor((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={t('avatarUrl')}
+              >
+                <ThemedText type="title">{avatarGlyph}</ThemedText>
               </Pressable>
-            </View>
+              {isEditingProfile ? (
+                <View style={styles.editBlock}>
+                  <TextInput
+                    value={displayName}
+                    onChangeText={setDisplayName}
+                    style={[styles.nameInput, { borderColor: border, color: text }]}
+                    placeholder={me?.profile?.username ?? ''}
+                    placeholderTextColor={muted}
+                    textAlign="center"
+                  />
+                  <ThemedText style={{ color: muted, textAlign: 'center' }}>{t('tapAvatarToEdit')}</ThemedText>
+                  {showAvatarEditor ? (
+                    <TextInput
+                      value={avatarUrl}
+                      onChangeText={setAvatarUrl}
+                      style={[styles.input, styles.avatarInputInline, { borderColor: border, color: text }]}
+                      placeholder={t('avatarUrl')}
+                      placeholderTextColor={muted}
+                      autoCapitalize="none"
+                    />
+                  ) : null}
+                  <View style={styles.editActionsRow}>
+                    <Pressable
+                      style={[styles.secondaryButton, { borderColor: border }]}
+                      onPress={() => {
+                        setDisplayName(initialDisplay);
+                        setAvatarUrl(initialAvatar);
+                        setIsEditingProfile(false);
+                        setShowAvatarEditor(false);
+                      }}
+                    >
+                      <ThemedText type="defaultSemiBold" style={{ color: muted }}>
+                        {t('doneEditing')}
+                      </ThemedText>
+                    </Pressable>
+                    <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={saveProfile}>
+                      <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+                        {t('saveProfile')}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <ThemedText type="subtitle" style={styles.profileNameCenter}>
+                    {displayName || me?.profile?.username}
+                  </ThemedText>
+                  <ThemedText style={{ color: muted }}>{`@${me?.profile?.username}`}</ThemedText>
+                  <Pressable
+                    style={[styles.secondaryButton, { borderColor: border }]}
+                    onPress={() => setIsEditingProfile(true)}
+                  >
+                    <ThemedText type="defaultSemiBold">{t('editProfile')}</ThemedText>
+                  </Pressable>
+                </>
+              )}
+            </>
           ) : (
-            <View style={styles.block}>
-              <ThemedText style={{ color: muted }}>{t('profileGuestHint')}</ThemedText>
-              <Pressable style={[styles.ctaButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
+            <>
+              <View style={[styles.avatarCircle, { borderColor: border }]}>
+                <ThemedText type="title">{avatarGlyph}</ThemedText>
+              </View>
+              <ThemedText type="subtitle" style={styles.profileNameCenter}>
+                {t('settingsGuestMode')}
+              </ThemedText>
+              <ThemedText style={{ color: muted }}>{t('settingsGuestSyncHint')}</ThemedText>
+              <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
                 <ThemedText type="defaultSemiBold" style={styles.ctaText}>
                   {t('login')}
                 </ThemedText>
               </Pressable>
-            </View>
+            </>
           )}
-        </SectionCard>
+        </View>
 
         <SectionCard>
           <ThemedText type="subtitle">{t('languageSection')}</ThemedText>
@@ -159,35 +210,19 @@ export function SettingsScreen() {
           </View>
         </SectionCard>
 
-        <SectionCard>
-          <ThemedText type="subtitle">{t('accountSection')}</ThemedText>
-          <View style={styles.block}>
-            {isMember ? (
-              <Pressable
-                style={[styles.ctaButton, { backgroundColor: cta }]}
-                onPress={() => {
-                  logout();
-                  router.replace('/');
-                }}
-              >
-                <ThemedText type="defaultSemiBold" style={styles.ctaText}>
-                  {t('logout')}
-                </ThemedText>
-              </Pressable>
-            ) : (
-              <>
-                <Pressable style={[styles.ctaButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
-                  <ThemedText type="defaultSemiBold" style={styles.ctaText}>
-                    {t('login')}
-                  </ThemedText>
-                </Pressable>
-                <Pressable style={[styles.outlineButton, { borderColor: border }]} onPress={() => router.push('/register')}>
-                  <ThemedText type="defaultSemiBold">{t('register')}</ThemedText>
-                </Pressable>
-              </>
-            )}
-          </View>
-        </SectionCard>
+        {isMember ? (
+          <Pressable
+            style={[styles.inlineLogoutButton, { borderColor: border }]}
+            onPress={() => {
+              logout();
+              router.replace('/');
+            }}
+          >
+            <ThemedText type="defaultSemiBold" style={{ color: muted }}>
+              {t('logout')}
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </ThemedView>
   );
@@ -197,12 +232,43 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   content: { gap: 12 },
   title: { fontSize: 30, lineHeight: 36 },
-  accountBadge: {
+  profileHeaderCard: {
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 6,
+    alignItems: 'center',
+  },
+  avatarCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  profileNameCenter: {
+    textAlign: 'center',
+  },
+  editBlock: {
+    width: '100%',
+    gap: 8,
+    marginTop: 2,
+  },
+  nameInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    gap: 2,
+    minWidth: 180,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  editActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   block: { gap: 8, marginTop: 8 },
   input: {
@@ -226,11 +292,30 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   ctaText: { color: '#fff' },
-  outlineButton: {
-    borderWidth: 1,
+  primaryButton: {
     borderRadius: 999,
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flex: 1,
+  },
+  avatarInputInline: {
+    width: '100%',
+  },
+  inlineLogoutButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    alignItems: 'center',
+    paddingVertical: 10,
+    marginTop: 2,
   },
 });
 
