@@ -79,6 +79,9 @@
 # Cursor — workspace/agent local (muốn version rules chung có thể: git add -f .cursor/rules)
 **/.cursor/
 
+# Local shared tooling (workflow / ui-ux scripts) — không đẩy repo
+**/.shared/
+
 # -----------------------------------------------------------------------------
 # OS
 # -----------------------------------------------------------------------------
