@@ -58,6 +58,7 @@ export function SettingsScreen() {
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
   const text = useThemeColor({}, 'text');
+  const card = useThemeColor({}, 'card');
 
   const initialDisplay = useMemo(
     () => (me?.profile ? me.profile.displayName ?? me.profile.username : ''),
@@ -96,6 +97,12 @@ export function SettingsScreen() {
           {t('settingsTitle')}
         </ThemedText>
         <ThemedText style={{ color: muted }}>{t('settingsSubtitle')}</ThemedText>
+        <View style={[styles.accountBadge, { borderColor: border, backgroundColor: card }]}>
+          <ThemedText type="defaultSemiBold">{isMember ? (me?.profile?.displayName ?? me?.profile?.username) : 'Guest mode'}</ThemedText>
+          <ThemedText style={{ color: muted }}>
+            {isMember ? `@${me?.profile?.username}` : 'Sign in to sync profile and preferences'}
+          </ThemedText>
+        </View>
 
         <SectionCard>
           <ThemedText type="subtitle">{t('profileSection')}</ThemedText>
@@ -190,6 +197,13 @@ const styles = StyleSheet.create({
   page: { flex: 1 },
   content: { gap: 12 },
   title: { fontSize: 30, lineHeight: 36 },
+  accountBadge: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 2,
+  },
   block: { gap: 8, marginTop: 8 },
   input: {
     borderWidth: 1,

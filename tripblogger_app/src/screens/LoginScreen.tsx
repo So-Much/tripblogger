@@ -79,13 +79,6 @@ export function LoginScreen() {
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom', 'left', 'right']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ThemedView style={styles.page}>
-          <Pressable style={styles.backRow} hitSlop={14} onPress={() => router.replace('/')}>
-            <IconSymbol name="chevron.left" color={muted} size={22} />
-            <ThemedText style={{ color: muted }} type="defaultSemiBold">
-              {t('backHome')}
-            </ThemedText>
-          </Pressable>
-
           <ScrollView
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollInner}
@@ -167,6 +160,19 @@ export function LoginScreen() {
               <Pressable onPress={() => router.replace('/')}>
                 <ThemedText style={[styles.skip, { color: muted }]}>Tiếp tục không đăng nhập</ThemedText>
               </Pressable>
+
+              <Pressable
+                style={styles.homeLinkRow}
+                hitSlop={12}
+                onPress={() => router.replace('/')}
+                accessibilityRole="button"
+                accessibilityLabel={t('backHome')}
+              >
+                <IconSymbol name="house.fill" color={muted} size={14} />
+                <ThemedText style={{ color: muted }} type="defaultSemiBold">
+                  {t('backHome')}
+                </ThemedText>
+              </Pressable>
             </View>
           </ScrollView>
         </ThemedView>
@@ -177,33 +183,25 @@ export function LoginScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  backRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
   scrollInner: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 16,
     paddingBottom: 20,
-    maxWidth: 520,
+    maxWidth: 500,
     width: '100%',
     alignSelf: 'center',
   },
   card: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    gap: 12,
-    padding: 20,
+    gap: 14,
+    padding: 22,
     alignItems: 'stretch',
     shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 2,
   },
   logoRing: {
@@ -218,7 +216,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 28,
     letterSpacing: -0.5,
-    marginTop: 4,
+    marginTop: 6,
   },
   label: {
     fontSize: 13,
@@ -262,6 +260,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 22,
+  },
+  homeLinkRow: {
+    marginTop: 4,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   error: {
     color: '#ef4444',

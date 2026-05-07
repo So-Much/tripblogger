@@ -27,6 +27,7 @@ export function HomeScreen() {
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
+  const text = useThemeColor({}, 'text');
   const insets = useSafeAreaInsets();
 
   const isMember = meQuery.data?.role === 'MEMBER';
@@ -87,6 +88,27 @@ export function HomeScreen() {
           )}
         </View>
 
+        <View style={[styles.welcomeCard, { borderColor: border, backgroundColor: card }]}>
+          <ThemedText type="defaultSemiBold" style={[styles.welcomeTitle, { color: text }]}>
+            {isMember ? 'Ready for your next trip?' : 'Discover travel inspiration today'}
+          </ThemedText>
+          <ThemedText style={{ color: muted }}>
+            {isMember ? 'New stories and hotel deals updated daily.' : 'Browse posts, save ideas, and sign in when you are ready.'}
+          </ThemedText>
+          {!isMember ? (
+            <View style={styles.guestActions}>
+              <Pressable style={[styles.ghostButton, { borderColor: border }]} onPress={() => router.push('/register')}>
+                <ThemedText type="defaultSemiBold">{t('register')}</ThemedText>
+              </Pressable>
+              <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
+                <ThemedText type="defaultSemiBold" style={styles.loginText}>
+                  {t('login')}
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
         <HomeSearchBar />
         <StoriesRow stories={FEED_STORIES} />
         <PromoBanner />
@@ -141,9 +163,35 @@ const styles = StyleSheet.create({
     width: 44,
   },
   title: { fontSize: 28, letterSpacing: -0.6, flexShrink: 1 },
+  welcomeCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 8,
+  },
+  welcomeTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  guestActions: {
+    marginTop: 2,
+    flexDirection: 'row',
+    gap: 8,
+  },
   loginButton: {
     borderRadius: 999,
     paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  primaryButton: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  ghostButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
     paddingVertical: 10,
   },
   loginText: { color: '#fff' },
