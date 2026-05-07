@@ -1,11 +1,9 @@
 import axios from 'axios';
-import Constants from 'expo-constants';
 import { useAuthStore } from '@/src/store/auth.store';
+import { resolveApiBaseUrl } from '@/src/services/api/resolve-api-base-url';
 
-const apiBaseUrl =
-  process.env.EXPO_PUBLIC_API_BASE_URL ??
-  Constants.expoConfig?.extra?.apiBaseUrl ??
-  'http://localhost:3000/api';
+/** Effective base URL (dev rewrites localhost for real devices via Expo Metro host). */
+export const apiBaseUrl = resolveApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
@@ -13,7 +11,7 @@ export const apiClient = axios.create({
 });
 
 let isRefreshing = false;
-let pendingRequests: Array<(token: string | null) => void> = [];
+let pendingRequests: ((token: string | null) => void)[] = [];
 
 apiClient.interceptors.request.use((config) => {
   const accessToken = useAuthStore.getState().tokens?.accessToken;

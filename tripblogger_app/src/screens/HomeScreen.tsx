@@ -1,94 +1,174 @@
-import { useMemo } from 'react';
-import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useForm, Controller } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useLoginMutation, useMeQuery } from '@/src/hooks/useAuth';
-import { useAccessControl } from '@/src/hooks/useAccessControl';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { CommerceWidgetRow } from '@/src/components/commerce/CommerceWidgetRow';
+import { FeedSection } from '@/src/components/feed/FeedSection';
+import { StoriesRow } from '@/src/components/feed/StoriesRow';
+import { PromoBanner } from '@/src/components/home/PromoBanner';
+import { HomeSearchBar } from '@/src/components/home/HomeSearchBar';
+import { QuickActionsStrip } from '@/src/components/home/QuickActionsStrip';
+import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
+import { COMMERCE_DEALS } from '@/src/mocks/commerce.mock';
+import { FEED_POSTS } from '@/src/mocks/feed.mock';
+import { FEED_STORIES } from '@/src/mocks/stories.mock';
+import { useMeQuery } from '@/src/hooks/useAuth';
 import { useAuthStore } from '@/src/store/auth.store';
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
-
 export function HomeScreen() {
-  const loginMutation = useLoginMutation();
+  const router = useRouter();
   const meQuery = useMeQuery();
-  const { hasStatus, canPerformVerifiedAction } = useAccessControl();
-  const logout = useAuthStore((s) => s.logout);
   const tokens = useAuthStore((s) => s.tokens);
+  const cta = useThemeColor({}, 'cta');
+  const surface = useThemeColor({}, 'surface');
+  const border = useThemeColor({}, 'border');
+  const card = useThemeColor({}, 'card');
+  const muted = useThemeColor({}, 'textMuted');
+  const insets = useSafeAreaInsets();
 
-  const { control, handleSubmit } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
-  });
+  const authenticated = Boolean(tokens?.accessToken);
 
-  const statusLine = useMemo(() => {
-    if (!tokens) return 'Guest mode';
-    if (meQuery.isLoading) return 'Loading profile...';
-    if (meQuery.data) return `Role: ${meQuery.data.role} | Statuses: ${meQuery.data.statuses.join(', ')}`;
-    return 'Authenticated';
-  }, [tokens, meQuery.data, meQuery.isLoading]);
+  const memberProfile =
+    authenticated && meQuery.data?.profile
+      ? {
+          displayName: meQuery.data.profile.username,
+          handle: `@${meQuery.data.profile.username}`,
+          followers: '12.4k',
+          following: '620',
+          posts: '89',
+          bio: 'Creator profile with social + commerce experiences.',
+        }
+      : null;
 
-  const onSubmit = handleSubmit(async (values) => {
-    await loginMutation.mutateAsync(values);
-    await meQuery.refetch();
-  });
+  const statusLine = !authenticated
+    ? 'Guest mode — browse public posts. Sign in for full profile.'
+    : meQuery.isLoading
+      ? 'Loading profile…'
+      : `Role: ${meQuery.data?.role ?? 'MEMBER'} · Statuses: ${meQuery.data?.statuses?.join(', ') || 'None'}`;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>TripBlogger Foundation</Text>
-      <Text>{statusLine}</Text>
-      <Text>{hasStatus('PREMIUM') ? 'Premium enabled' : 'Premium not active'}</Text>
-      <Text>{canPerformVerifiedAction() ? 'Verified actions allowed' : 'Verified actions blocked'}</Text>
+    <ThemedView style={[styles.page, { backgroundColor: surface }]}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: Math.max(insets.top, 8) + 4,
+            paddingBottom: Math.max(insets.bottom, 12) + 28,
+            paddingLeft: Math.max(insets.left, 16),
+            paddingRight: Math.max(insets.right, 16),
+          },
+        ]}
+        scrollIndicatorInsets={{ right: 1 }}
+      >
+        <View style={styles.topRow}>
+          <View style={styles.brandWrap}>
+            <View style={[styles.brandBadge, { borderColor: border, backgroundColor: card }]}>
+              <IconSymbol size={26} name="paperplane.fill" color={cta} />
+            </View>
+            <ThemedText type="title" style={styles.title}>
+              TripBlogger
+            </ThemedText>
+          </View>
 
-      {!tokens ? (
-        <View style={styles.form}>
-          <Controller
-            control={control}
-            name="email"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                placeholder="Email"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                style={styles.input}
-                value={value}
-                onChangeText={onChange}
-              />
-            )}
-          />
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, value } }) => (
-              <TextInput
-                placeholder="Password"
-                secureTextEntry
-                style={styles.input}
-                value={value}
-                onChangeText={onChange}
-              />
-            )}
-          />
-          <Button title={loginMutation.isPending ? 'Signing in...' : 'Sign in'} onPress={onSubmit} />
+          {!authenticated ? (
+            <Pressable style={[styles.loginButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
+              <ThemedText type="defaultSemiBold" style={styles.loginText}>
+                Login
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={[styles.avatarButton, { borderColor: border, backgroundColor: card }]}
+              onPress={() => router.push('/explore')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Open profile"
+            >
+              <IconSymbol size={24} name="person.crop.circle.fill" color={cta} />
+            </Pressable>
+          )}
         </View>
-      ) : (
-        <View style={styles.form}>
-          <Button title="Refresh profile" onPress={() => meQuery.refetch()} />
-          <Button title="Logout" onPress={logout} />
-        </View>
-      )}
-    </View>
+
+        <HomeSearchBar />
+        <StoriesRow stories={FEED_STORIES} />
+        <PromoBanner />
+        <QuickActionsStrip />
+
+        <ThemedText type="subtitle" style={styles.sectionTitle}>
+          Today
+        </ThemedText>
+        <ThemedText style={[styles.sectionMeta, { color: muted }]}>{statusLine}</ThemedText>
+
+        {authenticated && memberProfile ? (
+          <ProfileSummaryCard profile={memberProfile} statusLine={statusLine} />
+        ) : null}
+
+        <CommerceWidgetRow deals={COMMERCE_DEALS} />
+        <FeedSection posts={FEED_POSTS} />
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 24, fontWeight: '700' },
-  form: { gap: 8, marginTop: 16 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10 },
+  page: { flex: 1 },
+  content: {
+    gap: 14,
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  topRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    minHeight: 48,
+  },
+  brandWrap: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  brandBadge: {
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  title: { fontSize: 28, letterSpacing: -0.6, flexShrink: 1 },
+  loginButton: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  loginText: { color: '#fff' },
+  avatarButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    height: 44,
+    paddingHorizontal: 10,
+    width: 46,
+  },
+  sectionTitle: {
+    marginTop: 6,
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  sectionMeta: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: -6,
+    marginBottom: 2,
+  },
 });

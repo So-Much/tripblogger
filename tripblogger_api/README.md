@@ -1,5 +1,7 @@
 # TripBlogger API Foundation
 
+Tài liệu monorepo (app + hạ tầng): [README gốc](../README.md).
+
 ## Run
 
 1. Copy `.env.example` to `.env` and fill values.

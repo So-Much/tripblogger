@@ -1,8 +1,12 @@
 import { PropsWithChildren } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useThemeColor } from '@/hooks/use-theme-color';
 
 export function SectionCard({ children }: PropsWithChildren) {
-  return <View style={styles.card}>{children}</View>;
+  const borderColor = useThemeColor({}, 'border');
+  const backgroundColor = useThemeColor({}, 'card');
+
+  return <View style={[styles.card, { borderColor, backgroundColor }]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({

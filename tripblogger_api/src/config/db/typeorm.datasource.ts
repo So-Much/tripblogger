@@ -17,6 +17,7 @@ export default new DataSource({
   database: process.env.DB_NAME,
   options: {
     encrypt: false,
+    trustServerCertificate: true,
     ...(process.env.DB_INSTANCE ? { instanceName: process.env.DB_INSTANCE } : {}),
   },
   entities: [

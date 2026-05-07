@@ -5,9 +5,11 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuthStore } from '@/src/store/auth.store';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const hasAuth = Boolean(useAuthStore((s) => s.tokens?.accessToken));
 
   return (
     <Tabs
@@ -26,8 +28,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.crop.circle.fill" color={color} />,
+          href: hasAuth ? '/explore' : null,
         }}
       />
     </Tabs>

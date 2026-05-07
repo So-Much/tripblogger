@@ -1,71 +1,48 @@
-# TripBlogger App Foundation
+# TripBlogger — App (Expo)
 
-## Structure
+Ứng dụng Expo Router + React Native: feed (mock), commerce widgets, đăng nhập JWT, theme sáng/tối, safe area cho iPhone.
 
-- `src/screens`: route-level UI
-- `src/components`: reusable UI pieces
-- `src/services/api`: axios client + API services
-- `src/hooks`: react-query and access control hooks
-- `src/store`: global state with zustand
-- `src/types`: shared domain types
+## Cần có
 
-## Environment
+- Node.js LTS  
+- Backend [`tripblogger_api`](../tripblogger_api/) đang chạy (hoặc URL API hợp lệ trong `.env`)
 
-1. Copy `.env.example` to `.env`
-2. Set `EXPO_PUBLIC_API_BASE_URL`
+## Cấu trúc nhanh
 
-## Auth Integration
+| Đường dẫn | Vai trò |
+|-----------|--------|
+| `app/` | File-based routing (tabs, `(auth)/login`) |
+| `src/screens/` | Màn full-screen |
+| `src/components/` | UI tái sử dụng (feed, commerce, home) |
+| `src/services/api/` | Axios client; URL base resolve trong dev để tránh lỗi `localhost` trên thiết bị thật |
+| `src/hooks/` | React Query + auth |
+| `src/store/` | Zustand (`tokens`, `me`) |
+| `src/mocks/` | Dữ liệu giả cho UI |
 
-- Access token is attached by interceptor
-- On `401`, client triggers refresh token flow
-- Store keeps `tokens` + `me` profile
-# Welcome to your Expo app 👋
-
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
-
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Setup
 
 ```bash
-npm run reset-project
+cd tripblogger_app
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+1. Sao chép `.env.example` → `.env`  
+2. `EXPO_PUBLIC_API_BASE_URL` trỏ tới API, ví dụ `http://localhost:3000/api` hoặc `http://<IP-máy-chủ>:3000/api`.
 
-## Learn more
+## Chạy
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm run start
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Hoặc `npm run ios` / `npm run android` / `npm run web`.
 
-## Join the community
+Lint:
 
-Join our community of developers creating universal apps.
+```bash
+npm run lint
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Tài liệu repo gốc
+
+Hướng dẫn chung và backend: [**README ngang cấp**](../README.md).
