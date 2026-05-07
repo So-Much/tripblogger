@@ -13,9 +13,15 @@ export class MemberProfileEntity {
   @Column({ unique: true })
   username!: string;
 
-  @Column({ unique: true })
-  email!: string;
+  @Column({ type: 'nvarchar', length: 255, unique: true, nullable: true })
+  email?: string | null;
 
   @Column({ name: 'password_hash' })
   passwordHash!: string;
+
+  @Column({ name: 'display_name', nullable: true })
+  displayName?: string;
+
+  @Column({ name: 'avatar_url', nullable: true })
+  avatarUrl?: string;
 }

@@ -21,6 +21,8 @@ export interface MeResponse {
   statuses: UserStatusCode[];
   profile: {
     username: string;
-    email: string;
+    email: string | null;
+    displayName: string | null;
+    avatarUrl: string | null;
   } | null;
 }

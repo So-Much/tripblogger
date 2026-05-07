@@ -16,12 +16,12 @@ import { COMMERCE_DEALS } from '@/src/mocks/commerce.mock';
 import { FEED_POSTS } from '@/src/mocks/feed.mock';
 import { FEED_STORIES } from '@/src/mocks/stories.mock';
 import { useMeQuery } from '@/src/hooks/useAuth';
-import { useAuthStore } from '@/src/store/auth.store';
+import { useI18n } from '@/src/i18n';
 
 export function HomeScreen() {
   const router = useRouter();
   const meQuery = useMeQuery();
-  const tokens = useAuthStore((s) => s.tokens);
+  const { t } = useI18n();
   const cta = useThemeColor({}, 'cta');
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
@@ -29,12 +29,12 @@ export function HomeScreen() {
   const muted = useThemeColor({}, 'textMuted');
   const insets = useSafeAreaInsets();
 
-  const authenticated = Boolean(tokens?.accessToken);
+  const isMember = meQuery.data?.role === 'MEMBER';
 
   const memberProfile =
-    authenticated && meQuery.data?.profile
+    isMember && meQuery.data?.profile
       ? {
-          displayName: meQuery.data.profile.username,
+          displayName: meQuery.data.profile.displayName ?? meQuery.data.profile.username,
           handle: `@${meQuery.data.profile.username}`,
           followers: '12.4k',
           following: '620',
@@ -42,12 +42,6 @@ export function HomeScreen() {
           bio: 'Creator profile with social + commerce experiences.',
         }
       : null;
-
-  const statusLine = !authenticated
-    ? 'Guest mode — browse public posts. Sign in for full profile.'
-    : meQuery.isLoading
-      ? 'Loading profile…'
-      : `Role: ${meQuery.data?.role ?? 'MEMBER'} · Statuses: ${meQuery.data?.statuses?.join(', ') || 'None'}`;
 
   return (
     <ThemedView style={[styles.page, { backgroundColor: surface }]}>
@@ -74,10 +68,10 @@ export function HomeScreen() {
             </ThemedText>
           </View>
 
-          {!authenticated ? (
+          {!isMember ? (
             <Pressable style={[styles.loginButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
               <ThemedText type="defaultSemiBold" style={styles.loginText}>
-                Login
+                {t('login')}
               </ThemedText>
             </Pressable>
           ) : (
@@ -99,12 +93,14 @@ export function HomeScreen() {
         <QuickActionsStrip />
 
         <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Today
+          {t('homeToday')}
         </ThemedText>
-        <ThemedText style={[styles.sectionMeta, { color: muted }]}>{statusLine}</ThemedText>
+        <ThemedText style={[styles.subtitleLine, { color: muted }]}>
+          {isMember ? t('homeSubtitleMember') : t('homeSubtitleGuest')}
+        </ThemedText>
 
-        {authenticated && memberProfile ? (
-          <ProfileSummaryCard profile={memberProfile} statusLine={statusLine} />
+        {isMember && memberProfile ? (
+          <ProfileSummaryCard profile={memberProfile} />
         ) : null}
 
         <CommerceWidgetRow deals={COMMERCE_DEALS} />
@@ -165,10 +161,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 26,
   },
-  sectionMeta: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: -6,
-    marginBottom: 2,
+  subtitleLine: {
+    marginTop: -8,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

@@ -11,6 +11,7 @@ import { useAuthStore } from '@/src/store/auth.store';
 export function ProfileScreen() {
   const router = useRouter();
   const me = useAuthStore((s) => s.me);
+  const isMember = me?.role === 'MEMBER';
   const logout = useAuthStore((s) => s.logout);
   const accent = useThemeColor({}, 'accent');
   const surface = useThemeColor({}, 'surface');
@@ -21,12 +22,12 @@ export function ProfileScreen() {
 
   const profile = me?.profile
     ? {
-        displayName: me.profile.username,
+        displayName: me.profile.displayName ?? me.profile.username,
         handle: `@${me.profile.username}`,
         followers: '12.4k',
         following: '620',
         posts: '89',
-        bio: `${me.profile.email} — thành viên TripBlogger.`,
+        bio: 'Thành viên TripBlogger.',
       }
     : {
         displayName: 'Member',
@@ -69,26 +70,48 @@ export function ProfileScreen() {
           </ThemedText>
         </View>
 
-        <ProfileSummaryCard
-          profile={profile}
-          statusLine={`Role: ${me?.role ?? 'MEMBER'} · Trạng thái: ${me?.statuses?.join(', ') || '…'}`}
-        />
+        {isMember ? (
+          <>
+            <ProfileSummaryCard profile={profile} />
 
-        <ThemedText style={{ color: muted, fontSize: 14, lineHeight: 20 }}>
-          Quản lý đơn hàng, ví, voucher và cài đặt bảo mật sẽ được bổ sung ở các bước tiếp theo.
-        </ThemedText>
+            <ThemedText style={{ color: muted, fontSize: 14, lineHeight: 20 }}>
+              Quản lý đơn hàng, ví, voucher và cài đặt bảo mật sẽ được bổ sung ở các bước tiếp theo.
+            </ThemedText>
 
-        <Pressable
-          style={[styles.logout, { backgroundColor: accent }]}
-          onPress={() => {
-            logout();
-            router.replace('/');
-          }}
-        >
-          <ThemedText type="defaultSemiBold" style={styles.logoutText}>
-            Đăng xuất
-          </ThemedText>
-        </Pressable>
+            <Pressable
+              style={[styles.logout, { backgroundColor: accent }]}
+              onPress={() => {
+                logout();
+                router.replace('/');
+              }}
+            >
+              <ThemedText type="defaultSemiBold" style={styles.logoutText}>
+                Đăng xuất
+              </ThemedText>
+            </Pressable>
+          </>
+        ) : (
+          <View style={[styles.guestCard, { borderColor: border, backgroundColor: card }]}>
+            <IconSymbol name="person.crop.circle.fill" color={accent} size={48} />
+            <ThemedText type="subtitle" style={styles.guestTitle}>
+              Đăng nhập để mở Profile cá nhân
+            </ThemedText>
+            <ThemedText style={{ color: muted, textAlign: 'center' }}>
+              Khi đăng nhập bạn sẽ xem được hồ sơ cá nhân và các tiện ích member.
+            </ThemedText>
+            <Pressable style={[styles.authButton, { backgroundColor: accent }]} onPress={() => router.push('/login')}>
+              <ThemedText type="defaultSemiBold" style={styles.authButtonText}>
+                Đăng nhập
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.authOutlineButton, { borderColor: border }]}
+              onPress={() => router.push('/register')}
+            >
+              <ThemedText type="defaultSemiBold">Tạo tài khoản mới</ThemedText>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -129,5 +152,32 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#fff',
+  },
+  guestCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+    gap: 10,
+  },
+  guestTitle: {
+    textAlign: 'center',
+  },
+  authButton: {
+    marginTop: 4,
+    borderRadius: 999,
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  authButtonText: {
+    color: '#fff',
+  },
+  authOutlineButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 12,
   },
 });

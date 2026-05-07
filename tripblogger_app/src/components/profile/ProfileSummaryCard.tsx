@@ -6,7 +6,7 @@ import { ProfileSummary } from '@/src/types/profile';
 
 interface ProfileSummaryCardProps {
   profile: ProfileSummary;
-  statusLine: string;
+  statusLine?: string;
 }
 
 export function ProfileSummaryCard({ profile, statusLine }: ProfileSummaryCardProps) {
@@ -22,7 +22,7 @@ export function ProfileSummaryCard({ profile, statusLine }: ProfileSummaryCardPr
         <ThemedText type="defaultSemiBold">{profile.following} Following</ThemedText>
         <ThemedText type="defaultSemiBold">{profile.posts} Posts</ThemedText>
       </View>
-      <ThemedText style={{ color: muted }}>{statusLine}</ThemedText>
+      {statusLine ? <ThemedText style={{ color: muted }}>{statusLine}</ThemedText> : null}
     </SectionCard>
   );
 }

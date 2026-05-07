@@ -29,6 +29,7 @@ const MAPPING = {
   'heart.fill': 'favorite',
   'bubble.left.and.bubble.right.fill': 'chat-bubble-outline',
   'ellipsis.circle': 'more-horiz',
+  'gearshape.fill': 'settings',
 } as IconMapping;
 
 /**

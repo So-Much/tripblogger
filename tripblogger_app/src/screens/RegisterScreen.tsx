@@ -17,26 +17,30 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useGoogleLoginMutation, useLoginMutation, useMeQuery } from '@/src/hooks/useAuth';
-import { apiBaseUrl } from '@/src/services/api/client';
-import { signInWithGoogleIdToken } from '@/src/services/auth/google-auth';
+import { useMeQuery, useRegisterMutation } from '@/src/hooks/useAuth';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
 
-const loginSchema = z.object({
-  username: z.string().min(3, 'Username tối thiểu 3 ký tự'),
-  password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
-});
+const registerSchema = z
+  .object({
+    username: z.string().min(3, 'Username tối thiểu 3 ký tự'),
+    password: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
+    confirmPassword: z.string().min(8, 'Mật khẩu tối thiểu 8 ký tự'),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    message: 'Mật khẩu nhập lại không khớp',
+    path: ['confirmPassword'],
+  });
 
-type LoginForm = z.infer<typeof loginSchema>;
+type RegisterForm = z.infer<typeof registerSchema>;
 
-export function LoginScreen() {
+export function RegisterScreen() {
   const router = useRouter();
   const { t } = useI18n();
-  const loginMutation = useLoginMutation();
-  const googleLoginMutation = useGoogleLoginMutation();
+  const registerMutation = useRegisterMutation();
   const meQuery = useMeQuery();
   const [submitError, setSubmitError] = useState<string | null>(null);
+
   const borderColor = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
@@ -44,36 +48,25 @@ export function LoginScreen() {
   const accent = useThemeColor({}, 'accent');
   const textColor = useThemeColor({}, 'text');
 
-  const { control, handleSubmit } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
+  const { control, handleSubmit } = useForm<RegisterForm>({
+    resolver: zodResolver(registerSchema),
     defaultValues: {
-      username: 'much',
-      password: '12345678',
+      username: '',
+      password: '',
+      confirmPassword: '',
     },
   });
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      await loginMutation.mutateAsync(values);
+      await registerMutation.mutateAsync(values);
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {
-      setSubmitError(formatApiError(error, 'Đăng nhập thất bại'));
+      setSubmitError(formatApiError(error, 'Đăng ký thất bại'));
     }
   });
-
-  const onGoogle = async () => {
-    setSubmitError(null);
-    try {
-      const idToken = await signInWithGoogleIdToken();
-      await googleLoginMutation.mutateAsync({ idToken });
-      await meQuery.refetch();
-      router.replace('/');
-    } catch (error) {
-      setSubmitError(formatApiError(error, 'Google sign-in thất bại'));
-    }
-  };
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom', 'left', 'right']}>
@@ -86,19 +79,15 @@ export function LoginScreen() {
             </ThemedText>
           </Pressable>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollInner}
-          >
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollInner}>
             <View style={[styles.card, { borderColor, backgroundColor: card }]}>
               <View style={[styles.logoRing, { borderColor: accent }]}>
-                <IconSymbol name="paperplane.fill" color={accent} size={32} />
+                <IconSymbol name="person.crop.circle.fill" color={accent} size={30} />
               </View>
-
               <ThemedText type="subtitle" style={styles.title}>
-                {t('loginTitle')}
+                {t('registerTitle')}
               </ThemedText>
-              <ThemedText style={{ color: muted }}>{t('loginHint')}</ThemedText>
+              <ThemedText style={{ color: muted }}>{t('registerHint')}</ThemedText>
 
               <Controller
                 control={control}
@@ -144,28 +133,38 @@ export function LoginScreen() {
                 )}
               />
 
+              <Controller
+                control={control}
+                name="confirmPassword"
+                render={({ field: { onChange, value }, fieldState: { error } }) => (
+                  <View style={styles.field}>
+                    <ThemedText type="defaultSemiBold" style={styles.label}>
+                      {t('confirmPassword')}
+                    </ThemedText>
+                    <TextInput
+                      accessibilityLabel="Confirm password"
+                      secureTextEntry
+                      placeholder="••••••••"
+                      placeholderTextColor={muted}
+                      style={[styles.input, { borderColor, color: textColor }]}
+                      value={value}
+                      onChangeText={onChange}
+                    />
+                    {error ? <ThemedText style={styles.error}>{error.message}</ThemedText> : null}
+                  </View>
+                )}
+              />
+
               {submitError ? <ThemedText style={styles.error}>{submitError}</ThemedText> : null}
 
-              {__DEV__ ? (
-                <ThemedText style={[styles.devHint, { color: muted }]} selectable>{`API: ${apiBaseUrl}`}</ThemedText>
-              ) : null}
-
-              <Pressable style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
-                <ThemedText type="defaultSemiBold" style={styles.signInText}>
-                  {loginMutation.isPending ? 'Signing in…' : 'Sign in'}
+              <Pressable style={[styles.signUpButton, { backgroundColor: cta }]} onPress={onSubmit}>
+                <ThemedText type="defaultSemiBold" style={styles.signUpText}>
+                  {registerMutation.isPending ? 'Creating account…' : 'Create account'}
                 </ThemedText>
               </Pressable>
 
-              <Pressable style={[styles.googleButton, { borderColor }]} onPress={onGoogle} disabled={googleLoginMutation.isPending}>
-                <ThemedText type="defaultSemiBold">{googleLoginMutation.isPending ? 'Connecting…' : t('loginWithGoogle')}</ThemedText>
-              </Pressable>
-
-              <Pressable onPress={() => router.push('/register')}>
-                <ThemedText style={[styles.skip, { color: muted }]}>Chưa có tài khoản? Đăng ký</ThemedText>
-              </Pressable>
-
-              <Pressable onPress={() => router.replace('/')}>
-                <ThemedText style={[styles.skip, { color: muted }]}>Tiếp tục không đăng nhập</ThemedText>
+              <Pressable onPress={() => router.push('/login')}>
+                <ThemedText style={[styles.switchText, { color: muted }]}>Đã có tài khoản? Đăng nhập</ThemedText>
               </Pressable>
             </View>
           </ScrollView>
@@ -235,29 +234,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 48,
   },
-  devHint: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    marginTop: 4,
-    marginBottom: 2,
-    opacity: 0.95,
-  },
-  signInButton: {
+  signUpButton: {
     alignItems: 'center',
     borderRadius: 999,
     marginTop: 6,
     paddingVertical: 14,
   },
-  googleButton: {
-    alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
-    marginTop: 8,
-    paddingVertical: 14,
-  },
-  signInText: { color: '#fff' },
-  skip: {
+  signUpText: { color: '#fff' },
+  switchText: {
     paddingVertical: 4,
     textAlign: 'center',
     fontSize: 15,

@@ -7,6 +7,8 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(16),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('7d'),
+  ADMIN_SECRET: z.string().min(16),
+  GOOGLE_OAUTH_AUDIENCES: z.string().min(1),
   DB_HOST: z.string(),
   DB_PORT: z.coerce.number().optional(),
   DB_INSTANCE: z.string().optional(),

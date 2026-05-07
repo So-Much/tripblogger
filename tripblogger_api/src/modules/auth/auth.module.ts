@@ -9,12 +9,23 @@ import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { UserEntity } from '../users/entities/user.entity';
 import { RoleEntity } from '../users/entities/role.entity';
 import { MemberProfileEntity } from '../users/entities/member-profile.entity';
+import { GuestProfileEntity } from '../users/entities/guest-profile.entity';
+import { UserStatusEntity } from '../users/entities/user-status.entity';
+import { OAuthIdentityEntity } from './entities/oauth-identity.entity';
 
 @Module({
   imports: [
     ConfigModule,
     JwtModule.register({}),
-    TypeOrmModule.forFeature([RefreshTokenEntity, UserEntity, RoleEntity, MemberProfileEntity]),
+    TypeOrmModule.forFeature([
+      RefreshTokenEntity,
+      UserEntity,
+      RoleEntity,
+      MemberProfileEntity,
+      GuestProfileEntity,
+      UserStatusEntity,
+      OAuthIdentityEntity,
+    ]),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

@@ -15,8 +15,12 @@ let pendingRequests: ((token: string | null) => void)[] = [];
 
 apiClient.interceptors.request.use((config) => {
   const accessToken = useAuthStore.getState().tokens?.accessToken;
+  const sessionId = useAuthStore.getState().sessionId;
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  if (sessionId) {
+    config.headers['X-Session-Id'] = sessionId;
   }
   return config;
 });
