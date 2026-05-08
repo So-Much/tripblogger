@@ -4,9 +4,14 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { requestContextMiddleware } from './common/middleware/request-context.middleware';
+import { HttpLoggingInterceptor } from './common/interceptors/http-logging.interceptor';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: true });
+  app.use(requestContextMiddleware);
+  app.useGlobalInterceptors(new HttpLoggingInterceptor());
   const uploadsDir = join(process.cwd(), 'uploads');
   const avatarDir = join(uploadsDir, 'avatars');
   if (!existsSync(avatarDir)) {

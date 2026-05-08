@@ -18,6 +18,13 @@ const envSchema = z.object({
   REDIS_HOST: z.string().default('127.0.0.1'),
   REDIS_PORT: z.coerce.number().default(6379),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
+  LOG_HTTP_PRETTY: z.string().optional(),
+  LOG_HTTP_INCLUDE_HEADERS: z.string().optional(),
+  LOG_HTTP_INCLUDE_PARAMS: z.string().optional(),
+  LOG_HTTP_INCLUDE_CONTENT_TYPE: z.string().optional(),
+  LOG_HTTP_INCLUDE_COOKIE: z.string().optional(),
+  LOG_HTTP_INCLUDE_REQUEST: z.string().optional(),
+  LOG_HTTP_INCLUDE_RESPONSE: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

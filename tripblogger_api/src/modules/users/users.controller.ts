@@ -20,6 +20,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
+import { Request } from 'express';
 
 const AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -56,13 +57,13 @@ export class UsersController {
     FileInterceptor('avatar', {
       storage: diskStorage({
         destination: join(process.cwd(), 'uploads', 'avatars'),
-        filename: (_req, file, cb) => {
+        filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
           const extension = extname(file.originalname || '').toLowerCase() || '.jpg';
           cb(null, `${Date.now()}-${randomUUID()}${extension}`);
         },
       }),
       limits: { fileSize: 5 * 1024 * 1024 },
-      fileFilter: (_req, file, cb) => {
+      fileFilter: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile: boolean) => void) => {
         cb(null, AVATAR_MIME.has(file.mimetype));
       },
     }),

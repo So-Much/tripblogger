@@ -22,6 +22,6 @@ export class MemberProfileEntity {
   @Column({ name: 'display_name', nullable: true })
   displayName?: string;
 
-  @Column({ name: 'avatar_url', nullable: true })
-  avatarUrl?: string;
+  @Column({ name: 'avatar_url', type: 'nvarchar', length: 512, nullable: true })
+  avatarUrl?: string | null;
 }
