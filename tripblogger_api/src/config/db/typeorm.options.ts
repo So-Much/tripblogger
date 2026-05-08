@@ -7,6 +7,10 @@ import { MemberProfileEntity } from '../../modules/users/entities/member-profile
 import { StatusCatalogEntity } from '../../modules/users/entities/status-catalog.entity';
 import { UserStatusEntity } from '../../modules/users/entities/user-status.entity';
 import { RefreshTokenEntity } from '../../modules/auth/entities/refresh-token.entity';
+import { CommentEntity } from '../../modules/posts/entities/comment.entity';
+import { PostEntity } from '../../modules/posts/entities/post.entity';
+import { ReactEntity } from '../../modules/posts/entities/react.entity';
+import { ReactTypeEntity } from '../../modules/posts/entities/react-type.entity';
 
 export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOptions {
   const instanceName = configService.get<string>('DB_INSTANCE');
@@ -28,6 +32,10 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       StatusCatalogEntity,
       UserStatusEntity,
       RefreshTokenEntity,
+      PostEntity,
+      CommentEntity,
+      ReactEntity,
+      ReactTypeEntity,
     ],
     migrations: ['src/migrations/*.ts'],
     synchronize: false,

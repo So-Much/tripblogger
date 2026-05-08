@@ -30,6 +30,8 @@ const MAPPING = {
   'bubble.left.and.bubble.right.fill': 'chat-bubble-outline',
   'ellipsis.circle': 'more-horiz',
   'gearshape.fill': 'settings',
+  'doc.text.fill': 'article',
+  'plus.circle.fill': 'add-circle',
 } as IconMapping;
 
 /**

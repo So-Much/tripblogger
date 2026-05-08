@@ -7,6 +7,7 @@ import { typeOrmOptionsFactory } from './config/db/typeorm.options';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { PostsModule } from './modules/posts/posts.module';
 import { RedisModule } from './config/redis/redis.module';
 import { QueueModule } from './config/queue/queue.module';
 import { OtelModule } from './config/otel/otel.module';
@@ -26,6 +27,7 @@ import { OtelModule } from './config/otel/otel.module';
     HealthModule,
     UsersModule,
     AuthModule,
+    PostsModule,
   ],
 })
 export class AppModule {}
