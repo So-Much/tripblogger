@@ -15,9 +15,8 @@ export function ReactionPicker({
   onClose: () => void;
   anchor?: { x: number; y: number } | null;
 }) {
-  const listWidth = options.length * 52 + 16;
-  const top = Math.max(12, (anchor?.y ?? 200) - 72);
-  const left = Math.max(10, (anchor?.x ?? 120) - listWidth / 2);
+  const top = Math.max(12, (anchor?.y ?? 200) - options.length * 58 - 12);
+  const left = Math.max(10, (anchor?.x ?? 120) - 26);
 
   return (
     <Modal transparent visible={open} animationType="fade" onRequestClose={onClose}>
@@ -43,7 +42,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.04)' },
   bar: {
     position: 'absolute',
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     gap: 8,
     backgroundColor: '#FFFFFF',
@@ -57,7 +56,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   item: {
-    width: 52,
+    width: 56,
     alignItems: 'center',
     gap: 4,
     paddingVertical: 4,

@@ -39,6 +39,8 @@ export function PostPreviewCard({
 }) {
   const lastTapAt = useRef(0);
   const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mediaInteractingRef = useRef(false);
+  const lastMediaInteractionAt = useRef(0);
   const canInteract = post.status === 'PUBLISHED';
   const totalReacts = Object.values(post.reactionCounts ?? {}).reduce((acc, c) => acc + c, 0) - post.shareCount;
 
@@ -52,6 +54,7 @@ export function PostPreviewCard({
     <View style={[styles.card, { backgroundColor: cardColor, borderColor }]}>
       <Pressable
         onPress={() => {
+          if (mediaInteractingRef.current || Date.now() - lastMediaInteractionAt.current < 90) return;
           const now = Date.now();
           if (canInteract && now - lastTapAt.current < 280) {
             if (singleTapTimeoutRef.current) {
@@ -76,7 +79,17 @@ export function PostPreviewCard({
         <ThemedText style={[styles.meta, { color: mutedColor }]}>
           {formatDateTime(post.createdAt)}
         </ThemedText>
-        <PostMediaBlock media={post.media} compact />
+        <PostMediaBlock
+          media={post.media}
+          compact
+          onInteractionStart={() => {
+            mediaInteractingRef.current = true;
+          }}
+          onInteractionEnd={() => {
+            mediaInteractingRef.current = false;
+            lastMediaInteractionAt.current = Date.now();
+          }}
+        />
         <ThemedText style={{ color: mutedColor }} numberOfLines={2}>
           {previewFromHtml(post.contentHtml)}
         </ThemedText>

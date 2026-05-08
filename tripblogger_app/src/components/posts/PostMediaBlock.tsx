@@ -5,7 +5,17 @@ import type { PostDto } from '@/src/types/post';
 
 type MediaItem = PostDto['media'][number];
 
-export function PostMediaBlock({ media, compact = false }: { media?: MediaItem[]; compact?: boolean }) {
+export function PostMediaBlock({
+  media,
+  compact = false,
+  onInteractionStart,
+  onInteractionEnd,
+}: {
+  media?: MediaItem[];
+  compact?: boolean;
+  onInteractionStart?: () => void;
+  onInteractionEnd?: () => void;
+}) {
   const items = useMemo(() => (media ?? []).filter((m) => Boolean(m?.url)), [media]);
   const [width, setWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -16,6 +26,7 @@ export function PostMediaBlock({ media, compact = false }: { media?: MediaItem[]
     if (!width) return;
     const next = Math.round(event.nativeEvent.contentOffset.x / width);
     setActiveIndex(next);
+    onInteractionEnd?.();
   };
 
   return (
@@ -29,8 +40,13 @@ export function PostMediaBlock({ media, compact = false }: { media?: MediaItem[]
             keyExtractor={(item, idx) => `${item.url}-${idx}`}
             horizontal
             pagingEnabled
+            bounces={false}
+            decelerationRate="fast"
+            disableIntervalMomentum
             showsHorizontalScrollIndicator={false}
+            onScrollBeginDrag={onInteractionStart}
             onMomentumScrollEnd={onMomentumEnd}
+            onScrollEndDrag={onInteractionEnd}
             renderItem={({ item }) => {
               const sizeStyle = { width, height: slideHeight };
               if ((item.type ?? item.kind) === 'video') {
