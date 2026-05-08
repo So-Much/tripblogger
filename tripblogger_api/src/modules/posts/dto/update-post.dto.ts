@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
 import { LocationDto } from './create-post.dto';
 import { PostStatus, PostVisibility } from '../entities/post.entity';
 
@@ -32,4 +32,18 @@ export class UpdatePostDto {
   @IsString()
   @MaxLength(128)
   category?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  media?: Array<{
+    type: 'icon' | 'image' | 'video';
+    url: string;
+    thumbnailUrl?: string;
+    iconCode?: string;
+  }>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 }

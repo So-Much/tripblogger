@@ -29,8 +29,12 @@ export class CreatePostDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  media?: string[];
+  media?: Array<{
+    type: 'icon' | 'image' | 'video';
+    url: string;
+    thumbnailUrl?: string;
+    iconCode?: string;
+  }>;
 
   @IsOptional()
   @IsString()

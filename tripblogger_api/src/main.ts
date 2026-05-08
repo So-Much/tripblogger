@@ -14,9 +14,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new HttpLoggingInterceptor());
   const uploadsDir = join(process.cwd(), 'uploads');
   const avatarDir = join(uploadsDir, 'avatars');
-  if (!existsSync(avatarDir)) {
-    mkdirSync(avatarDir, { recursive: true });
-  }
+  const postsDir = join(uploadsDir, 'posts');
+  if (!existsSync(avatarDir)) mkdirSync(avatarDir, { recursive: true });
+  if (!existsSync(postsDir)) mkdirSync(postsDir, { recursive: true });
   app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

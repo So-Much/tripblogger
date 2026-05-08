@@ -1,6 +1,7 @@
-import { IsUUID } from 'class-validator';
+import { IsString, Matches } from 'class-validator';
 
 export class ToggleReactionDto {
-  @IsUUID()
-  typeId!: string;
+  @IsString()
+  @Matches(/^[A-Z_]+$/)
+  typeCode!: string;
 }

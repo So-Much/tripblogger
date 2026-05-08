@@ -1,14 +1,13 @@
-import { useCallback, useLayoutEffect, useMemo } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
-  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter, useNavigation } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -19,11 +18,8 @@ import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import type { PostDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
-
-function previewFromHtml(html: string, max = 140): string {
-  const t = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  return t.length > max ? `${t.slice(0, max)}…` : t;
-}
+import { PostPreviewCard } from '@/src/components/posts/PostPreviewCard';
+import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
 
 export function MyPostsScreen() {
   const { t } = useI18n();
@@ -36,17 +32,44 @@ export function MyPostsScreen() {
   const tint = useThemeColor({}, 'tint');
 
   const isMember = meQuery.data?.role === 'MEMBER';
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [reactPostId, setReactPostId] = useState<string | null>(null);
+  const [pickerAnchor, setPickerAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'PUBLISHED'>('ALL');
+
+  const reactionTypesQuery = useQuery({
+    queryKey: ['posts', 'reaction-types'],
+    queryFn: () => postsService.listReactionTypes(),
+    enabled: isMember === true,
+  });
 
   const query = useInfiniteQuery({
-    queryKey: ['posts', 'mine'],
+    queryKey: ['posts', 'mine', statusFilter],
     queryFn: ({ pageParam }) =>
-      postsService.listMine({ limit: 20, cursor: pageParam as string | undefined }),
+      postsService.listMine({
+        limit: 20,
+        cursor: pageParam as string | undefined,
+        status: statusFilter === 'ALL' ? undefined : statusFilter,
+      }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     enabled: isMember === true,
   });
 
   const items = useMemo(() => query.data?.pages.flatMap((p) => p.items) ?? [], [query.data?.pages]);
+  const postReactionTypes = useMemo(
+    () =>
+      (reactionTypesQuery.data ?? []).filter((t) => (t.useFor === 'POST' || t.useFor === 'BOTH') && t.code !== 'SHARE'),
+    [reactionTypesQuery.data],
+  );
+
+  const reactMutation = useMutation({
+    mutationFn: ({ postId, typeCode }: { postId: string; typeCode: string }) =>
+      postsService.togglePostReaction(postId, typeCode),
+    onSuccess: () => {
+      void query.refetch();
+    },
+  });
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -71,24 +94,26 @@ export function MyPostsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: PostDto }) => (
-      <Pressable
-        onPress={() => router.push(`/(tabs)/posts/${item.id}`)}
-        style={[styles.row, { backgroundColor: card, borderColor: border }]}>
-        <ThemedText type="defaultSemiBold" numberOfLines={2}>
-          {item.title}
-        </ThemedText>
-        <ThemedText style={[styles.preview, { color: muted }]} numberOfLines={2}>
-          {previewFromHtml(item.contentHtml)}
-        </ThemedText>
-        <View style={styles.metaRow}>
-          <ThemedText style={[styles.meta, { color: muted }]}>
-            {new Date(item.createdAt).toLocaleString()}
-          </ThemedText>
-          <ThemedText style={[styles.badge, { color: muted }]}>{item.status}</ThemedText>
-        </View>
-      </Pressable>
+      <PostPreviewCard
+        post={item}
+        onPress={() =>
+          router.push(item.status === 'DRAFT' ? `/(tabs)/posts/create?postId=${item.id}` : `/(tabs)/posts/${item.id}`)
+        }
+        onDoubleTapHeart={async () => {
+          await postsService.heartPost(item.id);
+          void query.refetch();
+        }}
+        onOpenReactionPicker={(anchor) => {
+          setReactPostId(item.id);
+          setPickerAnchor(anchor);
+          setPickerOpen(true);
+        }}
+        cardColor={card}
+        borderColor={border}
+        mutedColor={muted}
+      />
     ),
-    [router, card, border, muted],
+    [router, query, card, border, muted],
   );
 
   if (meQuery.isLoading) {
@@ -122,6 +147,24 @@ export function MyPostsScreen() {
 
   return (
     <ThemedView style={styles.flex}>
+      <ThemedView style={styles.filterRow}>
+        {(['ALL', 'DRAFT', 'PUBLISHED'] as const).map((s) => (
+          <Pressable
+            key={s}
+            onPress={() => setStatusFilter(s)}
+            style={[
+              styles.filterChip,
+              {
+                borderColor: s === statusFilter ? tint : border,
+                backgroundColor: s === statusFilter ? `${tint}22` : 'transparent',
+              },
+            ]}>
+            <ThemedText style={styles.filterTxt}>
+              {s === 'ALL' ? 'Tất cả' : s === 'DRAFT' ? 'Bản nháp' : 'Đã xuất bản'}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </ThemedView>
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -145,12 +188,31 @@ export function MyPostsScreen() {
           ) : null
         }
       />
+      <ReactionPicker
+        open={pickerOpen}
+        anchor={pickerAnchor}
+        options={postReactionTypes}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(typeCode) => {
+          if (!reactPostId) return;
+          reactMutation.mutate({ postId: reactPostId, typeCode });
+          setPickerOpen(false);
+        }}
+      />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+  filterChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterTxt: { fontSize: 12, fontWeight: '600' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   guestWrap: { flex: 1, padding: 24, justifyContent: 'center', gap: 16 },
   cta: {
@@ -162,16 +224,6 @@ const styles = StyleSheet.create({
   },
   listContent: { padding: 16, gap: 12, paddingBottom: 32 },
   emptyContainer: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  row: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 6,
-  },
-  preview: { fontSize: 14 },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  meta: { fontSize: 12 },
-  badge: { fontSize: 11, textTransform: 'uppercase' },
   headerBtn: { marginRight: 8, padding: 4 },
   footerLoader: { marginVertical: 16 },
 });

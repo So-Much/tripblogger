@@ -7,7 +7,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import sanitizeHtml from 'sanitize-html';
 import { Repository } from 'typeorm';
-import { REACTION_TYPE_IDS } from './constants';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -46,6 +45,16 @@ function parseJsonArray(raw: string | null): string[] {
   }
 }
 
+function parseMedia(raw: string | null): Array<Record<string, unknown>> {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? (v as Array<Record<string, unknown>>) : [];
+  } catch {
+    return [];
+  }
+}
+
 function parseLocation(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
   try {
@@ -76,15 +85,27 @@ export class PostsService {
   ) {}
 
   private canViewPost(post: PostEntity, viewerUserId: string): boolean {
-    if (post.userId === viewerUserId) return true;
-    return post.status === 'PUBLISHED';
+    if (post.status === 'DELETED') return false;
+    if (post.status === 'PUBLISHED') return true;
+    return post.userId === viewerUserId;
+  }
+
+  private ensurePostPublishedForInteraction(post: PostEntity): void {
+    if (post.status === 'DELETED') {
+      throw new NotFoundException('Post not found');
+    }
+    if (post.status !== 'PUBLISHED') {
+      throw new ForbiddenException('Draft posts cannot be interacted with');
+    }
   }
 
   private serializePost(
     post: PostEntity,
     extras?: {
       reactionCounts?: Record<string, number>;
-      myReactionTypeIds?: string[];
+      myReactionCodes?: string[];
+      commentCount?: number;
+      shareCount?: number;
     },
   ) {
     return {
@@ -92,7 +113,7 @@ export class PostsService {
       userId: post.userId,
       title: post.title,
       contentHtml: post.contentHtml,
-      media: parseJsonArray(post.mediaJson),
+      media: parseMedia(post.mediaJson),
       category: post.category,
       tags: parseJsonArray(post.tagsJson),
       visibility: post.visibility,
@@ -101,48 +122,90 @@ export class PostsService {
       createdAt: post.createdAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
       reactionCounts: extras?.reactionCounts ?? {},
-      myReactionTypeIds: extras?.myReactionTypeIds ?? [],
+      myReactionCodes: extras?.myReactionCodes ?? [],
+      commentCount: extras?.commentCount ?? 0,
+      shareCount: extras?.shareCount ?? 0,
     };
   }
 
   private async getPostReactionMeta(postId: string, viewerUserId?: string): Promise<{
     reactionCounts: Record<string, number>;
-    myReactionTypeIds: string[];
+    myReactionCodes: string[];
+    shareCount: number;
   }> {
     const countRows = await this.reactsRepo
       .createQueryBuilder('r')
-      .select('r.type_id', 'typeId')
+      .leftJoin('react_types', 'rt', 'rt.id = r.type_id')
+      .select('rt.code', 'typeCode')
       .addSelect('COUNT(*)', 'cnt')
       .where('r.post_id = :postId', { postId })
-      .groupBy('r.type_id')
-      .getRawMany<{ typeId: string; cnt: string }>();
+      .groupBy('rt.code')
+      .getRawMany<{ typeCode: string; cnt: string }>();
 
     const reactionCounts: Record<string, number> = {};
     for (const row of countRows) {
-      reactionCounts[row.typeId] = Number(row.cnt);
+      reactionCounts[row.typeCode] = Number(row.cnt);
     }
 
-    let myReactionTypeIds: string[] = [];
+    let myReactionCodes: string[] = [];
     if (viewerUserId) {
-      const mine = await this.reactsRepo.find({
-        where: { postId, userId: viewerUserId },
-        select: ['typeId'],
-      });
-      myReactionTypeIds = mine.map((r) => r.typeId);
+      const mine = await this.reactsRepo
+        .createQueryBuilder('r')
+        .leftJoin('react_types', 'rt', 'rt.id = r.type_id')
+        .select('rt.code', 'typeCode')
+        .where('r.post_id = :postId', { postId })
+        .andWhere('r.user_id = :userId', { userId: viewerUserId })
+        .getRawMany<{ typeCode: string }>();
+      myReactionCodes = mine.map((r) => r.typeCode);
     }
 
-    return { reactionCounts, myReactionTypeIds };
+    return {
+      reactionCounts,
+      myReactionCodes,
+      shareCount: reactionCounts.SHARE ?? 0,
+    };
   }
 
-  async listReactionTypes(): Promise<{ id: string; code: string; name: string; media: string | null; useFor: string }[]> {
+  private async getPostCommentCount(postId: string): Promise<number> {
+    return this.commentsRepo.count({ where: { postId } });
+  }
+
+  async listReactionTypes(): Promise<{ code: string; name: string; media: string | null; useFor: string }[]> {
     const types = await this.reactTypesRepo.find({ order: { code: 'ASC' } });
     return types.map((t) => ({
-      id: t.id,
       code: t.code,
       name: t.name,
       media: t.media,
       useFor: t.useFor,
     }));
+  }
+
+  async listPostReactors(postId: string, viewerUserId: string) {
+    const post = await this.postsRepo.findOne({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Post not found');
+    if (!this.canViewPost(post, viewerUserId)) throw new NotFoundException('Post not found');
+
+    const rows = await this.reactsRepo
+      .createQueryBuilder('r')
+      .leftJoin('react_types', 'rt', 'rt.id = r.type_id')
+      .leftJoin('users', 'u', 'u.id = r.user_id')
+      .leftJoin('member_profiles', 'mp', 'mp.user_id = u.id')
+      .select('COALESCE(mp.display_name, mp.username)', 'displayName')
+      .addSelect('rt.code', 'reactionCode')
+      .addSelect('rt.name', 'reactionName')
+      .where('r.post_id = :postId', { postId })
+      .andWhere('rt.code != :share', { share: 'SHARE' })
+      .orderBy('r.created_at', 'DESC')
+      .getRawMany<{ displayName: string | null; reactionCode: string; reactionName: string }>();
+
+    return {
+      total: rows.length,
+      items: rows.map((r) => ({
+        displayName: r.displayName ?? 'Member',
+        reactionCode: r.reactionCode,
+        reactionName: r.reactionName,
+      })),
+    };
   }
 
   async createPost(userId: string, dto: CreatePostDto) {
@@ -161,33 +224,57 @@ export class PostsService {
       status: dto.status ?? 'DRAFT',
     });
     await this.postsRepo.save(post);
-    return this.serializePost(post);
+    return this.serializePost(post, { commentCount: 0, shareCount: 0 });
   }
 
   async updatePost(userId: string, postId: string, dto: UpdatePostDto) {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
     if (post.userId !== userId) throw new ForbiddenException('Not your post');
+    if (post.status === 'DELETED') throw new NotFoundException('Post not found');
+    if (post.status !== 'DRAFT') throw new ForbiddenException('Only draft posts can be edited');
+    if (dto.status && dto.status !== 'DRAFT') {
+      throw new ForbiddenException('Use publish endpoint to publish a draft');
+    }
     if (dto.title !== undefined) post.title = dto.title.trim();
     if (dto.contentHtml !== undefined) post.contentHtml = sanitizePostHtml(dto.contentHtml);
     if (dto.visibility !== undefined) post.visibility = dto.visibility;
     if (dto.status !== undefined) post.status = dto.status as PostStatus;
     if (dto.category !== undefined) post.category = dto.category?.trim() ?? null;
+    if (dto.media !== undefined) post.mediaJson = dto.media.length ? JSON.stringify(dto.media) : null;
+    if (dto.tags !== undefined) post.tagsJson = dto.tags.length ? JSON.stringify(dto.tags) : null;
     if (dto.location !== undefined) {
       post.locationJson = dto.location ? JSON.stringify(dto.location) : null;
     }
     await this.postsRepo.save(post);
     const meta = await this.getPostReactionMeta(post.id, userId);
-    return this.serializePost(post, meta);
+    const commentCount = await this.getPostCommentCount(post.id);
+    return this.serializePost(post, { ...meta, commentCount });
   }
 
   async softDeletePost(userId: string, postId: string) {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
     if (post.userId !== userId) throw new ForbiddenException('Not your post');
+    if (post.status === 'DELETED') return { ok: true as const };
     post.status = 'DELETED';
     await this.postsRepo.save(post);
     return { ok: true as const };
+  }
+
+  async publishPost(userId: string, postId: string) {
+    const post = await this.postsRepo.findOne({ where: { id: postId } });
+    if (!post) throw new NotFoundException('Post not found');
+    if (post.userId !== userId) throw new ForbiddenException('Not your post');
+    if (post.status === 'DELETED') throw new NotFoundException('Post not found');
+    if (post.status !== 'DRAFT') throw new ForbiddenException('Only draft posts can be published');
+
+    post.status = 'PUBLISHED';
+    await this.postsRepo.save(post);
+
+    const meta = await this.getPostReactionMeta(post.id, userId);
+    const commentCount = await this.getPostCommentCount(post.id);
+    return this.serializePost(post, { ...meta, commentCount });
   }
 
   async findMine(userId: string, query: QueryMinePostsDto) {
@@ -199,6 +286,9 @@ export class PostsService {
       .orderBy('p.created_at', 'DESC')
       .addOrderBy('p.id', 'DESC')
       .take(limit + 1);
+    if (query.status) {
+      qb.andWhere('p.status = :status', { status: query.status });
+    }
 
     if (query.cursor) {
       const { createdAt, id } = decodePostCursor(query.cursor);
@@ -218,7 +308,8 @@ export class PostsService {
     const payloads = await Promise.all(
       items.map(async (p) => {
         const meta = await this.getPostReactionMeta(p.id, userId);
-        return this.serializePost(p, meta);
+        const commentCount = await this.getPostCommentCount(p.id);
+        return this.serializePost(p, { ...meta, commentCount });
       }),
     );
 
@@ -231,41 +322,60 @@ export class PostsService {
     if (!this.canViewPost(post, viewerUserId)) throw new NotFoundException('Post not found');
 
     const meta = await this.getPostReactionMeta(post.id, viewerUserId);
-    return this.serializePost(post, meta);
+    const commentCount = await this.getPostCommentCount(post.id);
+    return this.serializePost(post, { ...meta, commentCount });
   }
 
-  async togglePostReaction(userId: string, postId: string, typeId: string) {
+  async togglePostReaction(userId: string, postId: string, typeCode: string) {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
     if (!this.canViewPost(post, userId)) throw new NotFoundException('Post not found');
+    this.ensurePostPublishedForInteraction(post);
 
-    const rtype = await this.reactTypesRepo.findOne({ where: { id: typeId } });
+    const rtype = await this.reactTypesRepo.findOne({ where: { code: typeCode } });
     if (!rtype) throw new NotFoundException('Reaction type not found');
     validateReactTypeForTarget(rtype.useFor, 'POST');
 
-    const existing = await this.reactsRepo.findOne({
-      where: { userId, postId, typeId },
+    const existingByPost = await this.reactsRepo.findOne({
+      where: { userId, postId },
     });
-    if (existing) {
-      await this.reactsRepo.remove(existing);
+    if (existingByPost) {
+      if (existingByPost.typeId === rtype.id) {
+        await this.reactsRepo.remove(existingByPost);
+        const meta = await this.getPostReactionMeta(postId, userId);
+        const commentCount = await this.getPostCommentCount(post.id);
+        return {
+          toggledOn: false as const,
+          post: this.serializePost(post, { ...meta, commentCount }),
+        };
+      }
+      existingByPost.typeId = rtype.id;
+      await this.reactsRepo.save(existingByPost);
       const meta = await this.getPostReactionMeta(postId, userId);
-      return { toggledOn: false as const, post: this.serializePost(post, meta) };
+      const commentCount = await this.getPostCommentCount(post.id);
+      return { toggledOn: true as const, post: this.serializePost(post, { ...meta, commentCount }) };
     }
-    const row = this.reactsRepo.create({ userId, postId, commentId: null, typeId });
+
+    const row = this.reactsRepo.create({ userId, postId, commentId: null, typeId: rtype.id });
     await this.reactsRepo.save(row);
     const meta = await this.getPostReactionMeta(postId, userId);
-    return { toggledOn: true as const, post: this.serializePost(post, meta) };
+    const commentCount = await this.getPostCommentCount(post.id);
+    return { toggledOn: true as const, post: this.serializePost(post, { ...meta, commentCount }) };
   }
 
   async sharePost(userId: string, postId: string) {
-    return this.togglePostReaction(userId, postId, REACTION_TYPE_IDS.SHARE);
+    return this.togglePostReaction(userId, postId, 'SHARE');
+  }
+
+  async setHeartReaction(userId: string, postId: string) {
+    return this.togglePostReaction(userId, postId, 'HEART');
   }
 
   async addComment(userId: string, postId: string, dto: CreateCommentDto) {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
     if (!this.canViewPost(post, userId)) throw new NotFoundException('Post not found');
-    if (post.status === 'DELETED') throw new NotFoundException('Post not found');
+    this.ensurePostPublishedForInteraction(post);
 
     let parent: CommentEntity | null = null;
     if (dto.parentCommentId) {
@@ -287,8 +397,8 @@ export class PostsService {
     await this.commentsRepo.save(comment);
     return {
       id: comment.id,
-      userId: comment.userId,
       postId: comment.postId,
+      displayName: 'Bạn',
       content: comment.content,
       parentCommentId: comment.parentCommentId,
       createdAt: comment.createdAt.toISOString(),
@@ -300,6 +410,7 @@ export class PostsService {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
     if (!this.canViewPost(post, viewerUserId)) throw new NotFoundException('Post not found');
+    this.ensurePostPublishedForInteraction(post);
 
     const limit = query.limit;
     const qb = this.commentsRepo
@@ -323,39 +434,64 @@ export class PostsService {
     const last = items[items.length - 1];
     const nextCursor = hasMore && last ? encodePostCursor(last.createdAt, last.id) : null;
 
+    const profiles = items.length
+      ? await this.commentsRepo
+          .createQueryBuilder('c')
+          .leftJoin('c.user', 'u')
+          .leftJoin('u.memberProfile', 'mp')
+          .select('c.id', 'id')
+          .addSelect('COALESCE(mp.display_name, mp.username)', 'displayName')
+          .where('c.id IN (:...ids)', { ids: items.map((i) => i.id) })
+          .getRawMany<{ id: string; displayName: string | null }>()
+      : [];
+    const profileMap = new Map(profiles.map((p) => [p.id, p.displayName ?? 'Member']));
+
     const serialized = items.map((c) => ({
       id: c.id,
-      userId: c.userId,
+      displayName: profileMap.get(c.id) ?? 'Member',
       postId: c.postId,
       content: c.content,
       parentCommentId: c.parentCommentId,
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
     }));
+    const roots = serialized.filter((c) => !c.parentCommentId);
+    const repliesByParent = serialized
+      .filter((c) => !!c.parentCommentId)
+      .reduce<Record<string, typeof serialized>>((acc, c) => {
+        const parentId = c.parentCommentId as string;
+        acc[parentId] = acc[parentId] ? [...acc[parentId], c] : [c];
+        return acc;
+      }, {});
+    const threaded = roots.map((root) => ({
+      ...root,
+      replies: (repliesByParent[root.id] ?? []).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)),
+    }));
 
-    return { items: serialized, nextCursor };
+    return { items: serialized, threaded, nextCursor };
   }
 
-  async toggleCommentReaction(userId: string, postId: string, commentId: string, typeId: string) {
+  async toggleCommentReaction(userId: string, postId: string, commentId: string, typeCode: string) {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) throw new NotFoundException('Post not found');
     if (!this.canViewPost(post, userId)) throw new NotFoundException('Post not found');
+    this.ensurePostPublishedForInteraction(post);
 
     const comment = await this.commentsRepo.findOne({ where: { id: commentId } });
     if (!comment || comment.postId !== postId) throw new NotFoundException('Comment not found');
 
-    const rtype = await this.reactTypesRepo.findOne({ where: { id: typeId } });
+    const rtype = await this.reactTypesRepo.findOne({ where: { code: typeCode } });
     if (!rtype) throw new NotFoundException('Reaction type not found');
     validateReactTypeForTarget(rtype.useFor, 'COMMENT');
 
     const existing = await this.reactsRepo.findOne({
-      where: { userId, commentId, typeId },
+      where: { userId, commentId, typeId: rtype.id },
     });
     if (existing) {
       await this.reactsRepo.remove(existing);
       return { toggledOn: false as const, commentId };
     }
-    const row = this.reactsRepo.create({ userId, postId: null, commentId, typeId });
+    const row = this.reactsRepo.create({ userId, postId: null, commentId, typeId: rtype.id });
     await this.reactsRepo.save(row);
     return { toggledOn: true as const, commentId };
   }

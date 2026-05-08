@@ -97,6 +97,10 @@ const vi = {
   postDetailReplying: 'Đang trả lời',
   postDetailCommentPlaceholder: 'Viết bình luận…',
   postDetailSendComment: 'Gửi',
+  postDraftNoInteraction: 'Bài nháp chưa thể tương tác (tim/bình luận/chia sẻ).',
+  postDeleteTitle: 'Xóa bài viết?',
+  postDeleteConfirm: 'Bạn có chắc chắn muốn xoá bài viết này? Hành động không thể hoàn tác!',
+  postDeleteAction: 'Xóa',
 } as const;
 
 const en: Record<keyof typeof vi, string> = {
@@ -196,6 +200,10 @@ const en: Record<keyof typeof vi, string> = {
   postDetailReplying: 'Replying to',
   postDetailCommentPlaceholder: 'Write a comment…',
   postDetailSendComment: 'Send',
+  postDraftNoInteraction: 'Draft posts cannot be reacted, commented, or shared.',
+  postDeleteTitle: 'Delete this post?',
+  postDeleteConfirm: 'This will mark the post as deleted and hide it from users.',
+  postDeleteAction: 'Delete',
 };
 
 const dict = { vi, en };

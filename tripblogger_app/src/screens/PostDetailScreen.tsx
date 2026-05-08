@@ -1,7 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Alert,
+  Modal,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,32 +12,43 @@ import {
   View,
 } from 'react-native';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import type { CommentDto, ReactionTypeDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { PostMediaBlock } from '@/src/components/posts/PostMediaBlock';
+import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
+import { CommentThread } from '@/src/components/posts/CommentThread';
 
 function postReactionTypes(types: ReactionTypeDto[]): ReactionTypeDto[] {
   return types.filter((t) => t.useFor === 'POST' || t.useFor === 'BOTH');
-}
-
-function commentReactionTypes(types: ReactionTypeDto[]): ReactionTypeDto[] {
-  return types.filter((t) => t.useFor === 'COMMENT' || t.useFor === 'BOTH');
 }
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function formatDateTime(value: string): string {
+  const d = new Date(value);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy}, ${hh}:${min}`;
+}
+
 export function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -45,7 +58,6 @@ export function PostDetailScreen() {
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const border = useThemeColor({}, 'border');
-  const card = useThemeColor({}, 'card');
   const cta = useThemeColor({}, 'cta');
   const bg = useThemeColor({}, 'background');
 
@@ -67,13 +79,13 @@ export function PostDetailScreen() {
       postsService.listComments(String(id), { limit: 20, cursor: pageParam as string | undefined }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
-    enabled: Boolean(id) && isMember === true,
+    enabled: Boolean(id) && isMember === true && postQuery.data?.status === 'PUBLISHED',
   });
-
-  const comments = useMemo(
-    () => commentsQuery.data?.pages.flatMap((p) => p.items) ?? [],
-    [commentsQuery.data?.pages],
-  );
+  const reactorsQuery = useQuery({
+    queryKey: ['posts', id, 'reactors'],
+    queryFn: () => postsService.listPostReactors(String(id)),
+    enabled: Boolean(id) && isMember === true && postQuery.data?.status === 'PUBLISHED',
+  });
 
   const post = postQuery.data;
 
@@ -81,17 +93,24 @@ export function PostDetailScreen() {
     () => postReactionTypes(typesQuery.data ?? []),
     [typesQuery.data],
   );
-  const cmtTypes = useMemo(
-    () => commentReactionTypes(typesQuery.data ?? []),
-    [typesQuery.data],
-  );
 
   const [commentText, setCommentText] = useState('');
   const [replyTo, setReplyTo] = useState<CommentDto | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerAnchor, setPickerAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [commentInputHeight, setCommentInputHeight] = useState(42);
+  const [showReactors, setShowReactors] = useState(false);
+  const lastTapRef = useRef(0);
+  const totalReacts = Math.max(
+    Object.values(post?.reactionCounts ?? {}).reduce((acc, c) => acc + c, 0) - (post?.shareCount ?? 0),
+    0,
+  );
+  const canInteract = post?.status === 'PUBLISHED';
+  const canDelete = post?.status !== 'DELETED' && post?.userId === meQuery.data?.id;
 
   const togglePostReact = useMutation({
-    mutationFn: (typeId: string) => postsService.togglePostReaction(String(id), typeId),
+    mutationFn: (typeCode: string) => postsService.togglePostReaction(String(id), typeCode),
     onSuccess: (r) => {
       queryClient.setQueryData(['posts', id], r.post);
       void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
@@ -124,42 +143,14 @@ export function PostDetailScreen() {
     onError: (e) => setActionErr(formatApiError(e)),
   });
 
-  const toggleCommentReact = useMutation({
-    mutationFn: ({ commentId, typeId }: { commentId: string; typeId: string }) =>
-      postsService.toggleCommentReaction(String(id), commentId, typeId),
+  const deletePostMut = useMutation({
+    mutationFn: () => postsService.deletePost(String(id)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+      router.back();
+    },
     onError: (e) => setActionErr(formatApiError(e)),
   });
-
-  const renderComment = useCallback(
-    ({ item }: { item: CommentDto }) => (
-      <View
-        style={[
-          styles.commentRow,
-          { borderColor: border, backgroundColor: card },
-          item.parentCommentId ? styles.commentReply : null,
-        ]}>
-        <ThemedText style={{ fontSize: 13, color: muted }}>{item.userId.slice(0, 8)}…</ThemedText>
-        <ThemedText>{item.content}</ThemedText>
-        <View style={styles.commentActions}>
-          <Pressable onPress={() => setReplyTo(item)}>
-            <ThemedText type="link" style={{ fontSize: 13 }}>
-              {t('postDetailReply')}
-            </ThemedText>
-          </Pressable>
-          {isMember &&
-            cmtTypes.map((rt) => (
-              <Pressable
-                key={rt.id}
-                onPress={() => toggleCommentReact.mutate({ commentId: item.id, typeId: rt.id })}
-                style={styles.reactChip}>
-                <ThemedText>{rt.name}</ThemedText>
-              </Pressable>
-            ))}
-        </View>
-      </View>
-    ),
-    [border, card, muted, t, isMember, cmtTypes, toggleCommentReact],
-  );
 
   if (!isMember) {
     return (
@@ -185,104 +176,165 @@ export function PostDetailScreen() {
     );
   }
 
+  const handleDoubleTapHeart = async () => {
+    await postsService.heartPost(String(id));
+    await queryClient.invalidateQueries({ queryKey: ['posts', id] });
+    await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 48 : 0}>
-      <FlatList
-        data={comments}
-        keyExtractor={(c) => c.id}
-        renderItem={renderComment}
-        onEndReached={() => {
-          if (commentsQuery.hasNextPage && !commentsQuery.isFetchingNextPage) {
-            void commentsQuery.fetchNextPage();
-          }
-        }}
-        onEndReachedThreshold={0.5}
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            <ThemedText type="subtitle">{post.title}</ThemedText>
-            <ThemedText style={[styles.date, { color: muted }]}>
-              {new Date(post.createdAt).toLocaleString()} · {post.status}
-            </ThemedText>
-            <ThemedText style={{ color: text }}>{stripHtml(post.contentHtml)}</ThemedText>
-            {actionErr ? (
-              <ThemedText lightColor="#b00" darkColor="#f88" style={styles.errTxt}>
-                {actionErr}
-              </ThemedText>
-            ) : null}
-            <View style={styles.reactRow}>
-              {postTypes
-                .filter((rt) => rt.code !== 'SHARE')
-                .map((rt) => {
-                  const count = post.reactionCounts[rt.id] ?? 0;
-                  const on = post.myReactionTypeIds.includes(rt.id);
-                  return (
-                    <Pressable
-                      key={rt.id}
-                      onPress={() => togglePostReact.mutate(rt.id)}
-                      style={[
-                        styles.reactChip,
-                        on && { borderColor: cta, backgroundColor: card },
-                      ]}>
-                      <ThemedText style={{ fontSize: 13 }}>
-                        {rt.name} {count > 0 ? `(${count})` : ''}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 96, paddingHorizontal: 16, paddingTop: 8 }}>
+        <View style={[styles.headerBlock, { borderColor: border }]}>
+          <View style={styles.titleRow}>
+            <ThemedText type="subtitle" style={styles.titleFlex}>{post.title}</ThemedText>
+            {canDelete ? (
               <Pressable
-                onPress={() => shareMut.mutate()}
-                style={styles.reactChip}
-                disabled={shareMut.isPending}>
-                <ThemedText style={{ fontSize: 13 }}>{t('postDetailShare')}</ThemedText>
+                onPress={() => {
+                  Alert.alert(t('postDeleteTitle'), t('postDeleteConfirm'), [
+                    { text: t('cancel'), style: 'cancel' },
+                    { text: t('postDeleteAction'), style: 'destructive', onPress: () => deletePostMut.mutate() },
+                  ]);
+                }}
+                style={styles.deleteBtn}
+                disabled={deletePostMut.isPending}>
+                <ThemedText style={styles.deleteTxt}>{t('postDeleteAction')}</ThemedText>
+              </Pressable>
+            ) : null}
+          </View>
+          <ThemedText style={[styles.date, { color: muted }]}>{formatDateTime(post.createdAt)}</ThemedText>
+          <Pressable
+            onPress={() => {
+              if (!canInteract) return;
+              const now = Date.now();
+              if (now - lastTapRef.current < 280) {
+                void handleDoubleTapHeart();
+              }
+              lastTapRef.current = now;
+            }}>
+            <PostMediaBlock media={post.media} />
+            <View style={[styles.section, { borderColor: border }]}>
+              <ThemedText style={{ color: text }}>{stripHtml(post.contentHtml)}</ThemedText>
+            </View>
+          </Pressable>
+          {actionErr ? (
+            <ThemedText lightColor="#b00" darkColor="#f88" style={styles.errTxt}>
+              {actionErr}
+            </ThemedText>
+          ) : null}
+
+          {canInteract ? (
+            <View style={styles.reactorMetaRow}>
+              <Pressable onPress={() => setShowReactors(true)} hitSlop={8}>
+                <ThemedText style={[styles.reactorMeta, { color: muted }]}>
+                  {reactorsQuery.data?.total ?? 0} người đã tương tác
+                </ThemedText>
               </Pressable>
             </View>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
-              {t('postDetailComments')}
-            </ThemedText>
-          </View>
-        }
-        ListEmptyComponent={
-          !commentsQuery.isLoading ? (
-            <ThemedText style={{ color: muted, paddingHorizontal: 16 }}>{t('postDetailNoComments')}</ThemedText>
-          ) : (
+          ) : null}
+
+          {canInteract ? (
+            <View style={[styles.actionRow, { borderTopColor: border }]}>
+              <Pressable
+                onPress={() => void handleDoubleTapHeart()}
+                onLongPress={(e) => {
+                  setPickerAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
+                  setPickerOpen(true);
+                }}
+                style={styles.actionBtn}>
+                <IconSymbol name="heart.fill" size={17} color={cta} />
+                <ThemedText style={styles.actionText}>{totalReacts}</ThemedText>
+              </Pressable>
+              <Pressable style={styles.actionBtn}>
+                <IconSymbol name="bubble.left.and.bubble.right.fill" size={17} color={muted} />
+                <ThemedText style={styles.actionText}>{post.commentCount}</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => shareMut.mutate()} style={styles.actionBtn} disabled={shareMut.isPending}>
+                <IconSymbol name="paperplane.fill" size={17} color={muted} />
+                <ThemedText style={styles.actionText}>{post.shareCount}</ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+
+          <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
+            {t('postDetailComments')}
+          </ThemedText>
+          {!canInteract ? (
+            <ThemedText style={{ color: muted }}>{t('postDraftNoInteraction')}</ThemedText>
+          ) : commentsQuery.isLoading ? (
             <ActivityIndicator />
-          )
-        }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 16 }}
-      />
-      <View style={[styles.composer, { borderTopColor: border, backgroundColor: bg, paddingBottom: insets.bottom + 8 }]}>
+          ) : commentsQuery.data?.pages[0]?.threaded?.length ? (
+            <CommentThread
+              threaded={commentsQuery.data.pages.flatMap((p) => p.threaded ?? [])}
+              onReply={(c) => setReplyTo(c)}
+            />
+          ) : (
+            <ThemedText style={{ color: muted }}>{t('postDetailNoComments')}</ThemedText>
+          )}
+        </View>
+      </ScrollView>
+      <View style={[styles.composer, { borderTopColor: border, backgroundColor: bg, paddingBottom: insets.bottom, opacity: canInteract ? 1 : 0.5 }]}>
         {replyTo ? (
           <View style={styles.replyBanner}>
             <ThemedText style={{ color: muted }}>
-              {t('postDetailReplying')} {replyTo.id.slice(0, 8)}…
+              {t('postDetailReplying')} {replyTo.displayName}
             </ThemedText>
             <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
               <ThemedText type="link">{t('cancel')}</ThemedText>
             </Pressable>
           </View>
         ) : null}
-        <TextInput
-          value={commentText}
-          onChangeText={setCommentText}
-          placeholder={t('postDetailCommentPlaceholder')}
-          placeholderTextColor={muted}
-          multiline
-          style={[styles.input, { borderColor: border, color: text }]}
-        />
-        <Pressable
-          onPress={() => addCommentMut.mutate()}
-          disabled={addCommentMut.isPending || !commentText.trim()}
-          style={[styles.sendBtn, { backgroundColor: cta }]}>
-          {addCommentMut.isPending ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText style={styles.sendTxt}>{t('postDetailSendComment')}</ThemedText>
-          )}
-        </Pressable>
+        <View style={styles.composerRow}>
+          <TextInput
+            value={commentText}
+            onChangeText={setCommentText}
+            placeholder={t('postDetailCommentPlaceholder')}
+            placeholderTextColor={muted}
+            multiline
+            onContentSizeChange={(event) => {
+              const next = Math.min(Math.max(event.nativeEvent.contentSize.height, 42), 112);
+              setCommentInputHeight(next);
+            }}
+            style={[styles.input, { borderColor: border, color: text, height: commentInputHeight }]}
+          />
+          <Pressable
+            onPress={() => addCommentMut.mutate()}
+            disabled={addCommentMut.isPending || !commentText.trim() || !canInteract}
+            style={[styles.sendBtn, { backgroundColor: cta }]}>
+            {addCommentMut.isPending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.sendTxt}>{t('postDetailSendComment')}</ThemedText>
+            )}
+          </Pressable>
+        </View>
       </View>
+      <ReactionPicker
+        open={pickerOpen}
+        anchor={pickerAnchor}
+        options={postTypes.filter((r) => r.code !== 'SHARE')}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(typeCode) => {
+          if (!canInteract) return;
+          setPickerOpen(false);
+          togglePostReact.mutate(typeCode);
+        }}
+      />
+      <Modal transparent visible={showReactors} animationType="fade" onRequestClose={() => setShowReactors(false)}>
+        <Pressable style={styles.reactorsBackdrop} onPress={() => setShowReactors(false)}>
+          <View style={[styles.reactorsSheet, { borderColor: border, backgroundColor: bg }]}>
+            <ThemedText type="defaultSemiBold">Tương tác</ThemedText>
+            {(reactorsQuery.data?.items ?? []).slice(0, 30).map((r, idx) => (
+              <ThemedText key={`${r.displayName}-${r.reactionCode}-${idx}`} style={{ color: text }}>
+                {r.displayName} · {r.reactionName}
+              </ThemedText>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -290,26 +342,50 @@ export function PostDetailScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  headerBlock: { gap: 10, paddingTop: 8 },
-  date: { fontSize: 12 },
-  sectionTitle: { marginTop: 16, marginBottom: 8 },
-  reactRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 8 },
-  reactChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderColor: 'rgba(128,128,128,0.4)',
-  },
-  commentRow: {
-    padding: 12,
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  titleFlex: { flex: 1 },
+  deleteBtn: {
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 10,
-    gap: 4,
+    borderColor: '#EF4444',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  commentReply: { marginLeft: 16 },
-  commentActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  deleteTxt: { color: '#EF4444', fontWeight: '600', fontSize: 12 },
+  headerBlock: {
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  section: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  date: { fontSize: 12 },
+  sectionTitle: { marginTop: 12, marginBottom: 6 },
+  actionRow: {
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  actionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  reactorMetaRow: { alignItems: 'flex-end' },
+  reactorMeta: { fontSize: 12, fontWeight: '600' },
   errTxt: { marginVertical: 6 },
   composer: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -318,19 +394,35 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   input: {
+    flex: 1,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    minHeight: 44,
+    borderRadius: 12,
+    minHeight: 42,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     textAlignVertical: 'top',
   },
-  sendBtn: { marginTop: 8, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  sendBtn: {
+    marginLeft: 8,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sendTxt: { color: '#fff', fontWeight: '600' },
   replyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  composerRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  reactorsBackdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.22)', justifyContent: 'center', padding: 20 },
+  reactorsSheet: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
   },
 });

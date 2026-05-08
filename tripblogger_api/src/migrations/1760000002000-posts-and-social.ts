@@ -24,10 +24,12 @@ export class PostsAndSocial1760000002000 implements MigrationInterface {
 
     await queryRunner.query(`
       INSERT INTO react_types (id, code, name, media, use_for) VALUES
-      ('11111111-1111-4111-8111-111111111101', 'LIKE', 'Like', NULL, 'BOTH'),
-      ('11111111-1111-4111-8111-111111111102', 'LOVE', 'Love', NULL, 'BOTH'),
-      ('11111111-1111-4111-8111-111111111103', 'HAHA', 'Haha', NULL, 'BOTH'),
-      ('11111111-1111-4111-8111-111111111104', 'SHARE', 'Share', NULL, 'POST');
+      ('11111111-1111-4111-8111-111111111101', 'HEART', 'Tim', NULL, 'POST'),
+      ('11111111-1111-4111-8111-111111111102', 'HAHA', 'Haha', NULL, 'POST'),
+      ('11111111-1111-4111-8111-111111111103', 'ANGRY', 'Tức giận', NULL, 'POST'),
+      ('11111111-1111-4111-8111-111111111104', 'SAD', 'Buồn', NULL, 'POST'),
+      ('11111111-1111-4111-8111-111111111105', 'WOW', 'Wow', NULL, 'POST'),
+      ('11111111-1111-4111-8111-111111111106', 'SHARE', 'Share', NULL, 'POST');
     `);
 
     await queryRunner.query(`
@@ -92,7 +94,7 @@ export class PostsAndSocial1760000002000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE UNIQUE INDEX UQ_reacts_post_user_type ON reacts (user_id, post_id, type_id)
+      CREATE UNIQUE INDEX UQ_reacts_post_user ON reacts (user_id, post_id)
       WHERE post_id IS NOT NULL AND comment_id IS NULL;
     `);
 
@@ -114,7 +116,7 @@ export class PostsAndSocial1760000002000 implements MigrationInterface {
     await queryRunner.query('DROP INDEX IX_reacts_comment_id ON reacts;');
     await queryRunner.query('DROP INDEX IX_reacts_post_id ON reacts;');
     await queryRunner.query('DROP INDEX UQ_reacts_comment_user_type ON reacts;');
-    await queryRunner.query('DROP INDEX UQ_reacts_post_user_type ON reacts;');
+    await queryRunner.query('DROP INDEX UQ_reacts_post_user ON reacts;');
     await queryRunner.query('DROP TABLE reacts;');
     await queryRunner.query('DROP INDEX IX_comments_post_created_id ON comments;');
     await queryRunner.query('DROP TABLE comments;');

@@ -5,6 +5,7 @@ import type {
   PaginatedPosts,
   PostDto,
   ReactionTypeDto,
+  PostReactorDto,
 } from '@/src/types/post';
 
 export const postsService = {
@@ -13,11 +14,12 @@ export const postsService = {
     return res.data;
   },
 
-  async listMine(params: { limit?: number; cursor?: string }): Promise<PaginatedPosts> {
+  async listMine(params: { limit?: number; cursor?: string; status?: 'DRAFT' | 'PUBLISHED' }): Promise<PaginatedPosts> {
     const res = await apiClient.get<PaginatedPosts>('/posts/mine', {
       params: {
         limit: params.limit ?? 20,
         ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.status ? { status: params.status } : {}),
       },
     });
     return res.data;
@@ -31,7 +33,7 @@ export const postsService = {
   async createPost(body: {
     title: string;
     contentHtml: string;
-    media?: string[];
+    media?: { type: 'icon' | 'image' | 'video'; url: string; thumbnailUrl?: string; iconCode?: string }[];
     category?: string;
     tags?: string[];
     visibility?: 'PUBLIC' | 'PRIVATE';
@@ -51,6 +53,8 @@ export const postsService = {
       status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
       category: string | null;
       location: { lat?: number; lng?: number; name?: string } | null;
+      media: { type: 'icon' | 'image' | 'video'; url: string; thumbnailUrl?: string; iconCode?: string }[];
+      tags: string[];
     }>,
   ): Promise<PostDto> {
     const res = await apiClient.patch<PostDto>(`/posts/${id}`, body);
@@ -62,10 +66,25 @@ export const postsService = {
     return res.data;
   },
 
-  async togglePostReaction(postId: string, typeId: string): Promise<{ toggledOn: boolean; post: PostDto }> {
+  async togglePostReaction(postId: string, typeCode: string): Promise<{ toggledOn: boolean; post: PostDto }> {
     const res = await apiClient.post<{ toggledOn: boolean; post: PostDto }>(`/posts/${postId}/reactions`, {
-      typeId,
+      typeCode,
     });
+    return res.data;
+  },
+
+  async heartPost(postId: string): Promise<{ toggledOn: boolean; post: PostDto }> {
+    const res = await apiClient.post<{ toggledOn: boolean; post: PostDto }>(`/posts/${postId}/reactions/heart`);
+    return res.data;
+  },
+
+  async publishPost(postId: string): Promise<PostDto> {
+    const res = await apiClient.post<PostDto>(`/posts/${postId}/publish`);
+    return res.data;
+  },
+
+  async listPostReactors(postId: string): Promise<{ total: number; items: PostReactorDto[] }> {
+    const res = await apiClient.get<{ total: number; items: PostReactorDto[] }>(`/posts/${postId}/reactions/actors`);
     return res.data;
   },
 
@@ -95,12 +114,27 @@ export const postsService = {
   async toggleCommentReaction(
     postId: string,
     commentId: string,
-    typeId: string,
+    typeCode: string,
   ): Promise<{ toggledOn: boolean; commentId: string }> {
     const res = await apiClient.post<{ toggledOn: boolean; commentId: string }>(
       `/posts/${postId}/comments/${commentId}/reactions`,
-      { typeId },
+      { typeCode },
     );
+    return res.data;
+  },
+
+  async uploadMedia(file: { uri: string; name: string; type: string }, kind: 'image' | 'video') {
+    const body = new FormData();
+    body.append('kind', kind);
+    body.append('file', file as unknown as Blob);
+    const res = await apiClient.post<{
+      kind: 'image' | 'video';
+      url: string;
+      mimeType: string;
+      size: number;
+    }>('/posts/media', body, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return res.data;
   },
 };

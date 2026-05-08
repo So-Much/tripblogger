@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class QueryMinePostsDto {
   @IsOptional()
@@ -12,6 +12,10 @@ export class QueryMinePostsDto {
   @IsOptional()
   @IsString()
   cursor?: string;
+
+  @IsOptional()
+  @IsIn(['DRAFT', 'PUBLISHED'])
+  status?: 'DRAFT' | 'PUBLISHED';
 }
 
 export class QueryCommentsDto {

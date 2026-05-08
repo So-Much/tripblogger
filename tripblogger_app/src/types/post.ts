@@ -3,7 +3,13 @@ export interface PostDto {
   userId: string;
   title: string;
   contentHtml: string;
-  media: string[];
+  media: {
+    type?: 'icon' | 'image' | 'video';
+    url: string;
+    thumbnailUrl?: string;
+    iconCode?: string;
+    kind?: 'image' | 'video';
+  }[];
   category: string | null;
   tags: string[];
   visibility: 'PUBLIC' | 'PRIVATE';
@@ -12,25 +18,36 @@ export interface PostDto {
   createdAt: string;
   updatedAt: string;
   reactionCounts: Record<string, number>;
-  myReactionTypeIds: string[];
+  myReactionCodes: string[];
+  commentCount: number;
+  shareCount: number;
 }
 
 export interface ReactionTypeDto {
-  id: string;
   code: string;
   name: string;
   media: string | null;
   useFor: 'POST' | 'COMMENT' | 'BOTH';
 }
 
+export interface PostReactorDto {
+  displayName: string;
+  reactionCode: string;
+  reactionName: string;
+}
+
 export interface CommentDto {
   id: string;
-  userId: string;
+  displayName: string;
   postId: string;
   content: string;
   parentCommentId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ThreadedCommentDto extends CommentDto {
+  replies: CommentDto[];
 }
 
 export interface PaginatedPosts {
@@ -40,5 +57,6 @@ export interface PaginatedPosts {
 
 export interface PaginatedComments {
   items: CommentDto[];
+  threaded?: ThreadedCommentDto[];
   nextCursor: string | null;
 }
