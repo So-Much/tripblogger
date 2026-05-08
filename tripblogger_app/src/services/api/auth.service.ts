@@ -7,11 +7,13 @@ export interface RegisterPayload {
   confirmPassword: string;
   displayName?: string;
   avatarUrl?: string;
+  deviceId: string;
 }
 
 export interface LoginPayload {
   username: string;
   password: string;
+  deviceId: string;
 }
 
 export const authService = {
@@ -25,12 +27,12 @@ export const authService = {
     return response.data;
   },
 
-  async guest(payload: { sessionId: string }): Promise<AuthTokens> {
+  async guest(payload: { sessionId: string; deviceId: string }): Promise<AuthTokens> {
     const response = await apiClient.post<AuthTokens>('/auth/guest', payload);
     return response.data;
   },
 
-  async google(payload: { idToken: string }): Promise<AuthTokens> {
+  async google(payload: { idToken: string; deviceId: string }): Promise<AuthTokens> {
     const response = await apiClient.post<AuthTokens>('/auth/google', payload);
     return response.data;
   },
@@ -40,7 +42,28 @@ export const authService = {
     return response.data;
   },
 
-  async logout(refreshToken: string): Promise<void> {
-    await apiClient.post('/auth/logout', { refreshToken });
+  async logout(payload: { refreshToken: string; deviceId: string }): Promise<void> {
+    await apiClient.post('/auth/logout', payload);
+  },
+
+  async updateProfile(payload: {
+    displayName?: string;
+    removeAvatar?: boolean;
+    avatarFile?: { uri: string; name: string; type: string };
+  }): Promise<MeResponse> {
+    const body = new FormData();
+    if (payload.displayName !== undefined) {
+      body.append('displayName', payload.displayName);
+    }
+    if (payload.removeAvatar) {
+      body.append('removeAvatar', 'true');
+    }
+    if (payload.avatarFile) {
+      body.append('avatar', payload.avatarFile as unknown as Blob);
+    }
+    const response = await apiClient.patch<MeResponse>('/users/me/profile', body, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
   },
 };

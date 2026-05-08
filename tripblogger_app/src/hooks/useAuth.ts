@@ -39,7 +39,7 @@ export function useGoogleLoginMutation() {
   const setTokens = useAuthStore((s) => s.setTokens);
   return useMutation({
     mutationKey: ['auth', 'google'],
-    mutationFn: (payload: { idToken: string }) => authService.google(payload),
+    mutationFn: (payload: { idToken: string; deviceId: string }) => authService.google(payload),
     onSuccess: (tokens) => setTokens(tokens),
   });
 }

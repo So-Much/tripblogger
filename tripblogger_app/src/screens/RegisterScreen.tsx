@@ -20,6 +20,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery, useRegisterMutation } from '@/src/hooks/useAuth';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
+import { ensureDeviceId, persistAuthTokens } from '@/src/services/session/session.service';
 
 const registerSchema = z
   .object({
@@ -60,7 +61,9 @@ export function RegisterScreen() {
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      await registerMutation.mutateAsync(values);
+      const deviceId = await ensureDeviceId();
+      const tokens = await registerMutation.mutateAsync({ ...values, deviceId });
+      await persistAuthTokens(tokens);
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {

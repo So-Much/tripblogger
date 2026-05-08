@@ -22,6 +22,7 @@ import { apiBaseUrl } from '@/src/services/api/client';
 import { signInWithGoogleIdToken } from '@/src/services/auth/google-auth';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
+import { ensureDeviceId, persistAuthTokens } from '@/src/services/session/session.service';
 
 const loginSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters'),
@@ -55,7 +56,9 @@ export function LoginScreen() {
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      await loginMutation.mutateAsync(values);
+      const deviceId = await ensureDeviceId();
+      const tokens = await loginMutation.mutateAsync({ ...values, deviceId });
+      await persistAuthTokens(tokens);
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {
@@ -67,7 +70,9 @@ export function LoginScreen() {
     setSubmitError(null);
     try {
       const idToken = await signInWithGoogleIdToken();
-      await googleLoginMutation.mutateAsync({ idToken });
+      const deviceId = await ensureDeviceId();
+      const tokens = await googleLoginMutation.mutateAsync({ idToken, deviceId });
+      await persistAuthTokens(tokens);
       await meQuery.refetch();
       router.replace('/');
     } catch (error) {

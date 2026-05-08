@@ -21,4 +21,8 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   avatarUrl?: string;
+
+  @IsString()
+  @MinLength(8)
+  deviceId!: string;
 }

@@ -8,10 +8,18 @@ import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { queryClient } from '@/src/services/query-client';
-import { ensureSessionId } from '@/src/services/session/session.service';
+import {
+  clearPersistedAuthTokens,
+  ensureDeviceId,
+  ensureSessionId,
+  hydrateAuthTokens,
+  persistAuthTokens,
+} from '@/src/services/session/session.service';
 import { authService } from '@/src/services/api/auth.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useSettingsStore } from '@/src/store/settings.store';
+import { apiBaseUrl } from '@/src/services/api/client';
+import axios from 'axios';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -30,12 +38,36 @@ export default function RootLayout() {
     let cancelled = false;
     (async () => {
       const sessionId = await ensureSessionId();
+      const deviceId = await ensureDeviceId();
       if (cancelled) return;
-      const currentTokens = useAuthStore.getState().tokens;
-      if (currentTokens?.accessToken) return;
+      const currentTokens = useAuthStore.getState().tokens ?? (await hydrateAuthTokens());
+      if (currentTokens) {
+        useAuthStore.getState().setTokens(currentTokens);
+      }
+
+      if (currentTokens?.refreshToken && deviceId) {
+        try {
+          const refreshed = await axios.post(`${apiBaseUrl}/auth/refresh`, {
+            refreshToken: currentTokens.refreshToken,
+            deviceId,
+          });
+          if (!cancelled) {
+            useAuthStore.getState().setTokens(refreshed.data);
+            await persistAuthTokens(refreshed.data);
+            return;
+          }
+        } catch {
+          useAuthStore.getState().logout();
+          await clearPersistedAuthTokens();
+        }
+      }
+
       try {
-        const tokens = await authService.guest({ sessionId });
-        if (!cancelled) setTokens(tokens);
+        const tokens = await authService.guest({ sessionId, deviceId });
+        if (!cancelled) {
+          setTokens(tokens);
+          await persistAuthTokens(tokens);
+        }
       } catch {
         // Keep guest browsing without tokens if server not reachable.
       }

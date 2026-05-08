@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SectionCard } from '@/src/components/SectionCard';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuthStore } from '@/src/store/auth.store';
 import { AppLanguage, ThemePreference, useSettingsStore } from '@/src/store/settings.store';
 import { useI18n } from '@/src/i18n';
+import { authService } from '@/src/services/api/auth.service';
+import { clearPersistedAuthTokens } from '@/src/services/session/session.service';
 
 function OptionPill({
   label,
@@ -47,6 +52,8 @@ export function SettingsScreen() {
   const me = useAuthStore((s) => s.me);
   const setMe = useAuthStore((s) => s.setMe);
   const logout = useAuthStore((s) => s.logout);
+  const tokens = useAuthStore((s) => s.tokens);
+  const deviceId = useAuthStore((s) => s.deviceId);
   const isMember = me?.role === 'MEMBER';
 
   const language = useSettingsStore((s) => s.language);
@@ -65,29 +72,140 @@ export function SettingsScreen() {
     [me?.profile],
   );
   const initialAvatar = useMemo(() => (me?.profile ? me.profile.avatarUrl ?? '' : ''), [me?.profile]);
-  const [displayName, setDisplayName] = useState(initialDisplay);
-  const [avatarUrl, setAvatarUrl] = useState(initialAvatar);
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [showAvatarEditor, setShowAvatarEditor] = useState(false);
-  const avatarGlyph = (isMember ? displayName || me?.profile?.username : 'G').trim().charAt(0).toUpperCase();
+  const [displayNameDraft, setDisplayNameDraft] = useState(initialDisplay);
+  const [avatarUrlDraft, setAvatarUrlDraft] = useState(initialAvatar);
+  const [selectedAvatarFile, setSelectedAvatarFile] = useState<{ uri: string; name: string; type: string } | null>(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const profileName = displayNameDraft || me?.profile?.username || '';
+  const avatarGlyph = (isMember ? profileName : 'G').trim().charAt(0).toUpperCase();
+  const isProfileDirty =
+    displayNameDraft.trim() !== initialDisplay.trim() ||
+    Boolean(selectedAvatarFile) ||
+    removeAvatar ||
+    avatarUrlDraft.trim() !== initialAvatar.trim();
 
   useEffect(() => {
-    setDisplayName(initialDisplay);
-    setAvatarUrl(initialAvatar);
+    setDisplayNameDraft(initialDisplay);
+    setAvatarUrlDraft(initialAvatar);
+    setSelectedAvatarFile(null);
+    setRemoveAvatar(false);
   }, [initialDisplay, initialAvatar]);
 
-  const saveProfile = () => {
+  const openProfileModal = () => {
+    setDisplayNameDraft(initialDisplay);
+    setAvatarUrlDraft(initialAvatar);
+    setSelectedAvatarFile(null);
+    setRemoveAvatar(false);
+    setIsProfileModalOpen(true);
+  };
+
+  const closeProfileModal = () => {
+    setDisplayNameDraft(initialDisplay);
+    setAvatarUrlDraft(initialAvatar);
+    setSelectedAvatarFile(null);
+    setRemoveAvatar(false);
+    setIsProfileModalOpen(false);
+  };
+
+  const saveProfile = async () => {
     if (!me?.profile) return;
-    setMe({
-      ...me,
-      profile: {
-        ...me.profile,
-        displayName: displayName.trim() || me.profile.username,
-        avatarUrl: avatarUrl.trim() || null,
-      },
+    try {
+      const updated = await authService.updateProfile({
+        displayName: displayNameDraft.trim() || me.profile.username,
+        removeAvatar,
+        avatarFile: selectedAvatarFile ?? undefined,
+      });
+      setMe(updated);
+      setIsProfileModalOpen(false);
+    } catch {
+      Alert.alert(t('saveProfileFailedTitle'), t('saveProfileFailedMessage'));
+    }
+  };
+
+  const pickAvatarFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t('photoPermissionTitle'), t('photoPermissionMessage'));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      mediaTypes: ['images'],
+      quality: 0.85,
+      aspect: [1, 1],
     });
-    setIsEditingProfile(false);
-    setShowAvatarEditor(false);
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setSelectedAvatarFile({
+      uri: asset.uri,
+      name: asset.fileName ?? `avatar-${Date.now()}.jpg`,
+      type: asset.mimeType ?? 'image/jpeg',
+    });
+    setAvatarUrlDraft(asset.uri);
+    setRemoveAvatar(false);
+  };
+
+  const takeAvatarPhoto = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(t('cameraPermissionTitle'), t('cameraPermissionMessage'));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.85,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setSelectedAvatarFile({
+      uri: asset.uri,
+      name: asset.fileName ?? `avatar-${Date.now()}.jpg`,
+      type: asset.mimeType ?? 'image/jpeg',
+    });
+    setAvatarUrlDraft(asset.uri);
+    setRemoveAvatar(false);
+  };
+
+  const openAvatarActions = () => {
+    Alert.alert(t('avatarActionTitle'), t('avatarActionSubtitle'), [
+      { text: t('pickFromLibrary'), onPress: pickAvatarFromLibrary },
+      { text: t('takePhoto'), onPress: takeAvatarPhoto },
+      {
+        text: t('removeAvatar'),
+        style: 'destructive',
+        onPress: () => {
+          setSelectedAvatarFile(null);
+          setAvatarUrlDraft('');
+          setRemoveAvatar(true);
+        },
+      },
+      { text: t('cancel'), style: 'cancel' },
+    ]);
+  };
+
+  const requestCloseProfileModal = () => {
+    if (!isProfileDirty) {
+      closeProfileModal();
+      return;
+    }
+
+    Alert.alert(t('unsavedProfileTitle'), t('unsavedProfileMessage'), [
+      {
+        text: t('continueEditingProfile'),
+        style: 'cancel',
+      },
+      {
+        text: t('discardProfileChanges'),
+        style: 'destructive',
+        onPress: closeProfileModal,
+      },
+      {
+        text: t('saveProfile'),
+        onPress: saveProfile,
+      },
+    ]);
   };
 
   return (
@@ -110,70 +228,20 @@ export function SettingsScreen() {
         <View style={[styles.profileHeaderCard, { borderColor: border, backgroundColor: card }]}>
           {isMember ? (
             <>
-              <Pressable
-                style={[styles.avatarCircle, { borderColor: border }]}
-                onPress={() => isEditingProfile && setShowAvatarEditor((v) => !v)}
-                accessibilityRole="button"
-                accessibilityLabel={t('avatarUrl')}
-              >
-                <ThemedText type="title">{avatarGlyph}</ThemedText>
+              <View style={[styles.avatarCircle, { borderColor: border }]}>
+                {avatarUrlDraft ? (
+                  <Image source={{ uri: avatarUrlDraft }} style={styles.avatarImage} contentFit="cover" />
+                ) : (
+                  <ThemedText type="title">{avatarGlyph}</ThemedText>
+                )}
+              </View>
+              <ThemedText type="subtitle" style={styles.profileNameCenter}>
+                {profileName}
+              </ThemedText>
+              <ThemedText style={{ color: muted }}>{`@${me?.profile?.username}`}</ThemedText>
+              <Pressable style={[styles.secondaryButton, { borderColor: border }]} onPress={openProfileModal}>
+                <ThemedText type="defaultSemiBold">{t('editProfile')}</ThemedText>
               </Pressable>
-              {isEditingProfile ? (
-                <View style={styles.editBlock}>
-                  <TextInput
-                    value={displayName}
-                    onChangeText={setDisplayName}
-                    style={[styles.nameInput, { borderColor: border, color: text }]}
-                    placeholder={me?.profile?.username ?? ''}
-                    placeholderTextColor={muted}
-                    textAlign="center"
-                  />
-                  <ThemedText style={{ color: muted, textAlign: 'center' }}>{t('tapAvatarToEdit')}</ThemedText>
-                  {showAvatarEditor ? (
-                    <TextInput
-                      value={avatarUrl}
-                      onChangeText={setAvatarUrl}
-                      style={[styles.input, styles.avatarInputInline, { borderColor: border, color: text }]}
-                      placeholder={t('avatarUrl')}
-                      placeholderTextColor={muted}
-                      autoCapitalize="none"
-                    />
-                  ) : null}
-                  <View style={styles.editActionsRow}>
-                    <Pressable
-                      style={[styles.secondaryButton, { borderColor: border }]}
-                      onPress={() => {
-                        setDisplayName(initialDisplay);
-                        setAvatarUrl(initialAvatar);
-                        setIsEditingProfile(false);
-                        setShowAvatarEditor(false);
-                      }}
-                    >
-                      <ThemedText type="defaultSemiBold" style={{ color: muted }}>
-                        {t('doneEditing')}
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={saveProfile}>
-                      <ThemedText type="defaultSemiBold" style={styles.ctaText}>
-                        {t('saveProfile')}
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <>
-                  <ThemedText type="subtitle" style={styles.profileNameCenter}>
-                    {displayName || me?.profile?.username}
-                  </ThemedText>
-                  <ThemedText style={{ color: muted }}>{`@${me?.profile?.username}`}</ThemedText>
-                  <Pressable
-                    style={[styles.secondaryButton, { borderColor: border }]}
-                    onPress={() => setIsEditingProfile(true)}
-                  >
-                    <ThemedText type="defaultSemiBold">{t('editProfile')}</ThemedText>
-                  </Pressable>
-                </>
-              )}
             </>
           ) : (
             <>
@@ -213,7 +281,15 @@ export function SettingsScreen() {
         {isMember ? (
           <Pressable
             style={[styles.inlineLogoutButton, { borderColor: border }]}
-            onPress={() => {
+            onPress={async () => {
+              if (tokens?.refreshToken && deviceId) {
+                try {
+                  await authService.logout({ refreshToken: tokens.refreshToken, deviceId });
+                } catch {
+                  // Keep local logout resilient even if network/logout endpoint fails.
+                }
+              }
+              await clearPersistedAuthTokens();
               logout();
               router.replace('/');
             }}
@@ -224,6 +300,63 @@ export function SettingsScreen() {
           </Pressable>
         ) : null}
       </ScrollView>
+      {isMember ? (
+        <Modal
+          visible={isProfileModalOpen}
+          animationType="fade"
+          transparent
+          onRequestClose={requestCloseProfileModal}
+        >
+          <View style={styles.modalRoot}>
+            <Pressable style={styles.modalBackdrop} onPress={requestCloseProfileModal} />
+            <View style={[styles.modalCard, { backgroundColor: card, borderColor: border }]}>
+              <View style={styles.modalHeader}>
+                <ThemedText type="subtitle">{t('editProfile')}</ThemedText>
+                <Pressable onPress={requestCloseProfileModal} hitSlop={8}>
+                  <ThemedText style={{ color: muted }} type="defaultSemiBold">
+                    {t('close')}
+                  </ThemedText>
+                </Pressable>
+              </View>
+              <View style={[styles.modalProfileRow, { borderColor: border }]}>
+                <Pressable style={[styles.modalAvatarCircle, { borderColor: border }]} onPress={openAvatarActions}>
+                  {avatarUrlDraft ? (
+                    <Image source={{ uri: avatarUrlDraft }} style={styles.avatarImage} contentFit="cover" />
+                  ) : (
+                    <ThemedText type="title">{avatarGlyph}</ThemedText>
+                  )}
+                  <View style={[styles.avatarEditOverlay, { backgroundColor: 'rgba(0,0,0,0.38)' }]}>
+                    <IconSymbol name="camera.fill" color="#fff" size={16} />
+                  </View>
+                </Pressable>
+                <View style={styles.modalIdentity}>
+                  <ThemedText type="defaultSemiBold">{profileName}</ThemedText>
+                  <ThemedText style={{ color: muted }} numberOfLines={1}>
+                    {me?.profile?.email ?? t('noEmail')}
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.modalFieldGroup}>
+                <ThemedText style={{ color: muted }}>{t('displayName')}</ThemedText>
+                <TextInput
+                  value={displayNameDraft}
+                  onChangeText={setDisplayNameDraft}
+                  style={[styles.input, { borderColor: border, color: text }]}
+                  placeholder={me?.profile?.username ?? ''}
+                  placeholderTextColor={muted}
+                />
+              </View>
+              <View style={styles.modalFooter}>
+                <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={saveProfile}>
+                  <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+                    {t('saveProfile')}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </ThemedView>
   );
 }
@@ -249,28 +382,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 2,
   },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+  },
   profileNameCenter: {
     textAlign: 'center',
   },
-  editBlock: {
-    width: '100%',
-    gap: 8,
-    marginTop: 2,
-  },
-  nameInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    minWidth: 180,
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  editActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  block: { gap: 8, marginTop: 8 },
   input: {
     borderWidth: 1,
     borderRadius: 10,
@@ -305,10 +424,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    flex: 1,
-  },
-  avatarInputInline: {
-    width: '100%',
+    minWidth: 140,
   },
   inlineLogoutButton: {
     borderWidth: 1,
@@ -316,6 +432,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     marginTop: 2,
+  },
+  modalRoot: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalFieldGroup: {
+    gap: 4,
+  },
+  modalProfileRow: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalAvatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarEditOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalIdentity: {
+    flex: 1,
+    gap: 2,
+  },
+  modalFooter: {
+    alignItems: 'flex-end',
+    marginTop: 4,
   },
 });
 

@@ -24,17 +24,17 @@ export class AuthController {
 
   @Post('refresh')
   refresh(@Body() dto: RefreshDto) {
-    return this.authService.refresh(dto.refreshToken);
+    return this.authService.refresh(dto.refreshToken, dto.deviceId);
   }
 
   @Post('logout')
   logout(@Body() dto: RefreshDto) {
-    return this.authService.logout(dto.refreshToken);
+    return this.authService.logout(dto.refreshToken, dto.deviceId);
   }
 
   @Post('guest')
   guest(@Body() dto: GuestDto) {
-    return this.authService.guest(dto.sessionId);
+    return this.authService.guest(dto.sessionId, dto.deviceId);
   }
 
   @Post('guest/ban')
@@ -46,7 +46,7 @@ export class AuthController {
 
   @Post('google')
   google(@Body() dto: GoogleDto) {
-    return this.authService.googleLogin(dto.idToken);
+    return this.authService.googleLogin(dto.idToken, dto.deviceId);
   }
 
   @Get('me')

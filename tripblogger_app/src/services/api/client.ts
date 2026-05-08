@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '@/src/store/auth.store';
 import { resolveApiBaseUrl } from '@/src/services/api/resolve-api-base-url';
+import { clearPersistedAuthTokens, persistAuthTokens } from '@/src/services/session/session.service';
 
 /** Effective base URL (dev rewrites localhost for real devices via Expo Metro host). */
 export const apiBaseUrl = resolveApiBaseUrl();
@@ -35,10 +36,13 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
 
     const refreshToken = useAuthStore.getState().tokens?.refreshToken;
+    const deviceId = useAuthStore.getState().deviceId;
     if (!refreshToken) {
       useAuthStore.getState().logout();
+      void clearPersistedAuthTokens();
       return Promise.reject(error);
     }
+    if (!deviceId) return Promise.reject(error);
 
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
@@ -52,8 +56,9 @@ apiClient.interceptors.response.use(
 
     isRefreshing = true;
     try {
-      const response = await axios.post(`${apiBaseUrl}/auth/refresh`, { refreshToken });
+      const response = await axios.post(`${apiBaseUrl}/auth/refresh`, { refreshToken, deviceId });
       useAuthStore.getState().setTokens(response.data);
+      await persistAuthTokens(response.data);
       pendingRequests.forEach((cb) => cb(response.data.accessToken));
       pendingRequests = [];
       originalRequest.headers.Authorization = `Bearer ${response.data.accessToken}`;
@@ -62,6 +67,7 @@ apiClient.interceptors.response.use(
       pendingRequests.forEach((cb) => cb(null));
       pendingRequests = [];
       useAuthStore.getState().logout();
+      await clearPersistedAuthTokens();
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

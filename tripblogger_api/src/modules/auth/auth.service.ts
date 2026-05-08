@@ -73,7 +73,7 @@ export class AuthService {
       }),
     );
 
-    return this.issueTokenPair(user.id, memberRole.code);
+    return this.issueTokenPair(user.id, memberRole.code, dto.deviceId);
   }
 
   async login(dto: LoginDto) {
@@ -88,10 +88,10 @@ export class AuthService {
     const valid = await compare(dto.password, member.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.issueTokenPair(member.userId, member.user.role.code);
+    return this.issueTokenPair(member.userId, member.user.role.code, dto.deviceId);
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string, deviceId: string) {
     let payload: { sub: string; role: string; jti: string };
     try {
       payload = await this.jwtService.verifyAsync(refreshToken, {
@@ -110,27 +110,33 @@ export class AuthService {
       },
     });
     if (!stored) throw new UnauthorizedException('Refresh session is invalid');
+    if (!this.matchesDevice(stored.deviceInfo, deviceId)) {
+      throw new UnauthorizedException('Refresh session is invalid');
+    }
 
     const valid = await compare(refreshToken, stored.tokenHash);
     if (!valid) throw new UnauthorizedException('Refresh session is invalid');
 
     stored.revokedAt = new Date();
     await this.refreshTokensRepo.save(stored);
-    return this.issueTokenPair(payload.sub, payload.role);
+    return this.issueTokenPair(payload.sub, payload.role, deviceId);
   }
 
-  async logout(refreshToken: string) {
+  async logout(refreshToken: string, deviceId: string) {
     const payload = await this.jwtService.verifyAsync<{ sub: string; jti: string }>(refreshToken, {
       secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
     });
-    await this.refreshTokensRepo.update(
-      { userId: payload.sub, tokenJti: payload.jti, revokedAt: IsNull() },
-      { revokedAt: new Date() },
-    );
+    const stored = await this.refreshTokensRepo.findOne({
+      where: { userId: payload.sub, tokenJti: payload.jti, revokedAt: IsNull() },
+    });
+    if (stored && this.matchesDevice(stored.deviceInfo, deviceId)) {
+      stored.revokedAt = new Date();
+      await this.refreshTokensRepo.save(stored);
+    }
     return { success: true };
   }
 
-  async guest(sessionId: string) {
+  async guest(sessionId: string, deviceId: string) {
     const guestRole = await this.rolesRepo.findOneByOrFail({ code: RoleCode.GUEST });
 
     const existing = await this.guestProfilesRepo.findOne({
@@ -144,13 +150,13 @@ export class AuthService {
         throw new ForbiddenException('User is banned');
       }
       await this.ensureStatusActive(existing.userId, UserStatusCode.ACTIVE, 'guest');
-      return this.issueTokenPair(existing.userId, guestRole.code);
+      return this.issueTokenPair(existing.userId, guestRole.code, deviceId);
     }
 
     const user = await this.usersRepo.save(this.usersRepo.create({ roleId: guestRole.id }));
     await this.guestProfilesRepo.save(this.guestProfilesRepo.create({ userId: user.id, sessionId }));
     await this.ensureStatusActive(user.id, UserStatusCode.ACTIVE, 'guest');
-    return this.issueTokenPair(user.id, guestRole.code);
+    return this.issueTokenPair(user.id, guestRole.code, deviceId);
   }
 
   async banGuest(sessionId: string, reason?: string) {
@@ -167,7 +173,7 @@ export class AuthService {
     return { success: true };
   }
 
-  async googleLogin(idToken: string) {
+  async googleLogin(idToken: string, deviceId: string) {
     const audiences = this.configService
       .getOrThrow<string>('GOOGLE_OAUTH_AUDIENCES')
       .split(',')
@@ -188,7 +194,7 @@ export class AuthService {
       if (active.includes(UserStatusCode.BANNED)) throw new ForbiddenException('User is banned');
       const user = await this.usersRepo.findOne({ where: { id: identity.userId }, relations: ['role'] });
       if (!user) throw new UnauthorizedException('User not found');
-      return this.issueTokenPair(user.id, user.role.code);
+      return this.issueTokenPair(user.id, user.role.code, deviceId);
     }
 
     const memberRole = await this.rolesRepo.findOneByOrFail({ code: RoleCode.MEMBER });
@@ -227,7 +233,7 @@ export class AuthService {
     await this.ensureStatusActive(user.id, UserStatusCode.ACTIVE, 'google');
     await this.ensureStatusActive(user.id, UserStatusCode.PENDING_VERIFICATION, 'google');
 
-    return this.issueTokenPair(user.id, memberRole.code);
+    return this.issueTokenPair(user.id, memberRole.code, deviceId);
   }
 
   async me(userId: string) {
@@ -281,7 +287,7 @@ export class AuthService {
     }
   }
 
-  private async issueTokenPair(userId: string, roleCode: string) {
+  private async issueTokenPair(userId: string, roleCode: string, deviceId: string) {
     const accessPayload = { sub: userId, role: roleCode };
     const refreshPayload = { ...accessPayload, jti: randomUUID() };
 
@@ -296,16 +302,50 @@ export class AuthService {
     });
 
     const refreshTokenHash = await hash(refreshToken, 12);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+    const refreshTtl = this.configService.get<string>('JWT_REFRESH_TTL') ?? '7d';
+    const expiresAt = new Date(Date.now() + this.parseDurationMs(refreshTtl));
     await this.refreshTokensRepo.save(
       this.refreshTokensRepo.create({
         userId,
         tokenJti: refreshPayload.jti,
         tokenHash: refreshTokenHash,
+        deviceInfo: JSON.stringify({ deviceId }),
         expiresAt,
       }),
     );
 
     return { accessToken, refreshToken };
+  }
+
+  private matchesDevice(deviceInfo: string | undefined, deviceId: string): boolean {
+    if (!deviceInfo || !deviceId) return false;
+    try {
+      const parsed = JSON.parse(deviceInfo) as { deviceId?: string };
+      return parsed.deviceId === deviceId;
+    } catch {
+      return false;
+    }
+  }
+
+  private parseDurationMs(value: string): number {
+    const normalized = value.trim().toLowerCase();
+    const match = normalized.match(/^(\d+)(ms|s|m|h|d)$/);
+    if (!match) return 7 * 24 * 60 * 60 * 1000;
+    const amount = Number(match[1]);
+    const unit = match[2];
+    switch (unit) {
+      case 'ms':
+        return amount;
+      case 's':
+        return amount * 1000;
+      case 'm':
+        return amount * 60 * 1000;
+      case 'h':
+        return amount * 60 * 60 * 1000;
+      case 'd':
+        return amount * 24 * 60 * 60 * 1000;
+      default:
+        return 7 * 24 * 60 * 60 * 1000;
+    }
   }
 }

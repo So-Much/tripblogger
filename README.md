@@ -50,6 +50,92 @@ Chi tiết: [`tripblogger_app/README.md`](./tripblogger_app/README.md).
 
 Sau `seed:user`, có thể dùng tài khoản đã định nghĩa trong [`tripblogger_api/src/scripts/seed-user.ts`](./tripblogger_api/src/scripts/seed-user.ts) (email/password cập nhật theo script; mật khẩu tối thiểu khớp rule API).
 
+## Production Migration Checklist
+
+Danh sách này dùng khi chuyển từ local/dev sang production, đặc biệt cho phần upload ảnh, server, bảo mật và vận hành.
+
+### 1) Hạ tầng server
+
+- Tách riêng môi trường: `dev`, `staging`, `production` (không dùng chung DB/Redis).
+- Chuẩn bị máy chủ cho:
+  - API NestJS (process manager hoặc container).
+  - SQL Server production.
+  - Redis production.
+  - Reverse proxy (Nginx/Caddy) trước API.
+- Cấu hình domain + TLS (HTTPS bắt buộc).
+
+### 2) Biến môi trường production
+
+- API (`tripblogger_api/.env` trên server):
+  - `NODE_ENV=production`
+  - `PORT`
+  - `DB_*`
+  - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (khóa mạnh, không tái sử dụng khóa dev)
+  - `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`
+  - `REDIS_*`
+  - `ADMIN_SECRET`
+  - `GOOGLE_OAUTH_AUDIENCES`
+- App (`tripblogger_app/.env` khi build):
+  - `EXPO_PUBLIC_API_BASE_URL=https://<your-domain>/api`
+  - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` theo môi trường.
+
+### 3) Database migration + seed
+
+- Chạy migration trước khi mở traffic:
+  - `cd tripblogger_api && npm run migration:run`
+- Chỉ seed dữ liệu hệ thống cần thiết ở production (roles/statuses), tránh seed user demo.
+- Kiểm tra index/constraint sau migration, đảm bảo bảng auth/session/profile đúng schema.
+
+### 4) Upload ảnh avatar (rất quan trọng)
+
+- Hiện tại avatar lưu local tại `uploads/avatars` và serve qua `/uploads/*`.
+- Với production:
+  - Gắn volume/persistent disk cho thư mục `uploads` (không lưu ephemeral disk).
+  - Thiết lập quota + theo dõi dung lượng đĩa.
+  - Bật backup thư mục uploads định kỳ.
+  - Chặn upload file không hợp lệ (mime, size) ở API (đã có validate cơ bản).
+- `.gitignore` đã bỏ qua `**/uploads/` để không làm phình repo.
+- Khuyến nghị trung hạn: chuyển sang object storage (S3/Cloudinary) để scale và CDN tốt hơn.
+
+### 5) Build và deploy
+
+- API:
+  - `npm ci`
+  - `npm run build`
+  - chạy `node dist/main.js` (qua PM2/systemd/container).
+- App Expo:
+  - build profile production (Android/iOS) với env production.
+  - xác nhận app gọi đúng domain API production.
+- Reverse proxy:
+  - route `/api/*` vào API service.
+  - route `/uploads/*` vào static assets API hoặc mount trực tiếp từ proxy.
+
+### 6) Bảo mật production
+
+- Không bật Swagger/public debug trừ khi cần và có auth.
+- Bật HTTPS-only, HSTS ở proxy.
+- Rotate secrets định kỳ (JWT secrets, admin secret, DB password).
+- Giới hạn CORS theo domain app thật.
+- Giám sát login/refresh thất bại bất thường và rate-limit endpoint auth.
+
+### 7) Quan sát hệ thống và backup
+
+- Bật logging tập trung cho API (request ID, error tracking).
+- Theo dõi: CPU/RAM, latency, error rate, DB connection pool, Redis health, disk usage của uploads.
+- Backup:
+  - SQL Server backup tự động + kiểm tra restore định kỳ.
+  - Backup thư mục uploads + kiểm tra phục hồi.
+
+### 8) Smoke test sau release
+
+- Đăng ký/đăng nhập/refresh/logout trên ít nhất 2 thiết bị.
+- Chỉnh profile:
+  - đổi display name
+  - upload avatar từ thư viện/camera
+  - xóa avatar
+- Đóng/mở app xác nhận session còn hiệu lực cho đến khi refresh token hết hạn.
+- Kiểm tra URL avatar truy cập được từ mạng ngoài (không chỉ localhost).
+
 ## Git & bảo mật
 
 - **Không commit** `.env`, file chứa mật khẩu, keystore hay token.
