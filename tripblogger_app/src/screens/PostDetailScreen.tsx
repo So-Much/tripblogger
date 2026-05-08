@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,11 +22,13 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
-import type { CommentDto, ReactionTypeDto } from '@/src/types/post';
+import type { CommentDto, PostDto, ReactionTypeDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { PostMediaBlock } from '@/src/components/posts/PostMediaBlock';
 import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
 import { CommentThread } from '@/src/components/posts/CommentThread';
+import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
+import { applyCommentCreated, applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
 
 function postReactionTypes(types: ReactionTypeDto[]): ReactionTypeDto[] {
   return types.filter((t) => t.useFor === 'POST' || t.useFor === 'BOTH');
@@ -89,6 +91,14 @@ export function PostDetailScreen() {
 
   const post = postQuery.data;
 
+  useEffect(() => {
+    if (!id) return;
+    postsRealtimeClient.joinPost(String(id));
+    return () => {
+      postsRealtimeClient.leavePost(String(id));
+    };
+  }, [id]);
+
   const postTypes = useMemo(
     () => postReactionTypes(typesQuery.data ?? []),
     [typesQuery.data],
@@ -111,22 +121,57 @@ export function PostDetailScreen() {
 
   const togglePostReact = useMutation({
     mutationFn: (typeCode: string) => postsService.togglePostReaction(String(id), typeCode),
+    onMutate: async (typeCode) => {
+      const current = queryClient.getQueryData<PostDto>(['posts', id]);
+      if (!current) return { current };
+      const existing = current.myReactionCodes.includes(typeCode);
+      const nextCounts = {
+        ...current.reactionCounts,
+        [typeCode]: Math.max((current.reactionCounts[typeCode] ?? 0) + (existing ? -1 : 1), 0),
+      };
+      applyPostPatch(queryClient, { postId: String(id), reactionCounts: nextCounts });
+      return { current };
+    },
     onSuccess: (r) => {
-      queryClient.setQueryData(['posts', id], r.post);
-      void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+      applyPostPatch(queryClient, {
+        postId: r.post.id,
+        reactionCounts: r.post.reactionCounts,
+        commentCount: r.post.commentCount,
+        shareCount: r.post.shareCount,
+      });
       setActionErr(null);
     },
-    onError: (e) => setActionErr(formatApiError(e)),
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: ['posts', id] });
+      setActionErr(formatApiError(e));
+    },
   });
 
   const shareMut = useMutation({
     mutationFn: () => postsService.sharePost(String(id)),
+    onMutate: async () => {
+      const current = queryClient.getQueryData<PostDto>(['posts', id]);
+      if (!current) return { current };
+      const nextCounts = {
+        ...current.reactionCounts,
+        SHARE: (current.reactionCounts.SHARE ?? 0) + 1,
+      };
+      applyPostPatch(queryClient, { postId: String(id), reactionCounts: nextCounts, shareCount: current.shareCount + 1 });
+      return { current };
+    },
     onSuccess: (r) => {
-      queryClient.setQueryData(['posts', id], r.post);
-      void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+      applyPostPatch(queryClient, {
+        postId: r.post.id,
+        reactionCounts: r.post.reactionCounts,
+        commentCount: r.post.commentCount,
+        shareCount: r.post.shareCount,
+      });
       setActionErr(null);
     },
-    onError: (e) => setActionErr(formatApiError(e)),
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: ['posts', id] });
+      setActionErr(formatApiError(e));
+    },
   });
 
   const addCommentMut = useMutation({
@@ -136,6 +181,20 @@ export function PostDetailScreen() {
         parentCommentId: replyTo?.id,
       }),
     onSuccess: async () => {
+      const optimisticComment = {
+        id: `local-${Date.now()}`,
+        postId: String(id),
+        displayName: meQuery.data?.profile?.displayName || meQuery.data?.profile?.username || 'Bạn',
+        content: commentText.trim(),
+        parentCommentId: replyTo?.id ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      applyCommentCreated(queryClient, {
+        postId: String(id),
+        comment: optimisticComment,
+        commentCount: (post?.commentCount ?? 0) + 1,
+      });
       setCommentText('');
       setReplyTo(null);
       await queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });

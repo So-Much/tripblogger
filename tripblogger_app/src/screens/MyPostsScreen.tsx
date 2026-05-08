@@ -7,7 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useNavigation } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -20,11 +20,13 @@ import type { PostDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { PostPreviewCard } from '@/src/components/posts/PostPreviewCard';
 import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
+import { applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
 
 export function MyPostsScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const navigation = useNavigation();
+  const queryClient = useQueryClient();
   const meQuery = useMeQuery();
   const card = useThemeColor({}, 'card');
   const border = useThemeColor({}, 'border');
@@ -66,9 +68,26 @@ export function MyPostsScreen() {
   const reactMutation = useMutation({
     mutationFn: ({ postId, typeCode }: { postId: string; typeCode: string }) =>
       postsService.togglePostReaction(postId, typeCode),
-    onSuccess: () => {
-      void query.refetch();
+    onMutate: async ({ postId }) => {
+      await query.refetch({ cancelRefetch: true });
+      const prev = queryClient.getQueryData(['posts', postId]) as PostDto | undefined;
+      if (!prev) return { prev };
+      const nextCounts = { ...prev.reactionCounts, HEART: (prev.reactionCounts.HEART ?? 0) + 1 };
+      applyPostPatch(queryClient, {
+        postId,
+        reactionCounts: nextCounts,
+      });
+      return { prev };
     },
+    onSuccess: (result) => {
+      applyPostPatch(queryClient, {
+        postId: result.post.id,
+        reactionCounts: result.post.reactionCounts,
+        commentCount: result.post.commentCount,
+        shareCount: result.post.shareCount,
+      });
+    },
+    onError: () => void query.refetch(),
   });
 
   useLayoutEffect(() => {

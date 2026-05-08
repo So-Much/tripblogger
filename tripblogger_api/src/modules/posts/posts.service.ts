@@ -16,6 +16,7 @@ import { CommentEntity } from './entities/comment.entity';
 import { PostEntity, PostStatus } from './entities/post.entity';
 import { ReactEntity } from './entities/react.entity';
 import { ReactTypeEntity, ReactTypeUseFor } from './entities/react-type.entity';
+import { PostsRealtimeGateway } from './posts.realtime.gateway';
 
 const POST_SANITIZE: sanitizeHtml.IOptions = {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'img', 'span']),
@@ -82,6 +83,7 @@ export class PostsService {
     @InjectRepository(CommentEntity) private readonly commentsRepo: Repository<CommentEntity>,
     @InjectRepository(ReactEntity) private readonly reactsRepo: Repository<ReactEntity>,
     @InjectRepository(ReactTypeEntity) private readonly reactTypesRepo: Repository<ReactTypeEntity>,
+    private readonly realtimeGateway: PostsRealtimeGateway,
   ) {}
 
   private canViewPost(post: PostEntity, viewerUserId: string): boolean {
@@ -344,6 +346,28 @@ export class PostsService {
         await this.reactsRepo.remove(existingByPost);
         const meta = await this.getPostReactionMeta(postId, userId);
         const commentCount = await this.getPostCommentCount(post.id);
+        const eventAt = new Date().toISOString();
+        if (typeCode === 'SHARE') {
+          this.realtimeGateway.emitPostShared({
+            postId,
+            toggledOn: false,
+            reactionCounts: meta.reactionCounts,
+            shareCount: meta.shareCount,
+            postUpdatedAt: post.updatedAt.toISOString(),
+            eventAt,
+          });
+        } else {
+          this.realtimeGateway.emitPostReacted({
+            postId,
+            toggledOn: false,
+            typeCode,
+            reactionCounts: meta.reactionCounts,
+            commentCount,
+            shareCount: meta.shareCount,
+            postUpdatedAt: post.updatedAt.toISOString(),
+            eventAt,
+          });
+        }
         return {
           toggledOn: false as const,
           post: this.serializePost(post, { ...meta, commentCount }),
@@ -353,6 +377,28 @@ export class PostsService {
       await this.reactsRepo.save(existingByPost);
       const meta = await this.getPostReactionMeta(postId, userId);
       const commentCount = await this.getPostCommentCount(post.id);
+      const eventAt = new Date().toISOString();
+      if (typeCode === 'SHARE') {
+        this.realtimeGateway.emitPostShared({
+          postId,
+          toggledOn: true,
+          reactionCounts: meta.reactionCounts,
+          shareCount: meta.shareCount,
+          postUpdatedAt: post.updatedAt.toISOString(),
+          eventAt,
+        });
+      } else {
+        this.realtimeGateway.emitPostReacted({
+          postId,
+          toggledOn: true,
+          typeCode,
+          reactionCounts: meta.reactionCounts,
+          commentCount,
+          shareCount: meta.shareCount,
+          postUpdatedAt: post.updatedAt.toISOString(),
+          eventAt,
+        });
+      }
       return { toggledOn: true as const, post: this.serializePost(post, { ...meta, commentCount }) };
     }
 
@@ -360,6 +406,28 @@ export class PostsService {
     await this.reactsRepo.save(row);
     const meta = await this.getPostReactionMeta(postId, userId);
     const commentCount = await this.getPostCommentCount(post.id);
+    const eventAt = new Date().toISOString();
+    if (typeCode === 'SHARE') {
+      this.realtimeGateway.emitPostShared({
+        postId,
+        toggledOn: true,
+        reactionCounts: meta.reactionCounts,
+        shareCount: meta.shareCount,
+        postUpdatedAt: post.updatedAt.toISOString(),
+        eventAt,
+      });
+    } else {
+      this.realtimeGateway.emitPostReacted({
+        postId,
+        toggledOn: true,
+        typeCode,
+        reactionCounts: meta.reactionCounts,
+        commentCount,
+        shareCount: meta.shareCount,
+        postUpdatedAt: post.updatedAt.toISOString(),
+        eventAt,
+      });
+    }
     return { toggledOn: true as const, post: this.serializePost(post, { ...meta, commentCount }) };
   }
 
@@ -395,7 +463,7 @@ export class PostsService {
       parentCommentId: parent?.id ?? null,
     });
     await this.commentsRepo.save(comment);
-    return {
+    const payload = {
       id: comment.id,
       postId: comment.postId,
       displayName: 'Bạn',
@@ -404,6 +472,14 @@ export class PostsService {
       createdAt: comment.createdAt.toISOString(),
       updatedAt: comment.updatedAt.toISOString(),
     };
+    const commentCount = await this.getPostCommentCount(postId);
+    this.realtimeGateway.emitCommentCreated({
+      postId,
+      comment: payload,
+      commentCount,
+      eventAt: new Date().toISOString(),
+    });
+    return payload;
   }
 
   async listComments(postId: string, viewerUserId: string, query: QueryCommentsDto) {
@@ -489,10 +565,24 @@ export class PostsService {
     });
     if (existing) {
       await this.reactsRepo.remove(existing);
+      this.realtimeGateway.emitCommentReacted({
+        postId,
+        commentId,
+        toggledOn: false,
+        typeCode,
+        eventAt: new Date().toISOString(),
+      });
       return { toggledOn: false as const, commentId };
     }
     const row = this.reactsRepo.create({ userId, postId: null, commentId, typeId: rtype.id });
     await this.reactsRepo.save(row);
+    this.realtimeGateway.emitCommentReacted({
+      postId,
+      commentId,
+      toggledOn: true,
+      typeCode,
+      eventAt: new Date().toISOString(),
+    });
     return { toggledOn: true as const, commentId };
   }
 }

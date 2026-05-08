@@ -21,6 +21,8 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { useSettingsStore } from '@/src/store/settings.store';
 import { apiBaseUrl } from '@/src/services/api/client';
 import axios from 'axios';
+import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
+import { applyCommentCreated, applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -30,6 +32,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const setTokens = useAuthStore((s) => s.setTokens);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
+  const accessToken = useAuthStore((s) => s.tokens?.accessToken);
 
   useEffect(() => {
     hydrateSettings();
@@ -77,6 +80,74 @@ export default function RootLayout() {
       cancelled = true;
     };
   }, [setTokens]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      postsRealtimeClient.disconnect();
+      return;
+    }
+    postsRealtimeClient.connect(accessToken);
+
+    const onPostReacted = (payload: unknown) => {
+      const p = payload as {
+        postId: string;
+        reactionCounts: Record<string, number>;
+        commentCount: number;
+        shareCount: number;
+      };
+      applyPostPatch(queryClient, {
+        postId: p.postId,
+        reactionCounts: p.reactionCounts,
+        commentCount: p.commentCount,
+        shareCount: p.shareCount,
+      });
+    };
+
+    const onPostShared = (payload: unknown) => {
+      const p = payload as { postId: string; reactionCounts: Record<string, number>; shareCount: number };
+      applyPostPatch(queryClient, {
+        postId: p.postId,
+        reactionCounts: p.reactionCounts,
+        shareCount: p.shareCount,
+      });
+    };
+
+    const onCommentCreated = (payload: unknown) => {
+      applyCommentCreated(
+        queryClient,
+        payload as {
+          postId: string;
+          comment: {
+            id: string;
+            postId: string;
+            displayName: string;
+            content: string;
+            parentCommentId: string | null;
+            createdAt: string;
+            updatedAt: string;
+          };
+          commentCount: number;
+        },
+      );
+    };
+
+    const onReactorsChanged = (payload: unknown) => {
+      const p = payload as { postId: string };
+      void queryClient.invalidateQueries({ queryKey: ['posts', p.postId, 'reactors'] });
+    };
+
+    postsRealtimeClient.on('post.reacted', onPostReacted);
+    postsRealtimeClient.on('post.shared', onPostShared);
+    postsRealtimeClient.on('comment.created', onCommentCreated);
+    postsRealtimeClient.on('post.reactors.changed', onReactorsChanged);
+
+    return () => {
+      postsRealtimeClient.off('post.reacted', onPostReacted);
+      postsRealtimeClient.off('post.shared', onPostShared);
+      postsRealtimeClient.off('comment.created', onCommentCreated);
+      postsRealtimeClient.off('post.reactors.changed', onReactorsChanged);
+    };
+  }, [accessToken]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

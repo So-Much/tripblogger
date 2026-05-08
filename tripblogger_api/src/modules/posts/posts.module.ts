@@ -8,6 +8,7 @@ import { PostEntity } from './entities/post.entity';
 import { ReactEntity } from './entities/react.entity';
 import { ReactTypeEntity } from './entities/react-type.entity';
 import { PostsController } from './posts.controller';
+import { PostsRealtimeGateway } from './posts.realtime.gateway';
 import { PostsService } from './posts.service';
 
 @Module({
@@ -16,7 +17,7 @@ import { PostsService } from './posts.service';
     UsersModule,
   ],
   controllers: [PostsController],
-  providers: [PostsService, RolesGuard, StatusesGuard],
+  providers: [PostsService, PostsRealtimeGateway, RolesGuard, StatusesGuard],
   exports: [PostsService],
 })
 export class PostsModule {}
