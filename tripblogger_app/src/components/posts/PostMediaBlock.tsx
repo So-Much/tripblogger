@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
+  Dimensions,
   FlatList,
-  Image,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -9,10 +9,18 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import type { PostDto } from '@/src/types/post';
 
 type MediaItem = PostDto['media'][number];
+
+function mediaSources(item: MediaItem, preferOriginal = false): string[] {
+  const sources = preferOriginal
+    ? [item.originalUrl, item.previewUrl, item.url, item.thumbnailUrl]
+    : [item.thumbnailUrl, item.previewUrl, item.url, item.originalUrl];
+  return [...new Set(sources.filter((s): s is string => Boolean(s)))];
+}
 
 export function PostMediaBlock({
   media,
@@ -32,6 +40,7 @@ export function PostMediaBlock({
   const [viewerIndex, setViewerIndex] = useState(0);
   if (!items.length) return null;
   const slideHeight = compact ? 140 : 220;
+  const viewerWidth = width || Dimensions.get('window').width;
 
   const onMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!width) return;
@@ -78,7 +87,13 @@ export function PostMediaBlock({
                     setViewerIndex(items.findIndex((m) => m.url === item.url));
                     setViewerOpen(true);
                   }}>
-                  <Image source={{ uri: item.url }} style={[styles.image, sizeStyle]} resizeMode="cover" />
+                  <ExpoImage
+                    source={mediaSources(item)}
+                    style={[styles.image, sizeStyle]}
+                    contentFit="cover"
+                    placeholder={item.placeholder}
+                    transition={180}
+                  />
                 </Pressable>
               );
             }}
@@ -93,28 +108,41 @@ export function PostMediaBlock({
         </View>
       ) : null}
       <Modal transparent visible={viewerOpen} animationType="fade" onRequestClose={() => setViewerOpen(false)}>
-        <View style={styles.viewerRoot}>
-          <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} />
-          <FlatList
-            data={items}
-            horizontal
-            pagingEnabled
-            initialScrollIndex={Math.max(viewerIndex, 0)}
-            getItemLayout={(_data, index) => ({ index, length: width || 1, offset: (width || 1) * index })}
-            keyExtractor={(item, idx) => `${item.url}-viewer-${idx}`}
-            renderItem={({ item }) => {
-              if ((item.type ?? item.kind) === 'video') {
+        <Pressable style={styles.viewerRoot} onPress={() => setViewerOpen(false)}>
+          <Pressable style={styles.viewerFrame} onPress={() => {}}>
+            <FlatList
+              data={items}
+              horizontal
+              pagingEnabled
+              initialScrollIndex={Math.max(viewerIndex, 0)}
+              getItemLayout={(_data, index) => ({ index, length: viewerWidth, offset: viewerWidth * index })}
+              keyExtractor={(item, idx) => `${item.url}-viewer-${idx}`}
+              renderItem={({ item }) => {
+                if ((item.type ?? item.kind) === 'video') {
+                  return (
+                    <View style={[styles.viewerItem, { width: viewerWidth }]}>
+                      <View style={styles.viewerVideoStub}>
+                        <ThemedText type="defaultSemiBold" style={styles.viewerText}>Video</ThemedText>
+                        <ThemedText style={styles.viewerText}>{item.url}</ThemedText>
+                      </View>
+                    </View>
+                  );
+                }
                 return (
-                  <View style={[styles.viewerVideoStub, { width: width || 1 }]}>
-                    <ThemedText type="defaultSemiBold" style={styles.viewerText}>Video</ThemedText>
-                    <ThemedText style={styles.viewerText}>{item.url}</ThemedText>
+                  <View style={[styles.viewerItem, { width: viewerWidth }]}>
+                    <ExpoImage
+                      source={mediaSources(item, true)}
+                      style={styles.viewerImage}
+                      contentFit="contain"
+                      placeholder={item.placeholder}
+                      transition={220}
+                    />
                   </View>
                 );
-              }
-              return <Image source={{ uri: item.url }} style={[styles.viewerImage, { width: width || 1 }]} resizeMode="contain" />;
-            }}
-          />
-        </View>
+              }}
+            />
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -143,9 +171,10 @@ const styles = StyleSheet.create({
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#CBD5E1' },
   dotActive: { backgroundColor: '#2563EB', width: 14 },
   viewerRoot: { flex: 1, backgroundColor: 'rgba(2,6,23,0.92)', justifyContent: 'center' },
-  viewerBackdrop: { ...StyleSheet.absoluteFillObject },
-  viewerImage: { height: '82%' },
-  viewerVideoStub: { height: '82%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 8 },
+  viewerFrame: { alignSelf: 'stretch' },
+  viewerItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  viewerImage: { width: '100%', height: '84%' },
+  viewerVideoStub: { width: '100%', height: '84%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 8 },
   viewerText: { color: '#fff', textAlign: 'center' },
 });
 

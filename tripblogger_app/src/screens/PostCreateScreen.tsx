@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Animated,
   Alert,
+  Dimensions,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,7 +27,15 @@ import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
 import * as ImagePicker from 'expo-image-picker';
 
-type EditorMedia = { localId: string; type: 'icon' | 'image' | 'video'; url: string };
+type EditorMedia = {
+  localId: string;
+  type: 'icon' | 'image' | 'video';
+  url: string;
+  thumbnailUrl?: string;
+  previewUrl?: string;
+  originalUrl?: string;
+  placeholder?: string;
+};
 
 function DraggableMediaThumb({
   item,
@@ -83,8 +93,9 @@ export function PostCreateScreen() {
   const [contentHtml, setContentHtml] = useState('');
   const [media, setMedia] = useState<EditorMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const viewerWidth = Dimensions.get('window').width;
 
   const editingPostQuery = useQuery({
     queryKey: ['posts', postId],
@@ -96,7 +107,17 @@ export function PostCreateScreen() {
     if (!isEditDraft || !editingPostQuery.data) return;
     setTitle(editingPostQuery.data.title);
     setContentHtml(editingPostQuery.data.contentHtml);
-    setMedia(editingPostQuery.data.media.map((m, idx) => ({ localId: `${Date.now()}-${idx}`, type: m.type ?? 'image', url: m.url })));
+    setMedia(
+      editingPostQuery.data.media.map((m, idx) => ({
+        localId: `${Date.now()}-${idx}`,
+        type: m.type ?? 'image',
+        url: m.url,
+        thumbnailUrl: m.thumbnailUrl,
+        previewUrl: m.previewUrl,
+        originalUrl: m.originalUrl,
+        placeholder: m.placeholder,
+      })),
+    );
   }, [isEditDraft, editingPostQuery.data]);
 
   const border = useThemeColor({}, 'border');
@@ -112,7 +133,14 @@ export function PostCreateScreen() {
       if (!html) {
         throw new Error(t('postsValidationContent'));
       }
-      const submitMedia = media.map(({ type, url }) => ({ type, url }));
+      const submitMedia = media.map(({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder }) => ({
+        type,
+        url,
+        thumbnailUrl,
+        previewUrl,
+        originalUrl,
+        placeholder,
+      }));
       if (postId) {
         return postsService.updatePost(String(postId), { title: title.trim(), contentHtml: html, media: submitMedia });
       }
@@ -190,7 +218,18 @@ export function PostCreateScreen() {
         },
         kind,
       );
-      setMedia((prev) => [...prev, { localId: `${Date.now()}-${Math.random()}`, type: kind, url: uploaded.url }]);
+      setMedia((prev) => [
+        ...prev,
+        {
+          localId: `${Date.now()}-${Math.random()}`,
+          type: kind,
+          url: uploaded.url,
+          thumbnailUrl: uploaded.thumbnailUrl,
+          previewUrl: uploaded.previewUrl,
+          originalUrl: uploaded.originalUrl,
+          placeholder: uploaded.placeholder,
+        },
+      ]);
     }
   };
 
@@ -201,7 +240,8 @@ export function PostCreateScreen() {
       drag={drag}
       onPreview={() => {
         if (draggingId) return;
-        setPreviewImage(item.url);
+        const idx = media.findIndex((m) => m.localId === item.localId);
+        setPreviewIndex(idx >= 0 ? idx : 0);
       }}
       onRemove={() => setMedia((prev) => prev.filter((m) => m.localId !== item.localId))}
     />
@@ -305,9 +345,23 @@ export function PostCreateScreen() {
         </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <Modal transparent visible={Boolean(previewImage)} animationType="fade" onRequestClose={() => setPreviewImage(null)}>
-        <Pressable style={styles.previewBackdrop} onPress={() => setPreviewImage(null)}>
-          {previewImage ? <Image source={{ uri: previewImage }} style={styles.previewImage} resizeMode="contain" /> : null}
+      <Modal transparent visible={previewIndex !== null} animationType="fade" onRequestClose={() => setPreviewIndex(null)}>
+        <Pressable style={styles.previewBackdrop} onPress={() => setPreviewIndex(null)}>
+          <Pressable style={styles.previewFrame} onPress={() => {}}>
+            <FlatList
+              data={media}
+              horizontal
+              pagingEnabled
+              initialScrollIndex={Math.max(previewIndex ?? 0, 0)}
+              getItemLayout={(_data, index) => ({ index, length: viewerWidth, offset: viewerWidth * index })}
+              keyExtractor={(item) => `preview-${item.localId}`}
+              renderItem={({ item }) => (
+                <View style={[styles.previewItem, { width: viewerWidth }]}>
+                  <Image source={{ uri: item.url }} style={styles.previewImage} resizeMode="contain" />
+                </View>
+              )}
+            />
+          </Pressable>
         </Pressable>
       </Modal>
     </ThemedView>
@@ -382,6 +436,8 @@ const styles = StyleSheet.create({
   },
   dragOverlayText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.86)', justifyContent: 'center', padding: 16 },
+  previewFrame: { alignSelf: 'stretch' },
+  previewItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   previewImage: { width: '100%', height: '82%' },
   headerPublishBtn: {
     marginRight: 8,

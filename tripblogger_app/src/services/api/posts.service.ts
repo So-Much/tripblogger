@@ -1,4 +1,4 @@
-import { apiClient } from '@/src/services/api/client';
+import { apiBaseUrl, apiClient } from '@/src/services/api/client';
 import type {
   CommentDto,
   PaginatedComments,
@@ -7,6 +7,35 @@ import type {
   ReactionTypeDto,
   PostReactorDto,
 } from '@/src/types/post';
+
+function apiOrigin(): string {
+  try {
+    const parsed = new URL(apiBaseUrl);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return apiBaseUrl.replace(/\/api\/?$/, '');
+  }
+}
+
+function toAbsolute(url?: string): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
+  const base = apiOrigin().replace(/\/+$/, '');
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+function normalizePost(post: PostDto): PostDto {
+  return {
+    ...post,
+    media: (post.media ?? []).map((item) => ({
+      ...item,
+      url: toAbsolute(item.url) ?? item.url,
+      thumbnailUrl: toAbsolute(item.thumbnailUrl),
+      previewUrl: toAbsolute(item.previewUrl),
+      originalUrl: toAbsolute(item.originalUrl),
+    })),
+  };
+}
 
 export const postsService = {
   async listReactionTypes(): Promise<ReactionTypeDto[]> {
@@ -22,12 +51,12 @@ export const postsService = {
         ...(params.status ? { status: params.status } : {}),
       },
     });
-    return res.data;
+    return { ...res.data, items: res.data.items.map(normalizePost) };
   },
 
   async getPost(id: string): Promise<PostDto> {
     const res = await apiClient.get<PostDto>(`/posts/${id}`);
-    return res.data;
+    return normalizePost(res.data);
   },
 
   async createPost(body: {
@@ -41,7 +70,7 @@ export const postsService = {
     status?: 'DRAFT' | 'PUBLISHED';
   }): Promise<PostDto> {
     const res = await apiClient.post<PostDto>('/posts', body);
-    return res.data;
+    return normalizePost(res.data);
   },
 
   async updatePost(
@@ -58,7 +87,7 @@ export const postsService = {
     }>,
   ): Promise<PostDto> {
     const res = await apiClient.patch<PostDto>(`/posts/${id}`, body);
-    return res.data;
+    return normalizePost(res.data);
   },
 
   async deletePost(id: string): Promise<{ ok: true }> {
@@ -70,17 +99,17 @@ export const postsService = {
     const res = await apiClient.post<{ toggledOn: boolean; post: PostDto }>(`/posts/${postId}/reactions`, {
       typeCode,
     });
-    return res.data;
+    return { ...res.data, post: normalizePost(res.data.post) };
   },
 
   async heartPost(postId: string): Promise<{ toggledOn: boolean; post: PostDto }> {
     const res = await apiClient.post<{ toggledOn: boolean; post: PostDto }>(`/posts/${postId}/reactions/heart`);
-    return res.data;
+    return { ...res.data, post: normalizePost(res.data.post) };
   },
 
   async publishPost(postId: string): Promise<PostDto> {
     const res = await apiClient.post<PostDto>(`/posts/${postId}/publish`);
-    return res.data;
+    return normalizePost(res.data);
   },
 
   async listPostReactors(postId: string): Promise<{ total: number; items: PostReactorDto[] }> {
@@ -90,7 +119,7 @@ export const postsService = {
 
   async sharePost(postId: string) {
     const res = await apiClient.post<{ toggledOn: boolean; post: PostDto }>(`/posts/${postId}/share`);
-    return res.data;
+    return { ...res.data, post: normalizePost(res.data.post) };
   },
 
   async addComment(postId: string, body: { content: string; parentCommentId?: string }): Promise<CommentDto> {
@@ -130,11 +159,25 @@ export const postsService = {
     const res = await apiClient.post<{
       kind: 'image' | 'video';
       url: string;
+      thumbnailUrl?: string;
+      previewUrl?: string;
+      originalUrl?: string;
       mimeType: string;
       size: number;
+      width?: number;
+      height?: number;
+      placeholder?: string;
+      storage?: 'local' | 'cloud';
+      sourcePath?: string;
     }>('/posts/media', body, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res.data;
+    return {
+      ...res.data,
+      url: toAbsolute(res.data.url) ?? res.data.url,
+      thumbnailUrl: toAbsolute(res.data.thumbnailUrl),
+      previewUrl: toAbsolute(res.data.previewUrl),
+      originalUrl: toAbsolute(res.data.originalUrl),
+    };
   },
 };

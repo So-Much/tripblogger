@@ -10,6 +10,8 @@ import { ReactTypeEntity } from './entities/react-type.entity';
 import { PostsController } from './posts.controller';
 import { PostsRealtimeGateway } from './posts.realtime.gateway';
 import { PostsService } from './posts.service';
+import { MediaResolver } from './media.resolver';
+import { MediaMigrationWorker } from './media.migration.worker';
 
 @Module({
   imports: [
@@ -17,7 +19,7 @@ import { PostsService } from './posts.service';
     UsersModule,
   ],
   controllers: [PostsController],
-  providers: [PostsService, PostsRealtimeGateway, RolesGuard, StatusesGuard],
+  providers: [PostsService, PostsRealtimeGateway, MediaResolver, MediaMigrationWorker, RolesGuard, StatusesGuard],
   exports: [PostsService],
 })
 export class PostsModule {}

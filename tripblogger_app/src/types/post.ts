@@ -7,8 +7,18 @@ export interface PostDto {
     type?: 'icon' | 'image' | 'video';
     url: string;
     thumbnailUrl?: string;
+    previewUrl?: string;
+    originalUrl?: string;
     iconCode?: string;
     kind?: 'image' | 'video';
+    mimeType?: string;
+    width?: number;
+    height?: number;
+    size?: number;
+    placeholder?: string;
+    storage?: 'local' | 'cloud';
+    sourcePath?: string;
+    migratedAt?: string;
   }[];
   category: string | null;
   tags: string[];

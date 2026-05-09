@@ -9,6 +9,8 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  Headers,
   UseGuards,
   UploadedFile,
   UseInterceptors,
@@ -30,11 +32,19 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
-import { Request } from 'express';
+import { Request, Response } from 'express';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
+import sharp from 'sharp';
+import { MediaResolver } from './media.resolver';
+import { MediaMigrationWorker } from './media.migration.worker';
 
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(
+    private readonly postsService: PostsService,
+    private readonly mediaResolver: MediaResolver,
+    private readonly mediaMigrationWorker: MediaMigrationWorker,
+  ) {}
 
   @Get('reaction-types')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
@@ -185,7 +195,7 @@ export class PostsController {
       limits: { fileSize: 60 * 1024 * 1024 },
     }),
   )
-  uploadMedia(
+  async uploadMedia(
     @Req() req: { protocol: string; headers: { host?: string; 'x-forwarded-proto'?: string } },
     @UploadedFile() file?: Express.Multer.File,
     @Body() dto?: UploadPostMediaDto,
@@ -198,14 +208,85 @@ export class PostsController {
     if (kind === 'video' && !file.mimetype.startsWith('video/')) {
       throw new BadRequestException('Expected video file');
     }
-    const proto = req.headers['x-forwarded-proto'] ?? req.protocol ?? 'http';
-    const host = req.headers.host;
+    const reqMeta = {
+      protocol: req.protocol,
+      host: req.headers.host,
+      forwardedProto: req.headers['x-forwarded-proto'],
+    };
+
+    const relativeOriginal = `/uploads/posts/${file.filename}`;
+    const localSourcePath = join(process.cwd(), relativeOriginal.replace(/^\//, ''));
+
+    let thumbnailRelative: string | undefined;
+    let previewRelative: string | undefined;
+    let width: number | undefined;
+    let height: number | undefined;
+    let placeholder: string | undefined;
+
+    if (kind === 'image') {
+      const variantsDir = join(process.cwd(), 'uploads', 'posts', 'variants');
+      if (!existsSync(variantsDir)) mkdirSync(variantsDir, { recursive: true });
+      const image = sharp(localSourcePath);
+      const meta = readFileSync(localSourcePath);
+      const stats = await sharp(meta).metadata();
+      width = stats.width;
+      height = stats.height;
+
+      const thumbName = `${file.filename}-thumb.webp`;
+      const previewName = `${file.filename}-preview.webp`;
+      const thumbAbsolute = join(variantsDir, thumbName);
+      const previewAbsolute = join(variantsDir, previewName);
+      await image.resize(320, 320, { fit: 'inside' }).webp({ quality: 72 }).toFile(thumbAbsolute);
+      await sharp(localSourcePath).resize(1280, 1280, { fit: 'inside' }).webp({ quality: 82 }).toFile(previewAbsolute);
+      thumbnailRelative = `/uploads/posts/variants/${thumbName}`;
+      previewRelative = `/uploads/posts/variants/${previewName}`;
+      placeholder = `data:${file.mimetype};base64,${meta.subarray(0, Math.min(48, meta.length)).toString('base64')}`;
+    }
+
+    const originalUrl = this.mediaResolver.toPublicUrl(relativeOriginal, reqMeta);
+    const previewUrl = previewRelative ? this.mediaResolver.toPublicUrl(previewRelative, reqMeta) : undefined;
+    const thumbnailUrl = thumbnailRelative ? this.mediaResolver.toPublicUrl(thumbnailRelative, reqMeta) : undefined;
+
     return {
       kind,
-      url: `${proto}://${host}/uploads/posts/${file.filename}`,
+      url: previewUrl ?? originalUrl,
+      thumbnailUrl,
+      previewUrl,
+      originalUrl,
       mimeType: file.mimetype,
       size: file.size,
+      width,
+      height,
+      placeholder,
       caption: dto?.caption ?? null,
+      storage: 'local' as const,
+      sourcePath: relativeOriginal,
     };
+  }
+
+  @Post('media/migrate')
+  enqueueMediaMigration(
+    @Headers('x-admin-secret') adminSecret: string | undefined,
+    @Query('limit') limit?: string,
+  ) {
+    const expected = process.env.ADMIN_SECRET;
+    if (!expected || !adminSecret || adminSecret !== expected) throw new BadRequestException('Unauthorized');
+    const parsedLimit = limit ? Math.max(1, Math.min(1000, Number(limit))) : 200;
+    return this.postsService.enqueuePendingMediaMigrations(Number.isFinite(parsedLimit) ? parsedLimit : 200);
+  }
+
+  @Get('media/access')
+  accessSignedMedia(
+    @Query('p') encodedPath: string,
+    @Query('exp') exp: string,
+    @Query('sig') sig: string,
+    @Res() res: Response,
+  ) {
+    if (!encodedPath || !exp || !sig) throw new BadRequestException('Missing signed media params');
+    const mediaPath = decodeURIComponent(encodedPath);
+    this.mediaResolver.verifySignedPath(mediaPath, exp, sig);
+    const absolute = join(process.cwd(), mediaPath.replace(/^\//, ''));
+    if (!existsSync(absolute)) throw new BadRequestException('Media not found');
+    res.sendFile(absolute);
   }
 }

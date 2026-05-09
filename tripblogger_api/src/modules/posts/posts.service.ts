@@ -17,6 +17,9 @@ import { PostEntity, PostStatus } from './entities/post.entity';
 import { ReactEntity } from './entities/react.entity';
 import { ReactTypeEntity, ReactTypeUseFor } from './entities/react-type.entity';
 import { PostsRealtimeGateway } from './posts.realtime.gateway';
+import { MediaResolver } from './media.resolver';
+import { MediaMigrationWorker } from './media.migration.worker';
+import { normalizePostMediaItem, PostMediaItem } from './media.types';
 
 const POST_SANITIZE: sanitizeHtml.IOptions = {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'img', 'span']),
@@ -46,11 +49,11 @@ function parseJsonArray(raw: string | null): string[] {
   }
 }
 
-function parseMedia(raw: string | null): Array<Record<string, unknown>> {
+function parseMedia(raw: string | null): PostMediaItem[] {
   if (!raw) return [];
   try {
     const v = JSON.parse(raw) as unknown;
-    return Array.isArray(v) ? (v as Array<Record<string, unknown>>) : [];
+    return Array.isArray(v) ? (v as Array<Record<string, unknown>>).map((item) => normalizePostMediaItem(item)) : [];
   } catch {
     return [];
   }
@@ -84,6 +87,8 @@ export class PostsService {
     @InjectRepository(ReactEntity) private readonly reactsRepo: Repository<ReactEntity>,
     @InjectRepository(ReactTypeEntity) private readonly reactTypesRepo: Repository<ReactTypeEntity>,
     private readonly realtimeGateway: PostsRealtimeGateway,
+    private readonly mediaResolver: MediaResolver,
+    private readonly mediaMigrationWorker: MediaMigrationWorker,
   ) {}
 
   private canViewPost(post: PostEntity, viewerUserId: string): boolean {
@@ -110,12 +115,27 @@ export class PostsService {
       shareCount?: number;
     },
   ) {
+    const visibility = post.visibility;
+    const resolvedMedia = parseMedia(post.mediaJson).map((item) => {
+      const resolvePath = (path?: string) => {
+        if (!path) return undefined;
+        if (!path.startsWith('/')) return path;
+        return visibility === 'PRIVATE' ? this.mediaResolver.toPrivateSignedPath(path) : path;
+      };
+      return {
+        ...item,
+        url: resolvePath(item.previewUrl ?? item.url) ?? item.url,
+        thumbnailUrl: resolvePath(item.thumbnailUrl),
+        previewUrl: resolvePath(item.previewUrl),
+        originalUrl: resolvePath(item.originalUrl ?? item.url),
+      };
+    });
     return {
       id: post.id,
       userId: post.userId,
       title: post.title,
       contentHtml: post.contentHtml,
-      media: parseMedia(post.mediaJson),
+      media: resolvedMedia,
       category: post.category,
       tags: parseJsonArray(post.tagsJson),
       visibility: post.visibility,
@@ -226,6 +246,7 @@ export class PostsService {
       status: dto.status ?? 'DRAFT',
     });
     await this.postsRepo.save(post);
+    await this.mediaMigrationWorker.enqueuePostMediaMigration(post.id);
     return this.serializePost(post, { commentCount: 0, shareCount: 0 });
   }
 
@@ -249,6 +270,7 @@ export class PostsService {
       post.locationJson = dto.location ? JSON.stringify(dto.location) : null;
     }
     await this.postsRepo.save(post);
+    await this.mediaMigrationWorker.enqueuePostMediaMigration(post.id);
     const meta = await this.getPostReactionMeta(post.id, userId);
     const commentCount = await this.getPostCommentCount(post.id);
     return this.serializePost(post, { ...meta, commentCount });
@@ -584,5 +606,25 @@ export class PostsService {
       eventAt: new Date().toISOString(),
     });
     return { toggledOn: true as const, commentId };
+  }
+
+  async enqueuePendingMediaMigrations(limit = 200): Promise<{ queued: number }> {
+    const rows = await this.postsRepo
+      .createQueryBuilder('p')
+      .where('p.media_json IS NOT NULL')
+      .orderBy('p.created_at', 'DESC')
+      .take(limit)
+      .getMany();
+
+    let queued = 0;
+    for (const row of rows) {
+      if (!row.mediaJson) continue;
+      const media = parseMedia(row.mediaJson);
+      const hasLocal = media.some((item) => item.storage !== 'cloud' && Boolean(item.sourcePath));
+      if (!hasLocal) continue;
+      await this.mediaMigrationWorker.enqueuePostMediaMigration(row.id);
+      queued += 1;
+    }
+    return { queued };
   }
 }
