@@ -1,5 +1,14 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Image, NativeScrollEvent, NativeSyntheticEvent, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Image,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import type { PostDto } from '@/src/types/post';
 
@@ -19,6 +28,8 @@ export function PostMediaBlock({
   const items = useMemo(() => (media ?? []).filter((m) => Boolean(m?.url)), [media]);
   const [width, setWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
   if (!items.length) return null;
   const slideHeight = compact ? 140 : 220;
 
@@ -51,13 +62,25 @@ export function PostMediaBlock({
               const sizeStyle = { width, height: slideHeight };
               if ((item.type ?? item.kind) === 'video') {
                 return (
-                  <View style={[styles.videoStub, sizeStyle]}>
+                  <Pressable style={[styles.videoStub, sizeStyle]} onPress={() => {
+                    setViewerIndex(items.findIndex((m) => m.url === item.url));
+                    setViewerOpen(true);
+                  }}>
                     <ThemedText type="defaultSemiBold">Video</ThemedText>
                     <ThemedText numberOfLines={1}>{item.url}</ThemedText>
-                  </View>
+                  </Pressable>
                 );
               }
-              return <Image source={{ uri: item.url }} style={[styles.image, sizeStyle]} resizeMode="cover" />;
+              return (
+                <Pressable
+                  style={sizeStyle}
+                  onPress={() => {
+                    setViewerIndex(items.findIndex((m) => m.url === item.url));
+                    setViewerOpen(true);
+                  }}>
+                  <Image source={{ uri: item.url }} style={[styles.image, sizeStyle]} resizeMode="cover" />
+                </Pressable>
+              );
             }}
           />
         ) : null}
@@ -69,6 +92,30 @@ export function PostMediaBlock({
           ))}
         </View>
       ) : null}
+      <Modal transparent visible={viewerOpen} animationType="fade" onRequestClose={() => setViewerOpen(false)}>
+        <View style={styles.viewerRoot}>
+          <Pressable style={styles.viewerBackdrop} onPress={() => setViewerOpen(false)} />
+          <FlatList
+            data={items}
+            horizontal
+            pagingEnabled
+            initialScrollIndex={Math.max(viewerIndex, 0)}
+            getItemLayout={(_data, index) => ({ index, length: width || 1, offset: (width || 1) * index })}
+            keyExtractor={(item, idx) => `${item.url}-viewer-${idx}`}
+            renderItem={({ item }) => {
+              if ((item.type ?? item.kind) === 'video') {
+                return (
+                  <View style={[styles.viewerVideoStub, { width: width || 1 }]}>
+                    <ThemedText type="defaultSemiBold" style={styles.viewerText}>Video</ThemedText>
+                    <ThemedText style={styles.viewerText}>{item.url}</ThemedText>
+                  </View>
+                );
+              }
+              return <Image source={{ uri: item.url }} style={[styles.viewerImage, { width: width || 1 }]} resizeMode="contain" />;
+            }}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -95,5 +142,10 @@ const styles = StyleSheet.create({
   dotRow: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#CBD5E1' },
   dotActive: { backgroundColor: '#2563EB', width: 14 },
+  viewerRoot: { flex: 1, backgroundColor: 'rgba(2,6,23,0.92)', justifyContent: 'center' },
+  viewerBackdrop: { ...StyleSheet.absoluteFillObject },
+  viewerImage: { height: '82%' },
+  viewerVideoStub: { height: '82%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 8 },
+  viewerText: { color: '#fff', textAlign: 'center' },
 });
 

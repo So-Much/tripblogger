@@ -4,6 +4,7 @@ import type { PaginatedComments, PaginatedPosts, PostDto } from '@/src/types/pos
 type PostPatch = {
   postId: string;
   reactionCounts?: Record<string, number>;
+  myReactionCodes?: string[];
   commentCount?: number;
   shareCount?: number;
 };
@@ -28,6 +29,7 @@ export function applyPostPatch(queryClient: QueryClient, patch: PostPatch) {
     return {
       ...prev,
       reactionCounts: patch.reactionCounts ?? prev.reactionCounts,
+      myReactionCodes: patch.myReactionCodes ?? prev.myReactionCodes,
       commentCount: patch.commentCount ?? prev.commentCount,
       shareCount: patch.shareCount ?? prev.shareCount,
     };
@@ -45,6 +47,7 @@ export function applyPostPatch(queryClient: QueryClient, patch: PostPatch) {
             ? {
                 ...it,
                 reactionCounts: patch.reactionCounts ?? it.reactionCounts,
+                myReactionCodes: patch.myReactionCodes ?? it.myReactionCodes,
                 commentCount: patch.commentCount ?? it.commentCount,
                 shareCount: patch.shareCount ?? it.shareCount,
               }

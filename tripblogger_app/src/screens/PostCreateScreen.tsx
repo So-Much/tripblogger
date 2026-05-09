@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -26,6 +27,51 @@ import * as ImagePicker from 'expo-image-picker';
 
 type EditorMedia = { localId: string; type: 'icon' | 'image' | 'video'; url: string };
 
+function DraggableMediaThumb({
+  item,
+  isActive,
+  drag,
+  onPreview,
+  onRemove,
+}: {
+  item: EditorMedia;
+  isActive: boolean;
+  drag: () => void;
+  onPreview: () => void;
+  onRemove: () => void;
+}) {
+  const tilt = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(tilt, {
+      toValue: isActive ? 1 : 0,
+      duration: isActive ? 120 : 160,
+      useNativeDriver: true,
+    }).start();
+  }, [isActive, tilt]);
+
+  const rotate = tilt.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-4deg'] });
+  const scale = tilt.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] });
+
+  return (
+    <Animated.View style={[styles.thumbWrap, { transform: [{ rotate }, { scale }] }]}>
+      <Pressable onLongPress={drag} delayLongPress={170} style={styles.thumbPressable} onPress={onPreview}>
+        <Image source={{ uri: item.url }} style={styles.thumb} />
+        {isActive ? (
+          <View style={styles.dragOverlay}>
+            <ThemedText style={styles.dragOverlayText}>Đang di chuyển…</ThemedText>
+          </View>
+        ) : null}
+      </Pressable>
+      {!isActive ? (
+        <Pressable onPress={onRemove} style={styles.removeThumbBtn}>
+          <ThemedText style={styles.removeThumbTxt}>Xóa</ThemedText>
+        </Pressable>
+      ) : null}
+    </Animated.View>
+  );
+}
+
 export function PostCreateScreen() {
   const { t } = useI18n();
   const router = useRouter();
@@ -38,6 +84,7 @@ export function PostCreateScreen() {
   const [media, setMedia] = useState<EditorMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const editingPostQuery = useQuery({
     queryKey: ['posts', postId],
@@ -148,12 +195,16 @@ export function PostCreateScreen() {
   };
 
   const renderMediaItem = ({ item, drag, isActive }: RenderItemParams<EditorMedia>) => (
-    <Pressable onLongPress={drag} disabled={isActive} style={styles.thumbWrap} onPress={() => setPreviewImage(item.url)}>
-      <Image source={{ uri: item.url }} style={styles.thumb} />
-      <Pressable onPress={() => setMedia((prev) => prev.filter((m) => m.localId !== item.localId))} style={styles.removeThumbBtn}>
-        <ThemedText style={styles.removeThumbTxt}>Xóa</ThemedText>
-      </Pressable>
-    </Pressable>
+    <DraggableMediaThumb
+      item={item}
+      isActive={isActive}
+      drag={drag}
+      onPreview={() => {
+        if (draggingId) return;
+        setPreviewImage(item.url);
+      }}
+      onRemove={() => setMedia((prev) => prev.filter((m) => m.localId !== item.localId))}
+    />
   );
 
   return (
@@ -211,6 +262,8 @@ export function PostCreateScreen() {
             keyExtractor={(item) => item.localId}
             renderItem={renderMediaItem}
             onDragEnd={({ data }) => setMedia(data)}
+            onDragBegin={(index) => setDraggingId(media[index]?.localId ?? null)}
+            onRelease={() => setDraggingId(null)}
             activationDistance={12}
             containerStyle={styles.mediaList}
             contentContainerStyle={styles.mediaRow}
@@ -285,6 +338,7 @@ const styles = StyleSheet.create({
   mediaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   mediaList: { marginTop: 8 },
   thumb: { width: 72, height: 72, borderRadius: 10 },
+  thumbPressable: { borderRadius: 10, overflow: 'hidden' },
   mediaBtn: {
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -306,7 +360,7 @@ const styles = StyleSheet.create({
   },
   submitGhost: { borderWidth: StyleSheet.hairlineWidth, backgroundColor: 'transparent' },
   actionRow: { flexDirection: 'row', gap: 10 },
-  thumbWrap: { borderRadius: 10, overflow: 'hidden' },
+  thumbWrap: { borderRadius: 10, overflow: 'visible' },
   submitTxt: { color: '#fff', fontWeight: '600', fontSize: 16 },
   deleteDraftTopBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: '#EF4444' },
   deleteDraftTxt: { color: '#EF4444', fontWeight: '600' },
@@ -320,6 +374,13 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   removeThumbTxt: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  dragOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(2,6,23,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dragOverlayText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.86)', justifyContent: 'center', padding: 16 },
   previewImage: { width: '100%', height: '82%' },
   headerPublishBtn: {

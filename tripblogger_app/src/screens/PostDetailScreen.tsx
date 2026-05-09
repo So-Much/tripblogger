@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Image,
   Modal,
   ScrollView,
   KeyboardAvoidingView,
@@ -112,6 +114,11 @@ export function PostDetailScreen() {
   const [commentInputHeight, setCommentInputHeight] = useState(42);
   const [showReactors, setShowReactors] = useState(false);
   const lastTapRef = useRef(0);
+  const mediaInteractingRef = useRef(false);
+  const lastMediaInteractionAt = useRef(0);
+  const reactedCode = post?.myReactionCodes.find((code) => code !== 'SHARE') ?? null;
+  const reactedType = reactedCode ? postTypes.find((item) => item.code === reactedCode) ?? null : null;
+  const heartScale = useRef(new Animated.Value(1)).current;
   const totalReacts = Math.max(
     Object.values(post?.reactionCounts ?? {}).reduce((acc, c) => acc + c, 0) - (post?.shareCount ?? 0),
     0,
@@ -124,18 +131,31 @@ export function PostDetailScreen() {
     onMutate: async (typeCode) => {
       const current = queryClient.getQueryData<PostDto>(['posts', id]);
       if (!current) return { current };
-      const existing = current.myReactionCodes.includes(typeCode);
+      const existedCode = current.myReactionCodes.find((code) => code !== 'SHARE');
+      const isSame = existedCode === typeCode;
       const nextCounts = {
         ...current.reactionCounts,
-        [typeCode]: Math.max((current.reactionCounts[typeCode] ?? 0) + (existing ? -1 : 1), 0),
       };
-      applyPostPatch(queryClient, { postId: String(id), reactionCounts: nextCounts });
+      const nextMyReactionCodes = current.myReactionCodes.filter((code) => code === 'SHARE');
+      if (existedCode) {
+        nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
+      }
+      if (!isSame) {
+        nextCounts[typeCode] = (nextCounts[typeCode] ?? 0) + 1;
+        nextMyReactionCodes.push(typeCode);
+      }
+      applyPostPatch(queryClient, {
+        postId: String(id),
+        reactionCounts: nextCounts,
+        myReactionCodes: nextMyReactionCodes,
+      });
       return { current };
     },
     onSuccess: (r) => {
       applyPostPatch(queryClient, {
         postId: r.post.id,
         reactionCounts: r.post.reactionCounts,
+        myReactionCodes: r.post.myReactionCodes,
         commentCount: r.post.commentCount,
         shareCount: r.post.shareCount,
       });
@@ -163,6 +183,7 @@ export function PostDetailScreen() {
       applyPostPatch(queryClient, {
         postId: r.post.id,
         reactionCounts: r.post.reactionCounts,
+        myReactionCodes: r.post.myReactionCodes,
         commentCount: r.post.commentCount,
         shareCount: r.post.shareCount,
       });
@@ -235,10 +256,12 @@ export function PostDetailScreen() {
     );
   }
 
-  const handleDoubleTapHeart = async () => {
-    await postsService.heartPost(String(id));
-    await queryClient.invalidateQueries({ queryKey: ['posts', id] });
-    await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+  const triggerHeartReact = () => {
+    Animated.sequence([
+      Animated.timing(heartScale, { toValue: 1.22, duration: 110, useNativeDriver: true }),
+      Animated.spring(heartScale, { toValue: 1, speed: 16, bounciness: 10, useNativeDriver: true }),
+    ]).start();
+    togglePostReact.mutate('HEART');
   };
 
   return (
@@ -267,14 +290,24 @@ export function PostDetailScreen() {
           <ThemedText style={[styles.date, { color: muted }]}>{formatDateTime(post.createdAt)}</ThemedText>
           <Pressable
             onPress={() => {
+              if (mediaInteractingRef.current || Date.now() - lastMediaInteractionAt.current < 90) return;
               if (!canInteract) return;
               const now = Date.now();
               if (now - lastTapRef.current < 280) {
-                void handleDoubleTapHeart();
+                triggerHeartReact();
               }
               lastTapRef.current = now;
             }}>
-            <PostMediaBlock media={post.media} />
+            <PostMediaBlock
+              media={post.media}
+              onInteractionStart={() => {
+                mediaInteractingRef.current = true;
+              }}
+              onInteractionEnd={() => {
+                mediaInteractingRef.current = false;
+                lastMediaInteractionAt.current = Date.now();
+              }}
+            />
             <View style={[styles.section, { borderColor: border }]}>
               <ThemedText style={{ color: text }}>{stripHtml(post.contentHtml)}</ThemedText>
             </View>
@@ -285,11 +318,11 @@ export function PostDetailScreen() {
             </ThemedText>
           ) : null}
 
-          {canInteract ? (
+          {canInteract && (reactorsQuery.data?.total ?? 0) > 0 ? (
             <View style={styles.reactorMetaRow}>
               <Pressable onPress={() => setShowReactors(true)} hitSlop={8}>
                 <ThemedText style={[styles.reactorMeta, { color: muted }]}>
-                  {reactorsQuery.data?.total ?? 0} người đã tương tác
+                  {reactorsQuery.data?.total ?? 0} người đã bày tỏ cảm xúc
                 </ThemedText>
               </Pressable>
             </View>
@@ -298,13 +331,21 @@ export function PostDetailScreen() {
           {canInteract ? (
             <View style={[styles.actionRow, { borderTopColor: border }]}>
               <Pressable
-                onPress={() => void handleDoubleTapHeart()}
+                onPress={triggerHeartReact}
                 onLongPress={(e) => {
                   setPickerAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
                   setPickerOpen(true);
                 }}
                 style={styles.actionBtn}>
-                <IconSymbol name="heart.fill" size={17} color={cta} />
+                <Animated.View style={[styles.reactIconWrap, { transform: [{ scale: heartScale }] }]}>
+                  {reactedType?.media?.startsWith('http') ? (
+                    <Image source={{ uri: reactedType.media }} style={styles.reactImage} />
+                  ) : reactedType?.media ? (
+                    <ThemedText style={styles.reactFallback}>{reactedType.media}</ThemedText>
+                  ) : (
+                    <IconSymbol name={reactedCode ? 'heart.fill' : 'heart'} size={17} color={reactedCode ? cta : muted} />
+                  )}
+                </Animated.View>
                 <ThemedText style={styles.actionText}>{totalReacts}</ThemedText>
               </Pressable>
               <Pressable style={styles.actionBtn}>
@@ -375,6 +416,7 @@ export function PostDetailScreen() {
         open={pickerOpen}
         anchor={pickerAnchor}
         options={postTypes.filter((r) => r.code !== 'SHARE')}
+        selectedCode={reactedCode}
         onClose={() => setPickerOpen(false)}
         onSelect={(typeCode) => {
           if (!canInteract) return;
@@ -443,6 +485,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  reactIconWrap: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
+  reactImage: { width: 18, height: 18, borderRadius: 9 },
+  reactFallback: { fontSize: 16, lineHeight: 18 },
   reactorMetaRow: { alignItems: 'flex-end' },
   reactorMeta: { fontSize: 12, fontWeight: '600' },
   errTxt: { marginVertical: 6 },

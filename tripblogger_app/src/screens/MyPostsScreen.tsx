@@ -68,14 +68,24 @@ export function MyPostsScreen() {
   const reactMutation = useMutation({
     mutationFn: ({ postId, typeCode }: { postId: string; typeCode: string }) =>
       postsService.togglePostReaction(postId, typeCode),
-    onMutate: async ({ postId }) => {
-      await query.refetch({ cancelRefetch: true });
+    onMutate: async ({ postId, typeCode }) => {
       const prev = queryClient.getQueryData(['posts', postId]) as PostDto | undefined;
       if (!prev) return { prev };
-      const nextCounts = { ...prev.reactionCounts, HEART: (prev.reactionCounts.HEART ?? 0) + 1 };
+      const existedCode = prev.myReactionCodes.find((code) => code !== 'SHARE');
+      const isSame = existedCode === typeCode;
+      const nextCounts = { ...prev.reactionCounts };
+      const nextMyReactionCodes = prev.myReactionCodes.filter((code) => code === 'SHARE');
+      if (existedCode) {
+        nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
+      }
+      if (!isSame) {
+        nextCounts[typeCode] = (nextCounts[typeCode] ?? 0) + 1;
+        nextMyReactionCodes.push(typeCode);
+      }
       applyPostPatch(queryClient, {
         postId,
         reactionCounts: nextCounts,
+        myReactionCodes: nextMyReactionCodes,
       });
       return { prev };
     },
@@ -83,11 +93,14 @@ export function MyPostsScreen() {
       applyPostPatch(queryClient, {
         postId: result.post.id,
         reactionCounts: result.post.reactionCounts,
+        myReactionCodes: result.post.myReactionCodes,
         commentCount: result.post.commentCount,
         shareCount: result.post.shareCount,
       });
     },
-    onError: () => void query.refetch(),
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+    },
   });
 
   useLayoutEffect(() => {
@@ -119,8 +132,7 @@ export function MyPostsScreen() {
           router.push(item.status === 'DRAFT' ? `/(tabs)/posts/create?postId=${item.id}` : `/(tabs)/posts/${item.id}`)
         }
         onDoubleTapHeart={async () => {
-          await postsService.heartPost(item.id);
-          void query.refetch();
+          reactMutation.mutate({ postId: item.id, typeCode: 'HEART' });
         }}
         onOpenReactionPicker={(anchor) => {
           setReactPostId(item.id);
@@ -130,9 +142,10 @@ export function MyPostsScreen() {
         cardColor={card}
         borderColor={border}
         mutedColor={muted}
+        reactionTypes={postReactionTypes}
       />
     ),
-    [router, query, card, border, muted],
+    [router, reactMutation, card, border, muted, postReactionTypes],
   );
 
   if (meQuery.isLoading) {
@@ -211,6 +224,7 @@ export function MyPostsScreen() {
         open={pickerOpen}
         anchor={pickerAnchor}
         options={postReactionTypes}
+        selectedCode={items.find((p) => p.id === reactPostId)?.myReactionCodes.find((code) => code !== 'SHARE') ?? null}
         onClose={() => setPickerOpen(false)}
         onSelect={(typeCode) => {
           if (!reactPostId) return;
