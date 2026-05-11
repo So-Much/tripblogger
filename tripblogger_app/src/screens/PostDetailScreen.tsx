@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -32,8 +32,10 @@ import { CommentThread } from '@/src/components/posts/CommentThread';
 import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
 import { applyCommentCreated, applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
 
+const SINGLE_TAP_DELAY_MS = 240;
+
 function postReactionTypes(types: ReactionTypeDto[]): ReactionTypeDto[] {
-  return types.filter((t) => t.useFor === 'POST' || t.useFor === 'BOTH');
+  return types.filter((t) => (t.useFor === 'POST' || t.useFor === 'BOTH') && t.code !== 'SHARE');
 }
 
 function stripHtml(html: string): string {
@@ -114,17 +116,39 @@ export function PostDetailScreen() {
   const [commentInputHeight, setCommentInputHeight] = useState(42);
   const [showReactors, setShowReactors] = useState(false);
   const lastTapRef = useRef(0);
+  const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaInteractingRef = useRef(false);
   const lastMediaInteractionAt = useRef(0);
   const reactedCode = post?.myReactionCodes.find((code) => code !== 'SHARE') ?? null;
   const reactedType = reactedCode ? postTypes.find((item) => item.code === reactedCode) ?? null : null;
   const heartScale = useRef(new Animated.Value(1)).current;
+  const previousReactedCodeRef = useRef<string | null | undefined>(undefined);
   const totalReacts = Math.max(
-    Object.values(post?.reactionCounts ?? {}).reduce((acc, c) => acc + c, 0) - (post?.shareCount ?? 0),
+    Object.entries(post?.reactionCounts ?? {}).reduce((acc, [code, count]) => acc + (code === 'SHARE' ? 0 : count), 0),
     0,
   );
   const canInteract = post?.status === 'PUBLISHED';
   const canDelete = post?.status !== 'DELETED' && post?.userId === meQuery.data?.id;
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
+    };
+  }, []);
+
+  const runReactPulse = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(heartScale, { toValue: 1.22, duration: 110, useNativeDriver: true }),
+      Animated.spring(heartScale, { toValue: 1, speed: 16, bounciness: 10, useNativeDriver: true }),
+    ]).start();
+  }, [heartScale]);
+
+  useEffect(() => {
+    if (previousReactedCodeRef.current !== undefined && previousReactedCodeRef.current !== reactedCode && reactedCode) {
+      runReactPulse();
+    }
+    previousReactedCodeRef.current = reactedCode;
+  }, [reactedCode, runReactPulse]);
 
   const togglePostReact = useMutation({
     mutationFn: (typeCode: string) => postsService.togglePostReaction(String(id), typeCode),
@@ -136,7 +160,7 @@ export function PostDetailScreen() {
       const nextCounts = {
         ...current.reactionCounts,
       };
-      const nextMyReactionCodes = current.myReactionCodes.filter((code) => code === 'SHARE');
+      const nextMyReactionCodes: string[] = current.myReactionCodes.filter((code) => code === 'SHARE');
       if (existedCode) {
         nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
       }
@@ -163,35 +187,7 @@ export function PostDetailScreen() {
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: ['posts', id] });
-      setActionErr(formatApiError(e));
-    },
-  });
-
-  const shareMut = useMutation({
-    mutationFn: () => postsService.sharePost(String(id)),
-    onMutate: async () => {
-      const current = queryClient.getQueryData<PostDto>(['posts', id]);
-      if (!current) return { current };
-      const nextCounts = {
-        ...current.reactionCounts,
-        SHARE: (current.reactionCounts.SHARE ?? 0) + 1,
-      };
-      applyPostPatch(queryClient, { postId: String(id), reactionCounts: nextCounts, shareCount: current.shareCount + 1 });
-      return { current };
-    },
-    onSuccess: (r) => {
-      applyPostPatch(queryClient, {
-        postId: r.post.id,
-        reactionCounts: r.post.reactionCounts,
-        myReactionCodes: r.post.myReactionCodes,
-        commentCount: r.post.commentCount,
-        shareCount: r.post.shareCount,
-      });
-      setActionErr(null);
-    },
-    onError: (e) => {
-      void queryClient.invalidateQueries({ queryKey: ['posts', id] });
-      setActionErr(formatApiError(e));
+      setActionErr(formatApiError(e, 'Không thể cập nhật tương tác.'));
     },
   });
 
@@ -220,7 +216,7 @@ export function PostDetailScreen() {
       setReplyTo(null);
       await queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });
     },
-    onError: (e) => setActionErr(formatApiError(e)),
+    onError: (e) => setActionErr(formatApiError(e, 'Không thể gửi bình luận.')),
   });
 
   const deletePostMut = useMutation({
@@ -229,7 +225,7 @@ export function PostDetailScreen() {
       await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
       router.back();
     },
-    onError: (e) => setActionErr(formatApiError(e)),
+    onError: (e) => setActionErr(formatApiError(e, 'Không thể xóa bài viết.')),
   });
 
   if (!isMember) {
@@ -243,7 +239,7 @@ export function PostDetailScreen() {
   if (postQuery.isError) {
     return (
       <ThemedView style={styles.centered}>
-        <ThemedText>{formatApiError(postQuery.error)}</ThemedText>
+        <ThemedText>{formatApiError(postQuery.error, 'Không thể tải bài viết.')}</ThemedText>
       </ThemedView>
     );
   }
@@ -257,11 +253,31 @@ export function PostDetailScreen() {
   }
 
   const triggerHeartReact = () => {
-    Animated.sequence([
-      Animated.timing(heartScale, { toValue: 1.22, duration: 110, useNativeDriver: true }),
-      Animated.spring(heartScale, { toValue: 1, speed: 16, bounciness: 10, useNativeDriver: true }),
-    ]).start();
+    runReactPulse();
     togglePostReact.mutate('HEART');
+  };
+
+  const runDeferredPostAction = (action: () => void) => {
+    if (mediaInteractingRef.current || Date.now() - lastMediaInteractionAt.current < 90) return;
+    if (!canInteract) return;
+
+    const now = Date.now();
+    if (now - lastTapRef.current < SINGLE_TAP_DELAY_MS) {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+        singleTapTimeoutRef.current = null;
+      }
+      triggerHeartReact();
+      lastTapRef.current = 0;
+      return;
+    }
+
+    if (singleTapTimeoutRef.current) clearTimeout(singleTapTimeoutRef.current);
+    singleTapTimeoutRef.current = setTimeout(() => {
+      action();
+      singleTapTimeoutRef.current = null;
+    }, SINGLE_TAP_DELAY_MS);
+    lastTapRef.current = now;
   };
 
   return (
@@ -290,13 +306,7 @@ export function PostDetailScreen() {
           <ThemedText style={[styles.date, { color: muted }]}>{formatDateTime(post.createdAt)}</ThemedText>
           <Pressable
             onPress={() => {
-              if (mediaInteractingRef.current || Date.now() - lastMediaInteractionAt.current < 90) return;
-              if (!canInteract) return;
-              const now = Date.now();
-              if (now - lastTapRef.current < 280) {
-                triggerHeartReact();
-              }
-              lastTapRef.current = now;
+              runDeferredPostAction(() => {});
             }}>
             <PostMediaBlock
               media={post.media}
@@ -308,6 +318,7 @@ export function PostDetailScreen() {
                 mediaInteractingRef.current = false;
                 lastMediaInteractionAt.current = Date.now();
               }}
+              deferViewerOpen={runDeferredPostAction}
             />
             <View style={[styles.section, { borderColor: border }]}>
               <ThemedText style={{ color: text }}>{stripHtml(post.contentHtml)}</ThemedText>
@@ -337,6 +348,7 @@ export function PostDetailScreen() {
                   setPickerAnchor({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY });
                   setPickerOpen(true);
                 }}
+                delayLongPress={180}
                 style={styles.actionBtn}>
                 <Animated.View style={[styles.reactIconWrap, { transform: [{ scale: heartScale }] }]}>
                   {reactedType?.media?.startsWith('http') ? (
@@ -353,7 +365,7 @@ export function PostDetailScreen() {
                 <IconSymbol name="bubble.left.and.bubble.right.fill" size={17} color={muted} />
                 <ThemedText style={styles.actionText}>{post.commentCount}</ThemedText>
               </Pressable>
-              <Pressable onPress={() => shareMut.mutate()} style={styles.actionBtn} disabled={shareMut.isPending}>
+              <Pressable disabled style={styles.actionBtn}>
                 <IconSymbol name="paperplane.fill" size={17} color={muted} />
                 <ThemedText style={styles.actionText}>{post.shareCount}</ThemedText>
               </Pressable>
@@ -416,7 +428,7 @@ export function PostDetailScreen() {
       <ReactionPicker
         open={pickerOpen}
         anchor={pickerAnchor}
-        options={postTypes.filter((r) => r.code !== 'SHARE')}
+        options={postTypes}
         selectedCode={reactedCode}
         onClose={() => setPickerOpen(false)}
         onSelect={(typeCode) => {

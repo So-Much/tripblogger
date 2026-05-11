@@ -74,7 +74,7 @@ export function MyPostsScreen() {
       const existedCode = prev.myReactionCodes.find((code) => code !== 'SHARE');
       const isSame = existedCode === typeCode;
       const nextCounts = { ...prev.reactionCounts };
-      const nextMyReactionCodes = prev.myReactionCodes.filter((code) => code === 'SHARE');
+      const nextMyReactionCodes: string[] = prev.myReactionCodes.filter((code) => code === 'SHARE');
       if (existedCode) {
         nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
       }
@@ -172,7 +172,7 @@ export function MyPostsScreen() {
   if (query.isError) {
     return (
       <ThemedView style={styles.center}>
-        <ThemedText>{formatApiError(query.error)}</ThemedText>
+        <ThemedText>{formatApiError(query.error, 'Không thể tải danh sách bài viết.')}</ThemedText>
       </ThemedView>
     );
   }

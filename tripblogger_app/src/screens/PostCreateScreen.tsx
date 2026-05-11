@@ -68,13 +68,8 @@ function DraggableMediaThumb({
 
   return (
     <Animated.View style={[styles.thumbWrap, { transform: [{ rotate }, { scale }] }]}>
-      <Pressable onLongPress={drag} delayLongPress={170} style={styles.thumbPressable} onPress={onPreview}>
+      <Pressable onLongPress={drag} delayLongPress={80} style={styles.thumbPressable} onPress={onPreview}>
         <Image source={{ uri: item.url }} style={styles.thumb} />
-        {isActive ? (
-          <View style={styles.dragOverlay}>
-            <ThemedText style={styles.dragOverlayText}>Đang di chuyển…</ThemedText>
-          </View>
-        ) : null}
       </Pressable>
       {!isActive ? (
         <Pressable onPress={onRemove} style={styles.removeThumbBtn}>
@@ -315,7 +310,10 @@ export function PostCreateScreen() {
             onDragEnd={({ data }) => setMedia(data)}
             onDragBegin={(index) => setDraggingId(media[index]?.localId ?? null)}
             onRelease={() => setDraggingId(null)}
-            activationDistance={12}
+            activationDistance={4}
+            dragItemOverflow
+            autoscrollThreshold={48}
+            autoscrollSpeed={90}
             containerStyle={styles.mediaList}
             contentContainerStyle={styles.mediaRow}
           />
@@ -455,13 +453,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   removeThumbTxt: { color: '#fff', fontSize: 11, fontWeight: '600' },
-  dragOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(2,6,23,0.28)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dragOverlayText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   previewBackdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.86)' },
   previewList: { flex: 1 },
   previewItem: { flex: 1 },

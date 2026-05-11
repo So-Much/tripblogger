@@ -110,12 +110,14 @@ export function PostMediaBlock({
   slot,
   onInteractionStart,
   onInteractionEnd,
+  deferViewerOpen,
 }: {
   media?: MediaItem[];
   compact?: boolean;
   slot?: PostMediaSlot;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
+  deferViewerOpen?: (openViewer: () => void) => void;
 }) {
   const items = useMemo(() => (media ?? []).filter((m) => Boolean(m?.url)), [media]);
   const [width, setWidth] = useState(0);
@@ -137,6 +139,20 @@ export function PostMediaBlock({
   const viewerHeight = Math.round(screenHeight);
 
   if (!items.length) return null;
+
+  const openViewerAtIndex = (index: number) => {
+    const openViewer = () => {
+      setViewerIndex(index);
+      setViewerOpen(true);
+    };
+
+    if (deferViewerOpen) {
+      deferViewerOpen(openViewer);
+      return;
+    }
+
+    openViewer();
+  };
 
   const onMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!width) return;
@@ -173,8 +189,7 @@ export function PostMediaBlock({
                   <Pressable
                     style={[styles.videoStub, sizeStyle, { backgroundColor: backdropColor }]}
                     onPress={() => {
-                      setViewerIndex(items.findIndex((m) => m.url === item.url));
-                      setViewerOpen(true);
+                      openViewerAtIndex(items.findIndex((m) => m.url === item.url));
                     }}>
                     <ThemedText type="defaultSemiBold">Video</ThemedText>
                     <ThemedText numberOfLines={1}>{item.url}</ThemedText>
@@ -185,8 +200,7 @@ export function PostMediaBlock({
                 <Pressable
                   style={sizeStyle}
                   onPress={() => {
-                    setViewerIndex(items.findIndex((m) => m.url === item.url));
-                    setViewerOpen(true);
+                    openViewerAtIndex(items.findIndex((m) => m.url === item.url));
                   }}>
                   <ResilientPostImage
                     sources={mediaSources(item, 'feed')}

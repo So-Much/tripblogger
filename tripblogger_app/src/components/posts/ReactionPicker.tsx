@@ -1,7 +1,86 @@
-import { Image, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { Animated, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
 import { ThemedText } from '@/components/themed-text';
 import type { ReactionTypeDto } from '@/src/types/post';
+
+function ReactionPickerItem({
+  option,
+  active,
+  previewed,
+  onPreview,
+  onClearPreview,
+  onSelect,
+}: {
+  option: ReactionTypeDto;
+  active: boolean;
+  previewed: boolean;
+  onPreview: () => void;
+  onClearPreview: () => void;
+  onSelect: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const labelProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(labelProgress, {
+      toValue: previewed ? 1 : 0,
+      duration: previewed ? 120 : 90,
+      useNativeDriver: true,
+    }).start();
+  }, [labelProgress, previewed]);
+
+  const runPressAnimation = () => {
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 1.24, duration: 70, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, speed: 18, bounciness: 10, useNativeDriver: true }),
+    ]).start();
+  };
+
+  return (
+    <Pressable
+      onPress={() => {
+        onSelect();
+        runPressAnimation();
+      }}
+      onPressIn={onPreview}
+      onPressOut={onClearPreview}
+      onHoverIn={onPreview}
+      onHoverOut={onClearPreview}
+      style={styles.item}>
+      <Animated.View
+        style={[
+          styles.iconWrap,
+          active ? styles.iconWrapActive : null,
+          previewed ? styles.iconWrapPreviewed : null,
+          { transform: [{ scale }] },
+        ]}>
+        {option.media?.startsWith('http') ? (
+          <Image source={{ uri: option.media }} style={styles.mediaIcon} />
+        ) : (
+          <ThemedText style={styles.fallbackIcon}>{option.media || option.name[0]}</ThemedText>
+        )}
+      </Animated.View>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.nameBubble,
+          {
+            opacity: labelProgress,
+            transform: [
+              {
+                translateY: labelProgress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-4, 0],
+                }),
+              },
+            ],
+          },
+        ]}>
+        <ThemedText style={styles.name}>{option.name}</ThemedText>
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 export function ReactionPicker({
   open,
@@ -19,12 +98,8 @@ export function ReactionPicker({
   anchor?: { x: number; y: number } | null;
 }) {
   const [hoveredCode, setHoveredCode] = useState<string | null>(null);
-  const previewCode = hoveredCode ?? selectedCode ?? null;
-  const top = Math.max(12, (anchor?.y ?? 200) - 86);
+  const top = Math.max(12, (anchor?.y ?? 200) - 72);
   const left = Math.max(8, (anchor?.x ?? 120) - Math.min(options.length, 6) * 28);
-  const itemWidth = 54;
-  const touchIndex = (x: number) => Math.max(0, Math.min(options.length - 1, Math.floor(x / itemWidth)));
-  const previewType = useMemo(() => options.find((o) => o.code === previewCode) ?? null, [options, previewCode]);
 
   useEffect(() => {
     if (!open) setHoveredCode(null);
@@ -41,73 +116,62 @@ export function ReactionPicker({
       }}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable onPress={() => {}}>
-        <View
-          style={[styles.bar, { top, left }]}
-          onTouchMove={(e) => {
-            const idx = touchIndex(e.nativeEvent.locationX);
-            setHoveredCode(options[idx]?.code ?? null);
-          }}
-          onTouchEnd={() => {
-            if (hoveredCode) onSelect(hoveredCode);
-            setHoveredCode(null);
-          }}>
-          {options.map((o) => (
-            <Pressable
-              key={o.code}
-              onPress={() => onSelect(o.code)}
-              onPressIn={() => setHoveredCode(o.code)}
-              onPressOut={() => setHoveredCode(null)}
-              style={[
-                styles.item,
-                previewCode === o.code ? styles.itemActive : null,
-              ]}>
-              {o.media?.startsWith('http') ? (
-                <Image source={{ uri: o.media }} style={styles.mediaIcon} />
-              ) : (
-                <ThemedText style={styles.fallbackIcon}>{o.media || o.name[0]}</ThemedText>
-              )}
-              <ThemedText style={styles.name}>{o.name}</ThemedText>
-            </Pressable>
-          ))}
-        </View>
-        </Pressable>
-        {previewType ? (
-          <View style={[styles.previewBadge, { top: Math.max(8, top - 36), left }]}>
-            <ThemedText style={styles.previewText}>{previewType.name}</ThemedText>
+          <View style={[styles.bar, { top, left }]}>
+            {options.map((o) => (
+              <ReactionPickerItem
+                key={o.code}
+                option={o}
+                active={selectedCode === o.code}
+                previewed={hoveredCode === o.code}
+                onPreview={() => setHoveredCode(o.code)}
+                onClearPreview={() => setHoveredCode(null)}
+                onSelect={() => onSelect(o.code)}
+              />
+            ))}
           </View>
-        ) : null}
+        </Pressable>
       </Pressable>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.04)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.02)' },
   bar: {
     position: 'absolute',
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    alignItems: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
   item: {
-    width: 50,
+    width: 46,
+    minHeight: 64,
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingTop: 2,
   },
-  itemActive: {
-    backgroundColor: 'rgba(37,99,235,0.14)',
-    transform: [{ scale: 1.08 }],
+  iconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+  iconWrapActive: {
+    borderWidth: 2,
+    borderColor: '#2563EB',
+  },
+  iconWrapPreviewed: {
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 10,
   },
   mediaIcon: {
     width: 28,
@@ -121,16 +185,14 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     textAlign: 'center',
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  name: { fontSize: 10, fontWeight: '600' },
-  previewBadge: {
-    position: 'absolute',
+  nameBubble: {
+    marginTop: 5,
     backgroundColor: '#0F172A',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  previewText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  name: { color: '#fff', fontSize: 10, fontWeight: '700' },
 });
 
