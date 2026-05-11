@@ -19,6 +19,9 @@ export interface PostDto {
     storage?: 'local' | 'cloud';
     sourcePath?: string;
     migratedAt?: string;
+    available?: boolean;
+    missingVariants?: string[];
+    loadFailedAt?: string;
   }[];
   category: string | null;
   tags: string[];

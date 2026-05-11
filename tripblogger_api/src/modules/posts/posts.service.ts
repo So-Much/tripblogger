@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import sanitizeHtml from 'sanitize-html';
 import { Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
@@ -57,6 +59,23 @@ function parseMedia(raw: string | null): PostMediaItem[] {
   } catch {
     return [];
   }
+}
+
+function toLocalUploadPath(value?: string): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith('/uploads/')) return value;
+  try {
+    const parsed = new URL(value);
+    return parsed.pathname.startsWith('/uploads/') ? parsed.pathname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isLocalMediaPathAvailable(value?: string): boolean {
+  const localPath = toLocalUploadPath(value);
+  if (!localPath) return Boolean(value);
+  return existsSync(join(process.cwd(), localPath.replace(/^\/+/, '')));
 }
 
 function parseLocation(raw: string | null): Record<string, unknown> | null {
@@ -119,15 +138,34 @@ export class PostsService {
     const resolvedMedia = parseMedia(post.mediaJson).map((item) => {
       const resolvePath = (path?: string) => {
         if (!path) return undefined;
+        const localPath = toLocalUploadPath(path);
+        if (localPath) {
+          return visibility === 'PRIVATE' ? this.mediaResolver.toPrivateSignedPath(localPath) : localPath;
+        }
         if (!path.startsWith('/')) return path;
         return visibility === 'PRIVATE' ? this.mediaResolver.toPrivateSignedPath(path) : path;
       };
+      const variants = {
+        thumbnailUrl: isLocalMediaPathAvailable(item.thumbnailUrl) ? item.thumbnailUrl : undefined,
+        previewUrl: isLocalMediaPathAvailable(item.previewUrl) ? item.previewUrl : undefined,
+        originalUrl: isLocalMediaPathAvailable(item.originalUrl ?? item.url) ? (item.originalUrl ?? item.url) : undefined,
+      };
+      const primaryUrl = variants.previewUrl ?? variants.originalUrl ?? variants.thumbnailUrl;
+      const missingVariants = [
+        item.thumbnailUrl && !variants.thumbnailUrl ? 'thumbnailUrl' : null,
+        item.previewUrl && !variants.previewUrl ? 'previewUrl' : null,
+        (item.originalUrl ?? item.url) && !variants.originalUrl ? 'originalUrl' : null,
+      ].filter((variant): variant is string => Boolean(variant));
+      const available = Boolean(primaryUrl);
       return {
         ...item,
-        url: resolvePath(item.previewUrl ?? item.url) ?? item.url,
-        thumbnailUrl: resolvePath(item.thumbnailUrl),
-        previewUrl: resolvePath(item.previewUrl),
-        originalUrl: resolvePath(item.originalUrl ?? item.url),
+        url: resolvePath(primaryUrl) ?? item.url,
+        thumbnailUrl: resolvePath(variants.thumbnailUrl),
+        previewUrl: resolvePath(variants.previewUrl),
+        originalUrl: resolvePath(variants.originalUrl),
+        available,
+        missingVariants,
+        loadFailedAt: available ? undefined : new Date().toISOString(),
       };
     });
     return {

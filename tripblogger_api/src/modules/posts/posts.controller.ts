@@ -240,7 +240,8 @@ export class PostsController {
       await sharp(localSourcePath).resize(1280, 1280, { fit: 'inside' }).webp({ quality: 82 }).toFile(previewAbsolute);
       thumbnailRelative = `/uploads/posts/variants/${thumbName}`;
       previewRelative = `/uploads/posts/variants/${previewName}`;
-      placeholder = `data:${file.mimetype};base64,${meta.subarray(0, Math.min(48, meta.length)).toString('base64')}`;
+      const tiny = await sharp(localSourcePath).resize(24, 24, { fit: 'inside' }).webp({ quality: 35 }).toBuffer();
+      placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
     }
 
     const originalUrl = this.mediaResolver.toPublicUrl(relativeOriginal, reqMeta);

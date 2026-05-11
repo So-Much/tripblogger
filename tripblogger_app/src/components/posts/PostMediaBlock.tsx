@@ -1,35 +1,118 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   FlatList,
+  ImageStyle,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  StyleProp,
   StyleSheet,
   View,
+  ViewStyle,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
+import { useThemeColor } from '@/hooks/use-theme-color';
 import type { PostDto } from '@/src/types/post';
 
 type MediaItem = PostDto['media'][number];
 
-function mediaSources(item: MediaItem, preferOriginal = false): string[] {
-  const sources = preferOriginal
+export type PostMediaSlot = 'square' | 'portrait' | 'landscape';
+
+function mediaSources(item: MediaItem, mode: 'feed' | 'viewer' = 'feed'): string[] {
+  const sources = mode === 'viewer'
     ? [item.originalUrl, item.previewUrl, item.url, item.thumbnailUrl]
     : [item.thumbnailUrl, item.previewUrl, item.url, item.originalUrl];
   return [...new Set(sources.filter((s): s is string => Boolean(s)))];
 }
 
+function ResilientPostImage({
+  sources,
+  unavailable,
+  imageStyle,
+  fallbackStyle,
+  placeholder,
+  contentFit,
+  transition,
+  fallbackLabel,
+  retryLabel,
+  fallbackTextColor,
+}: {
+  sources: string[];
+  unavailable?: boolean;
+  imageStyle: StyleProp<ImageStyle>;
+  fallbackStyle: StyleProp<ViewStyle>;
+  placeholder?: string;
+  contentFit: 'contain';
+  transition: number;
+  fallbackLabel: string;
+  retryLabel: string;
+  fallbackTextColor?: string;
+}) {
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const [retrySeed, setRetrySeed] = useState(0);
+  const sourceKey = sources.join('|');
+  const currentSource = sources[sourceIndex];
+
+  useEffect(() => {
+    setSourceIndex(0);
+    setFailed(false);
+  }, [sourceKey]);
+
+  const retry = () => {
+    setSourceIndex(0);
+    setFailed(false);
+    setRetrySeed((value) => value + 1);
+  };
+
+  if (unavailable || failed || !currentSource) {
+    return (
+      <Pressable style={fallbackStyle} onPress={retry}>
+        <ThemedText type="defaultSemiBold" style={[styles.fallbackText, fallbackTextColor ? { color: fallbackTextColor } : null]}>
+          {fallbackLabel}
+        </ThemedText>
+        {!unavailable && sources.length ? (
+          <ThemedText style={[styles.fallbackSubtext, fallbackTextColor ? { color: fallbackTextColor } : null]}>
+            {retryLabel}
+          </ThemedText>
+        ) : null}
+      </Pressable>
+    );
+  }
+
+  return (
+    <ExpoImage
+      key={`${retrySeed}-${sourceIndex}-${currentSource}`}
+      source={currentSource}
+      style={imageStyle}
+      contentFit={contentFit}
+      cachePolicy="disk"
+      placeholder={placeholder}
+      transition={transition}
+      onError={() => {
+        setSourceIndex((nextIndex) => {
+          if (nextIndex + 1 < sources.length) return nextIndex + 1;
+          setFailed(true);
+          return nextIndex;
+        });
+      }}
+    />
+  );
+}
+
 export function PostMediaBlock({
   media,
   compact = false,
+  slot,
   onInteractionStart,
   onInteractionEnd,
 }: {
   media?: MediaItem[];
   compact?: boolean;
+  slot?: PostMediaSlot;
   onInteractionStart?: () => void;
   onInteractionEnd?: () => void;
 }) {
@@ -38,8 +121,18 @@ export function PostMediaBlock({
   const [activeIndex, setActiveIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+
+  const effectiveSlot: PostMediaSlot = slot ?? (compact ? 'square' : 'portrait');
+  const slotAspect = useMemo(() => {
+    if (effectiveSlot === 'portrait') return 4 / 5;
+    if (effectiveSlot === 'landscape') return 16 / 9;
+    return 1;
+  }, [effectiveSlot]);
+
+  const backdropColor = useThemeColor({ light: '#F1F5F9', dark: '#0F172A' }, 'background');
+  const slotHeight = width ? Math.round(width / slotAspect) : 0;
+
   if (!items.length) return null;
-  const slideHeight = compact ? 140 : 220;
   const viewerWidth = width || Dimensions.get('window').width;
 
   const onMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -52,7 +145,10 @@ export function PostMediaBlock({
   return (
     <View style={styles.wrap}>
       <View
-        style={[styles.sliderViewport, { height: slideHeight }]}
+        style={[
+          styles.sliderViewport,
+          { aspectRatio: slotAspect, backgroundColor: backdropColor },
+        ]}
         onLayout={(event) => setWidth(Math.round(event.nativeEvent.layout.width))}>
         {width ? (
           <FlatList
@@ -68,13 +164,15 @@ export function PostMediaBlock({
             onMomentumScrollEnd={onMomentumEnd}
             onScrollEndDrag={onInteractionEnd}
             renderItem={({ item }) => {
-              const sizeStyle = { width, height: slideHeight };
+              const sizeStyle = { width, height: slotHeight };
               if ((item.type ?? item.kind) === 'video') {
                 return (
-                  <Pressable style={[styles.videoStub, sizeStyle]} onPress={() => {
-                    setViewerIndex(items.findIndex((m) => m.url === item.url));
-                    setViewerOpen(true);
-                  }}>
+                  <Pressable
+                    style={[styles.videoStub, sizeStyle, { backgroundColor: backdropColor }]}
+                    onPress={() => {
+                      setViewerIndex(items.findIndex((m) => m.url === item.url));
+                      setViewerOpen(true);
+                    }}>
                     <ThemedText type="defaultSemiBold">Video</ThemedText>
                     <ThemedText numberOfLines={1}>{item.url}</ThemedText>
                   </Pressable>
@@ -87,12 +185,16 @@ export function PostMediaBlock({
                     setViewerIndex(items.findIndex((m) => m.url === item.url));
                     setViewerOpen(true);
                   }}>
-                  <ExpoImage
-                    source={mediaSources(item)}
-                    style={[styles.image, sizeStyle]}
-                    contentFit="cover"
+                  <ResilientPostImage
+                    sources={mediaSources(item, 'feed')}
+                    unavailable={item.available === false}
+                    imageStyle={[styles.image, sizeStyle, { backgroundColor: backdropColor }]}
+                    fallbackStyle={[styles.imageFallback, sizeStyle, { backgroundColor: backdropColor }]}
+                    contentFit="contain"
                     placeholder={item.placeholder}
                     transition={180}
+                    fallbackLabel="Không tải được ảnh"
+                    retryLabel="Chạm để thử lại"
                   />
                 </Pressable>
               );
@@ -130,12 +232,17 @@ export function PostMediaBlock({
                 }
                 return (
                   <View style={[styles.viewerItem, { width: viewerWidth }]}>
-                    <ExpoImage
-                      source={mediaSources(item, true)}
-                      style={styles.viewerImage}
+                    <ResilientPostImage
+                      sources={mediaSources(item, 'viewer')}
+                      unavailable={item.available === false}
+                      imageStyle={styles.viewerImage}
+                      fallbackStyle={styles.viewerImageFallback}
                       contentFit="contain"
                       placeholder={item.placeholder}
                       transition={220}
+                      fallbackLabel="Không tải được ảnh"
+                      retryLabel="Chạm để thử lại"
+                      fallbackTextColor="#fff"
                     />
                   </View>
                 );
@@ -153,10 +260,16 @@ const styles = StyleSheet.create({
   sliderViewport: {
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
   },
   image: {
     borderRadius: 14,
+  },
+  imageFallback: {
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    gap: 4,
   },
   videoStub: {
     justifyContent: 'center',
@@ -174,7 +287,16 @@ const styles = StyleSheet.create({
   viewerFrame: { alignSelf: 'stretch' },
   viewerItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   viewerImage: { width: '100%', height: '84%' },
+  viewerImageFallback: {
+    width: '100%',
+    height: '84%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    gap: 6,
+  },
   viewerVideoStub: { width: '100%', height: '84%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 8 },
   viewerText: { color: '#fff', textAlign: 'center' },
+  fallbackText: { textAlign: 'center' },
+  fallbackSubtext: { textAlign: 'center', opacity: 0.72 },
 });
-

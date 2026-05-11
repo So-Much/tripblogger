@@ -101,7 +101,7 @@ export function PostPreviewCard({
         </ThemedText>
         <PostMediaBlock
           media={post.media}
-          compact
+          slot="square"
           onInteractionStart={() => {
             mediaInteractingRef.current = true;
           }}

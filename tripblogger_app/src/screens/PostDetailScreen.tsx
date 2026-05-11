@@ -300,6 +300,7 @@ export function PostDetailScreen() {
             }}>
             <PostMediaBlock
               media={post.media}
+              slot="portrait"
               onInteractionStart={() => {
                 mediaInteractingRef.current = true;
               }}

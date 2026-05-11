@@ -22,6 +22,9 @@ export interface PostMediaItem {
   storage?: MediaStorage;
   sourcePath?: string;
   migratedAt?: string;
+  available?: boolean;
+  missingVariants?: string[];
+  loadFailedAt?: string;
 }
 
 export function normalizePostMediaItem(input: Record<string, unknown>): PostMediaItem {
@@ -42,5 +45,8 @@ export function normalizePostMediaItem(input: Record<string, unknown>): PostMedi
     storage: (input.storage as MediaStorage | undefined) ?? 'local',
     sourcePath: typeof input.sourcePath === 'string' ? input.sourcePath : undefined,
     migratedAt: typeof input.migratedAt === 'string' ? input.migratedAt : undefined,
+    available: typeof input.available === 'boolean' ? input.available : undefined,
+    missingVariants: Array.isArray(input.missingVariants) ? input.missingVariants.map(String) : undefined,
+    loadFailedAt: typeof input.loadFailedAt === 'string' ? input.loadFailedAt : undefined,
   };
 }
