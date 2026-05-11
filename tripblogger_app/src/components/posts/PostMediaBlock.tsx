@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
   FlatList,
   ImageStyle,
   Modal,
@@ -11,11 +10,13 @@ import {
   StyleSheet,
   View,
   ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { PostDto } from '@/src/types/post';
+import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 
 type MediaItem = PostDto['media'][number];
 
@@ -121,6 +122,7 @@ export function PostMediaBlock({
   const [activeIndex, setActiveIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const effectiveSlot: PostMediaSlot = slot ?? (compact ? 'square' : 'portrait');
   const slotAspect = useMemo(() => {
@@ -131,9 +133,10 @@ export function PostMediaBlock({
 
   const backdropColor = useThemeColor({ light: '#F1F5F9', dark: '#0F172A' }, 'background');
   const slotHeight = width ? Math.round(width / slotAspect) : 0;
+  const viewerWidth = Math.round(screenWidth);
+  const viewerHeight = Math.round(screenHeight);
 
   if (!items.length) return null;
-  const viewerWidth = width || Dimensions.get('window').width;
 
   const onMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!width) return;
@@ -210,46 +213,68 @@ export function PostMediaBlock({
         </View>
       ) : null}
       <Modal transparent visible={viewerOpen} animationType="fade" onRequestClose={() => setViewerOpen(false)}>
-        <Pressable style={styles.viewerRoot} onPress={() => setViewerOpen(false)}>
-          <Pressable style={styles.viewerFrame} onPress={() => {}}>
-            <FlatList
-              data={items}
-              horizontal
-              pagingEnabled
-              initialScrollIndex={Math.max(viewerIndex, 0)}
-              getItemLayout={(_data, index) => ({ index, length: viewerWidth, offset: viewerWidth * index })}
-              keyExtractor={(item, idx) => `${item.url}-viewer-${idx}`}
-              renderItem={({ item }) => {
-                if ((item.type ?? item.kind) === 'video') {
-                  return (
-                    <View style={[styles.viewerItem, { width: viewerWidth }]}>
-                      <View style={styles.viewerVideoStub}>
-                        <ThemedText type="defaultSemiBold" style={styles.viewerText}>Video</ThemedText>
-                        <ThemedText style={styles.viewerText}>{item.url}</ThemedText>
-                      </View>
-                    </View>
-                  );
-                }
+        <View style={styles.viewerRoot}>
+          <FlatList
+            data={items}
+            horizontal
+            pagingEnabled
+            style={styles.viewerList}
+            initialScrollIndex={Math.max(viewerIndex, 0)}
+            getItemLayout={(_data, index) => ({ index, length: viewerWidth, offset: viewerWidth * index })}
+            keyExtractor={(item, idx) => `${item.url}-viewer-${idx}`}
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const mediaFrame = getContainedMediaFrame({
+                source: item,
+                maxWidth: viewerWidth - 24,
+                maxHeight: viewerHeight * 0.84,
+              });
+
+              if ((item.type ?? item.kind) === 'video') {
                 return (
                   <View style={[styles.viewerItem, { width: viewerWidth }]}>
-                    <ResilientPostImage
-                      sources={mediaSources(item, 'viewer')}
-                      unavailable={item.available === false}
-                      imageStyle={styles.viewerImage}
-                      fallbackStyle={styles.viewerImageFallback}
-                      contentFit="contain"
-                      placeholder={item.placeholder}
-                      transition={220}
-                      fallbackLabel="Không tải được ảnh"
-                      retryLabel="Chạm để thử lại"
-                      fallbackTextColor="#fff"
-                    />
+                    <Pressable style={styles.viewerCloseBand} onPress={() => setViewerOpen(false)} />
+                    <View style={[styles.viewerMediaRow, { height: mediaFrame.height }]}>
+                      <Pressable style={styles.viewerSideCloseBand} onPress={() => setViewerOpen(false)} />
+                      <View style={[styles.viewerMediaBox, mediaFrame]}>
+                        <View style={styles.viewerVideoStub}>
+                          <ThemedText type="defaultSemiBold" style={styles.viewerText}>Video</ThemedText>
+                          <ThemedText style={styles.viewerText}>{item.url}</ThemedText>
+                        </View>
+                      </View>
+                      <Pressable style={styles.viewerSideCloseBand} onPress={() => setViewerOpen(false)} />
+                    </View>
+                    <Pressable style={styles.viewerCloseBand} onPress={() => setViewerOpen(false)} />
                   </View>
                 );
-              }}
-            />
-          </Pressable>
-        </Pressable>
+              }
+              return (
+                <View style={[styles.viewerItem, { width: viewerWidth }]}>
+                  <Pressable style={styles.viewerCloseBand} onPress={() => setViewerOpen(false)} />
+                  <View style={[styles.viewerMediaRow, { height: mediaFrame.height }]}>
+                    <Pressable style={styles.viewerSideCloseBand} onPress={() => setViewerOpen(false)} />
+                    <View style={[styles.viewerMediaBox, mediaFrame]}>
+                      <ResilientPostImage
+                        sources={mediaSources(item, 'viewer')}
+                        unavailable={item.available === false}
+                        imageStyle={styles.viewerImage}
+                        fallbackStyle={styles.viewerImageFallback}
+                        contentFit="contain"
+                        placeholder={item.placeholder}
+                        transition={220}
+                        fallbackLabel="Không tải được ảnh"
+                        retryLabel="Chạm để thử lại"
+                        fallbackTextColor="#fff"
+                      />
+                    </View>
+                    <Pressable style={styles.viewerSideCloseBand} onPress={() => setViewerOpen(false)} />
+                  </View>
+                  <Pressable style={styles.viewerCloseBand} onPress={() => setViewerOpen(false)} />
+                </View>
+              );
+            }}
+          />
+        </View>
       </Modal>
     </View>
   );
@@ -283,19 +308,23 @@ const styles = StyleSheet.create({
   dotRow: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#CBD5E1' },
   dotActive: { backgroundColor: '#2563EB', width: 14 },
-  viewerRoot: { flex: 1, backgroundColor: 'rgba(2,6,23,0.92)', justifyContent: 'center' },
-  viewerFrame: { alignSelf: 'stretch' },
-  viewerItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
-  viewerImage: { width: '100%', height: '84%' },
+  viewerRoot: { flex: 1, backgroundColor: 'rgba(2,6,23,0.92)' },
+  viewerList: { flex: 1 },
+  viewerItem: { flex: 1 },
+  viewerCloseBand: { flex: 1 },
+  viewerMediaRow: { flexDirection: 'row', alignItems: 'center' },
+  viewerSideCloseBand: { flex: 1, alignSelf: 'stretch' },
+  viewerMediaBox: { alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '100%' },
   viewerImageFallback: {
     width: '100%',
-    height: '84%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
     gap: 6,
   },
-  viewerVideoStub: { width: '100%', height: '84%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 8 },
+  viewerVideoStub: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, gap: 8 },
   viewerText: { color: '#fff', textAlign: 'center' },
   fallbackText: { textAlign: 'center' },
   fallbackSubtext: { textAlign: 'center', opacity: 0.72 },

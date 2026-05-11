@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Animated,
   Alert,
-  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,6 +13,7 @@ import {
   TextInput,
   View,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
@@ -25,6 +25,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 import * as ImagePicker from 'expo-image-picker';
 
 type EditorMedia = {
@@ -35,6 +36,8 @@ type EditorMedia = {
   previewUrl?: string;
   originalUrl?: string;
   placeholder?: string;
+  width?: number;
+  height?: number;
 };
 
 function DraggableMediaThumb({
@@ -95,7 +98,9 @@ export function PostCreateScreen() {
   const [error, setError] = useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const viewerWidth = Dimensions.get('window').width;
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const viewerWidth = Math.round(screenWidth);
+  const viewerHeight = Math.round(screenHeight);
 
   const editingPostQuery = useQuery({
     queryKey: ['posts', postId],
@@ -116,6 +121,8 @@ export function PostCreateScreen() {
         previewUrl: m.previewUrl,
         originalUrl: m.originalUrl,
         placeholder: m.placeholder,
+        width: m.width,
+        height: m.height,
       })),
     );
   }, [isEditDraft, editingPostQuery.data]);
@@ -133,13 +140,15 @@ export function PostCreateScreen() {
       if (!html) {
         throw new Error(t('postsValidationContent'));
       }
-      const submitMedia = media.map(({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder }) => ({
+      const submitMedia = media.map(({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height }) => ({
         type,
         url,
         thumbnailUrl,
         previewUrl,
         originalUrl,
         placeholder,
+        width,
+        height,
       }));
       if (postId) {
         return postsService.updatePost(String(postId), { title: title.trim(), contentHtml: html, media: submitMedia });
@@ -151,7 +160,7 @@ export function PostCreateScreen() {
       router.back();
     },
     onError: (e: unknown) => {
-      setError(e instanceof Error ? e.message : formatApiError(e));
+      setError(formatApiError(e, 'Không thể lưu bài viết.'));
     },
   });
 
@@ -165,7 +174,7 @@ export function PostCreateScreen() {
       router.replace('/(tabs)/posts');
     },
     onError: (e: unknown) => {
-      setError(e instanceof Error ? e.message : formatApiError(e));
+      setError(formatApiError(e, 'Không thể xuất bản bài viết.'));
     },
   });
 
@@ -175,7 +184,7 @@ export function PostCreateScreen() {
       await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
       router.back();
     },
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : formatApiError(e)),
+    onError: (e: unknown) => setError(formatApiError(e, 'Không thể xóa bản nháp.')),
   });
 
   const handlePublishPress = useCallback(() => {
@@ -228,6 +237,8 @@ export function PostCreateScreen() {
           previewUrl: uploaded.previewUrl,
           originalUrl: uploaded.originalUrl,
           placeholder: uploaded.placeholder,
+          width: uploaded.width,
+          height: uploaded.height,
         },
       ]);
     }
@@ -346,23 +357,39 @@ export function PostCreateScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
       <Modal transparent visible={previewIndex !== null} animationType="fade" onRequestClose={() => setPreviewIndex(null)}>
-        <Pressable style={styles.previewBackdrop} onPress={() => setPreviewIndex(null)}>
-          <Pressable style={styles.previewFrame} onPress={() => {}}>
-            <FlatList
-              data={media}
-              horizontal
-              pagingEnabled
-              initialScrollIndex={Math.max(previewIndex ?? 0, 0)}
-              getItemLayout={(_data, index) => ({ index, length: viewerWidth, offset: viewerWidth * index })}
-              keyExtractor={(item) => `preview-${item.localId}`}
-              renderItem={({ item }) => (
+        <View style={styles.previewBackdrop}>
+          <FlatList
+            data={media}
+            horizontal
+            pagingEnabled
+            style={styles.previewList}
+            initialScrollIndex={Math.max(previewIndex ?? 0, 0)}
+            getItemLayout={(_data, index) => ({ index, length: viewerWidth, offset: viewerWidth * index })}
+            keyExtractor={(item) => `preview-${item.localId}`}
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const mediaFrame = getContainedMediaFrame({
+                source: item,
+                maxWidth: viewerWidth - 24,
+                maxHeight: viewerHeight * 0.82,
+              });
+
+              return (
                 <View style={[styles.previewItem, { width: viewerWidth }]}>
-                  <Image source={{ uri: item.url }} style={styles.previewImage} resizeMode="contain" />
+                  <Pressable style={styles.previewCloseBand} onPress={() => setPreviewIndex(null)} />
+                  <View style={[styles.previewMediaRow, { height: mediaFrame.height }]}>
+                    <Pressable style={styles.previewSideCloseBand} onPress={() => setPreviewIndex(null)} />
+                    <View style={[styles.previewMediaBox, mediaFrame]}>
+                      <Image source={{ uri: item.url }} style={styles.previewImage} resizeMode="contain" />
+                    </View>
+                    <Pressable style={styles.previewSideCloseBand} onPress={() => setPreviewIndex(null)} />
+                  </View>
+                  <Pressable style={styles.previewCloseBand} onPress={() => setPreviewIndex(null)} />
                 </View>
-              )}
-            />
-          </Pressable>
-        </Pressable>
+              );
+            }}
+          />
+        </View>
       </Modal>
     </ThemedView>
   );
@@ -435,10 +462,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dragOverlayText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  previewBackdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.86)', justifyContent: 'center', padding: 16 },
-  previewFrame: { alignSelf: 'stretch' },
-  previewItem: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  previewImage: { width: '100%', height: '82%' },
+  previewBackdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.86)' },
+  previewList: { flex: 1 },
+  previewItem: { flex: 1 },
+  previewCloseBand: { flex: 1 },
+  previewMediaRow: { flexDirection: 'row', alignItems: 'center' },
+  previewSideCloseBand: { flex: 1, alignSelf: 'stretch' },
+  previewMediaBox: { alignItems: 'center', justifyContent: 'center' },
+  previewImage: { width: '100%', height: '100%' },
   headerPublishBtn: {
     marginRight: 8,
     borderRadius: 10,
