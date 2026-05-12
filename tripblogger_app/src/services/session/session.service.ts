@@ -1,18 +1,16 @@
-import * as Crypto from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
-import { useAuthStore } from '@/src/store/auth.store';
+import * as SecureStore from 'expo-secure-store';import { useAuthStore } from '@/src/store/auth.store';
 
 const SESSION_ID_KEY = 'tripblogger.sessionId';
 const DEVICE_ID_KEY = 'tripblogger.deviceId';
 const ACCESS_TOKEN_KEY = 'tripblogger.accessToken';
 const REFRESH_TOKEN_KEY = 'tripblogger.refreshToken';
 
-function uuidLike() {
-  // Expo Crypto gives us random bytes; format to UUID-ish string
-  const hex = Crypto.getRandomBytes(16)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+function uuidLike(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export async function ensureSessionId(): Promise<string> {

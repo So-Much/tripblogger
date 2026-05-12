@@ -7,6 +7,27 @@ import { MemberProfileEntity } from '../../modules/users/entities/member-profile
 import { StatusCatalogEntity } from '../../modules/users/entities/status-catalog.entity';
 import { UserStatusEntity } from '../../modules/users/entities/user-status.entity';
 import { RefreshTokenEntity } from '../../modules/auth/entities/refresh-token.entity';
+import { OAuthIdentityEntity } from '../../modules/auth/entities/oauth-identity.entity';
+import { CommentEntity } from '../../modules/posts/entities/comment.entity';
+import { PostEntity } from '../../modules/posts/entities/post.entity';
+import { ReactEntity } from '../../modules/posts/entities/react.entity';
+import { ReactTypeEntity } from '../../modules/posts/entities/react-type.entity';
+import { CategoryEntity } from '../../modules/commerce/entities/category.entity';
+import { TagEntity } from '../../modules/commerce/entities/tag.entity';
+import { ProductEntity } from '../../modules/commerce/entities/product.entity';
+import { ProductTagEntity } from '../../modules/commerce/entities/product-tag.entity';
+import { SellerVerificationEntity } from '../../modules/commerce/entities/seller-verification.entity';
+import { WishlistEntity } from '../../modules/commerce/entities/wishlist.entity';
+import { CartEntity } from '../../modules/commerce/entities/cart.entity';
+import { CartProductEntity } from '../../modules/commerce/entities/cart-product.entity';
+import { AddressEntity } from '../../modules/commerce/entities/address.entity';
+import { CouponEntity } from '../../modules/commerce/entities/coupon.entity';
+import { CouponUsageEntity } from '../../modules/commerce/entities/coupon-usage.entity';
+import { OrderEntity } from '../../modules/commerce/entities/order.entity';
+import { OrderProductEntity } from '../../modules/commerce/entities/order-product.entity';
+import { PaymentEntity } from '../../modules/commerce/entities/payment.entity';
+import { ShipmentEntity } from '../../modules/commerce/entities/shipment.entity';
+import { ProductRatingEntity } from '../../modules/commerce/entities/product-rating.entity';
 
 export default new DataSource({
   type: 'mssql',
@@ -28,6 +49,27 @@ export default new DataSource({
     StatusCatalogEntity,
     UserStatusEntity,
     RefreshTokenEntity,
+    OAuthIdentityEntity,
+    PostEntity,
+    CommentEntity,
+    ReactEntity,
+    ReactTypeEntity,
+    CategoryEntity,
+    TagEntity,
+    ProductEntity,
+    ProductTagEntity,
+    SellerVerificationEntity,
+    WishlistEntity,
+    CartEntity,
+    CartProductEntity,
+    AddressEntity,
+    CouponEntity,
+    CouponUsageEntity,
+    OrderEntity,
+    OrderProductEntity,
+    PaymentEntity,
+    ShipmentEntity,
+    ProductRatingEntity,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

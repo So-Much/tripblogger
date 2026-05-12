@@ -24,4 +24,7 @@ export class MemberProfileEntity {
 
   @Column({ name: 'avatar_url', type: 'nvarchar', length: 512, nullable: true })
   avatarUrl?: string | null;
+
+  @Column({ name: 'is_verified_seller', type: 'bit', default: false })
+  isVerifiedSeller!: boolean;
 }

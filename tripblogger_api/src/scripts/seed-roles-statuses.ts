@@ -13,6 +13,7 @@ async function run() {
   const roles = [
     { code: RoleCode.GUEST, name: 'Guest' },
     { code: RoleCode.MEMBER, name: 'Member' },
+    { code: RoleCode.ADMIN, name: 'Admin' },
   ];
   for (const role of roles) {
     const existed = await roleRepo.findOne({ where: { code: role.code } });

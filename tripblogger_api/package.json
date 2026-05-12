@@ -11,6 +11,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "seed:roles-statuses": "ts-node src/scripts/seed-roles-statuses.ts",
+    "seed:categories": "ts-node src/scripts/seed-categories.ts",
     "seed:user": "ts-node src/scripts/seed-user.ts",
     "lint": "eslint \"src/**/*.ts\""
   },

@@ -1,4 +1,4 @@
-import { io, Socket } from 'socket.io-client/dist/socket.io.js';
+import { io, type Socket } from 'socket.io-client';
 import { apiBaseUrl } from '@/src/services/api/client';
 
 type RealtimeHandler = (payload: unknown) => void;

@@ -15,8 +15,12 @@ async function bootstrap() {
   const uploadsDir = join(process.cwd(), 'uploads');
   const avatarDir = join(uploadsDir, 'avatars');
   const postsDir = join(uploadsDir, 'posts');
+  const commerceDir = join(uploadsDir, 'commerce');
+  const commerceVariantsDir = join(commerceDir, 'variants');
   if (!existsSync(avatarDir)) mkdirSync(avatarDir, { recursive: true });
   if (!existsSync(postsDir)) mkdirSync(postsDir, { recursive: true });
+  if (!existsSync(commerceDir)) mkdirSync(commerceDir, { recursive: true });
+  if (!existsSync(commerceVariantsDir)) mkdirSync(commerceVariantsDir, { recursive: true });
   app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

@@ -1,4 +1,4 @@
-export type RoleCode = 'GUEST' | 'MEMBER';
+export type RoleCode = 'GUEST' | 'MEMBER' | 'ADMIN';
 
 export type UserStatusCode =
   | 'ACTIVE'

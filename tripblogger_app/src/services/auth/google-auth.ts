@@ -38,7 +38,7 @@ export async function signInWithGoogleIdToken(): Promise<string> {
   const redirectUri = AuthSession.makeRedirectUri({
     useProxy: true,
     projectNameForProxy,
-  });
+  } as never);
   const state = Crypto.randomUUID();
 
   const authRequest = new AuthSession.AuthRequest({
@@ -57,7 +57,7 @@ export async function signInWithGoogleIdToken(): Promise<string> {
   const result = await authRequest.promptAsync(discovery, {
     useProxy: true,
     projectNameForProxy,
-  });
+  } as never);
 
   if (result.type !== 'success') {
     throw new Error('Google sign-in cancelled');

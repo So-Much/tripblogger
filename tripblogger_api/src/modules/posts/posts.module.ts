@@ -20,6 +20,6 @@ import { MediaMigrationWorker } from './media.migration.worker';
   ],
   controllers: [PostsController],
   providers: [PostsService, PostsRealtimeGateway, MediaResolver, MediaMigrationWorker, RolesGuard, StatusesGuard],
-  exports: [PostsService],
+  exports: [PostsService, MediaResolver],
 })
 export class PostsModule {}
