@@ -1,11 +1,12 @@
 import { useLayoutEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation, useRouter, type Href } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
@@ -52,7 +53,7 @@ export function ProductDetailScreen() {
       commerceService.addToCart({ productId: String(id), quantity: Math.max(1, parseInt(qty, 10) || 1) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['commerce', 'cart'] });
-      Alert.alert(t('cartTitle'), 'OK');
+      Alert.alert(t('cartTitle'), t('cartAddedSuccess'));
     },
   });
 
@@ -76,7 +77,7 @@ export function ProductDetailScreen() {
   if (q.isLoading || !q.data) {
     return (
       <ThemedView style={styles.center}>
-        <ThemedText>…</ThemedText>
+        <ActivityIndicator />
       </ThemedView>
     );
   }
@@ -84,6 +85,7 @@ export function ProductDetailScreen() {
   const p = q.data;
   const cover = p.media?.[0]?.previewUrl || p.media?.[0]?.url;
   const isMember = me.data?.role === 'MEMBER';
+  const canBuy = isMember || me.data?.role === 'GUEST';
   const buyerId = me.data?.id;
   const isOwn = buyerId != null && p.sellerId === buyerId;
 
@@ -118,23 +120,32 @@ export function ProductDetailScreen() {
             </View>
           ) : null}
           <ThemedText style={styles.desc}>{p.description.replace(/<[^>]+>/g, ' ')}</ThemedText>
-          {isMember && p.status === 'PUBLISHED' && !isOwn ? (
+          {canBuy && p.status === 'PUBLISHED' && !isOwn ? (
             <View style={styles.buyRow}>
               <TextInput
                 value={qty}
                 onChangeText={setQty}
                 keyboardType="number-pad"
+                accessibilityLabel={t('productQuantityShort')}
                 style={[styles.qty, { borderColor: border, color: text }]}
               />
               <Pressable
-                style={[styles.cta, { backgroundColor: tint }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('addToCart')}
+                style={[styles.cta, { backgroundColor: tint, opacity: addCart.isPending ? 0.65 : 1 }]}
                 onPress={() => addCart.mutate()}
                 disabled={addCart.isPending}>
                 <ThemedText style={styles.ctaTxt}>{t('addToCart')}</ThemedText>
               </Pressable>
-              <Pressable style={[styles.cta2, { borderColor: border }]} onPress={() => wish.mutate()}>
-                <ThemedText type="link">♥</ThemedText>
-              </Pressable>
+              {isMember ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('wishlistToggleA11y')}
+                  style={[styles.cta2, { borderColor: border }]}
+                  onPress={() => wish.mutate()}>
+                  <IconSymbol name="heart" size={22} color={tint} />
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
         </ThemedView>
@@ -156,6 +167,14 @@ const styles = StyleSheet.create({
   qty: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, width: 56, fontSize: 16 },
   cta: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
   ctaTxt: { color: '#fff', fontWeight: '700' },
-  cta2: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
+  cta2: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   revCard: { borderWidth: 1, borderRadius: 10, padding: 10, gap: 4 },
 });

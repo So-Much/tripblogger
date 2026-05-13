@@ -185,14 +185,16 @@ export function OrderDetailScreen() {
           </View>
         ) : null}
 
-        {o.address ? (
+        {o.address || o.guestAddress ? (
           <View style={[styles.card, { borderColor: border }]}>
             <ThemedText type="subtitle">{t('addressSection')}</ThemedText>
-            <ThemedText>{o.address.recipientName}</ThemedText>
+            <ThemedText>{o.address?.recipientName ?? o.guestAddress?.recipientName}</ThemedText>
             <ThemedText style={styles.small}>
-              {o.address.street}, {o.address.ward}, {o.address.district}, {o.address.province}
+              {o.address?.street ?? o.guestAddress?.street}, {o.address?.ward ?? o.guestAddress?.ward},{' '}
+              {o.address?.district ?? o.guestAddress?.district}, {o.address?.province ?? o.guestAddress?.province}
             </ThemedText>
-            <ThemedText style={styles.small}>{o.address.phone}</ThemedText>
+            <ThemedText style={styles.small}>{o.address?.phone ?? o.guestAddress?.phone}</ThemedText>
+            {!o.address && o.guestAddress?.email ? <ThemedText style={styles.small}>{o.guestAddress.email}</ThemedText> : null}
           </View>
         ) : null}
 

@@ -1,29 +1,49 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { CommerceDeal } from '@/src/types/commerce';
 import { DealCard } from './DealCard';
 
 interface CommerceWidgetRowProps {
   deals: CommerceDeal[];
+  /** Opens full shop / marketplace (e.g. expo-router push). */
+  onSeeAllPress?: () => void;
 }
 
-export function CommerceWidgetRow({ deals }: CommerceWidgetRowProps) {
+export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowProps) {
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
+  const border = useThemeColor({}, 'border');
+  const card = useThemeColor({}, 'card');
+  const text = useThemeColor({}, 'text');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.shell, { borderColor: border, backgroundColor: card }]}>
       <View style={styles.sectionHeader}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <ThemedText type="subtitle">Deals gợi ý</ThemedText>
-          <ThemedText style={{ color: muted, fontSize: 13, marginTop: 2 }}>Flash sale · Mall · Freeship</ThemedText>
-        </View>
-        <Pressable hitSlop={10} style={({ pressed }) => [pressed && { opacity: 0.75 }]}>
-          <ThemedText type="defaultSemiBold" style={{ color: cta }}>
-            Xem thêm
+        <View style={styles.headerLeft}>
+          <View style={[styles.kicker, { backgroundColor: `${cta}18` }]}>
+            <IconSymbol name="cart.fill" size={14} color={cta} />
+            <ThemedText style={[styles.kickerText, { color: cta }]}>Marketplace</ThemedText>
+          </View>
+          <ThemedText type="subtitle" style={[styles.title, { color: text }]}>
+            Gợi ý cho chuyến đi
           </ThemedText>
-        </Pressable>
+          <ThemedText style={[styles.subtitle, { color: muted }]}>
+            Flash sale · Mall · Freeship · Đổi trả minh bạch
+          </ThemedText>
+        </View>
+        {onSeeAllPress ? (
+          <Pressable
+            hitSlop={10}
+            onPress={onSeeAllPress}
+            style={({ pressed }) => [styles.seeAll, pressed && { opacity: 0.75 }]}>
+            <ThemedText type="defaultSemiBold" style={{ color: cta }}>
+              Vào sàn
+            </ThemedText>
+            <IconSymbol name="chevron.right" size={14} color={cta} />
+          </Pressable>
+        ) : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {deals.map((deal) => (
@@ -35,17 +55,56 @@ export function CommerceWidgetRow({ deals }: CommerceWidgetRowProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 10,
+  shell: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 12,
   },
   sectionHeader: {
-    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+  },
+  headerLeft: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  kicker: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  kickerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  title: {
+    marginTop: 2,
+  },
+  subtitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  seeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 22,
   },
   row: {
-    gap: 10,
+    gap: 12,
+    paddingHorizontal: 14,
     paddingRight: 6,
   },
 });

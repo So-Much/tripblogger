@@ -6,6 +6,8 @@ export interface CommerceDeal {
   priceLabel: string;
   soldLabel: string;
   badge: string;
+  /** Optional cover image for marketplace-style cards */
+  imageUrl?: string;
 }
 
 export type ProductStatus =
@@ -163,7 +165,7 @@ export interface OrderDto {
   id: string;
   orderCode: string;
   buyerId: string;
-  addressId: string;
+  addressId: string | null;
   couponId: string | null;
   status: OrderStatus;
   subTotal: number;
@@ -174,6 +176,15 @@ export interface OrderDto {
   createdAt: string;
   updatedAt: string;
   address?: AddressDto;
+  guestAddress?: {
+    recipientName: string | null;
+    phone: string | null;
+    email: string | null;
+    province: string | null;
+    district: string | null;
+    ward: string | null;
+    street: string | null;
+  } | null;
   items?: OrderProductDto[];
   payment?: PaymentDto;
 }

@@ -293,7 +293,20 @@ export const commerceService = {
     return res.data;
   },
 
-  async checkout(body: { addressId: string; couponCode?: string; note?: string }): Promise<OrderDto> {
+  async checkout(body: {
+    addressId?: string;
+    couponCode?: string;
+    note?: string;
+    guestInfo?: {
+      recipientName: string;
+      phone: string;
+      email: string;
+      province: string;
+      district: string;
+      ward: string;
+      street: string;
+    };
+  }): Promise<OrderDto> {
     const res = await apiClient.post<OrderDto>('/commerce/orders/checkout', body);
     return res.data;
   },

@@ -24,7 +24,7 @@ export class CartController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   getCart(@Req() req: AuthedRequest) {
     return this.cartService.getOrCreateActiveCart(req.user.sub, this.reqMeta(req));
@@ -32,7 +32,7 @@ export class CartController {
 
   @Post('items')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   add(@Req() req: AuthedRequest, @Body() dto: AddToCartDto) {
     return this.cartService.addItem(req.user.sub, dto.productId, dto.quantity ?? 1, this.reqMeta(req));
@@ -40,7 +40,7 @@ export class CartController {
 
   @Patch('items/:itemId')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   patchItem(
     @Req() req: AuthedRequest,
@@ -52,7 +52,7 @@ export class CartController {
 
   @Delete('items/:itemId')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   removeItem(@Req() req: AuthedRequest, @Param('itemId', ParseUUIDPipe) itemId: string) {
     return this.cartService.removeItem(req.user.sub, itemId, this.reqMeta(req));

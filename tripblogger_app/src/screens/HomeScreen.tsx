@@ -128,7 +128,7 @@ export function HomeScreen() {
           <ProfileSummaryCard profile={memberProfile} />
         ) : null}
 
-        <CommerceWidgetRow deals={COMMERCE_DEALS} />
+        <CommerceWidgetRow deals={COMMERCE_DEALS} onSeeAllPress={() => router.push('/(tabs)/shop')} />
         <FeedSection posts={FEED_POSTS} />
       </ScrollView>
     </ThemedView>

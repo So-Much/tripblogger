@@ -23,6 +23,8 @@ import { formatApiError } from '@/src/utils/format-api-error';
 import { CategoryChip } from '@/src/components/commerce/CategoryChip';
 import { ProductCard } from '@/src/components/commerce/ProductCard';
 
+const headerHitSlop = { top: 12, bottom: 12, left: 12, right: 12 };
+
 export function ShopScreen() {
   const { t } = useI18n();
   const router = useRouter();
@@ -69,13 +71,31 @@ export function ShopScreen() {
       title: t('tabShop'),
       headerRight: () => (
         <View style={styles.headerRow}>
-          <Pressable onPress={() => router.push('/(tabs)/shop/search')} accessibilityLabel={t('shopSearch')}>
+          <Pressable
+            hitSlop={headerHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel={t('shopSearch')}
+            onPress={() => router.push('/(tabs)/shop/search')}>
             <IconSymbol name="magnifyingglass" size={22} color={tint} />
           </Pressable>
-          <Pressable onPress={() => router.push('/(tabs)/shop/wishlist')} style={styles.hdrPad}>
+          <Pressable
+            hitSlop={headerHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel={t('wishlistTitle')}
+            onPress={() => router.push('/(tabs)/shop/wishlist')}
+            style={styles.hdrPad}>
             <IconSymbol name="heart.fill" size={22} color={tint} />
           </Pressable>
-          <Pressable onPress={() => router.push('/(tabs)/shop/cart')} style={styles.cartWrap}>
+          <Pressable
+            hitSlop={headerHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isMember && (cartCountQuery.data?.itemCount ?? 0) > 0
+                ? t('cartBadgeA11y', { count: cartCountQuery.data?.itemCount ?? 0 })
+                : t('cartTitle')
+            }
+            onPress={() => router.push('/(tabs)/shop/cart')}
+            style={styles.cartWrap}>
             <IconSymbol name="cart.fill" size={22} color={tint} />
             {isMember && (cartCountQuery.data?.itemCount ?? 0) > 0 ? (
               <View style={[styles.cartBadge, { backgroundColor: tint }]}>
@@ -136,23 +156,29 @@ export function ShopScreen() {
         {isMember ? (
           <View style={styles.actions}>
             <Pressable
-              style={[styles.btn, { borderColor: border }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('productMyProductsA11y')}
+              style={[styles.btn, styles.btnGhost, { borderColor: border }]}
               onPress={() => router.push('/(tabs)/shop/my-products')}>
               <ThemedText type="link">{t('productMyProducts')}</ThemedText>
             </Pressable>
             <Pressable
-              style={[styles.btn, { borderColor: border }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('productCreateA11y')}
+              style={[styles.btn, styles.btnPrimary, { backgroundColor: tint }]}
               onPress={() => router.push('/(tabs)/shop/create')}>
-              <ThemedText type="link">{t('productCreate')}</ThemedText>
+              <ThemedText style={styles.btnPrimaryTxt}>{t('productCreate')}</ThemedText>
             </Pressable>
             <Pressable
-              style={[styles.btn, { borderColor: border }]}
+              accessibilityRole="button"
+              accessibilityLabel={t('ordersTitleA11y')}
+              style={[styles.btn, styles.btnGhost, { borderColor: border }]}
               onPress={() => router.push('/(tabs)/shop/orders')}>
               <ThemedText type="link">{t('ordersTitle')}</ThemedText>
             </Pressable>
           </View>
         ) : (
-          <ThemedText style={[styles.hint, { color: muted }]}>{t('shopMemberRequired')}</ThemedText>
+          <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
         )}
         {productsQuery.isError ? (
           <ThemedText style={styles.center}>{formatApiError(productsQuery.error, t('productEmpty'))}</ThemedText>
@@ -202,8 +228,11 @@ const styles = StyleSheet.create({
   },
   cartBadgeTxt: { color: '#fff', fontSize: 10, fontWeight: '700' },
   catRow: { maxHeight: 44, paddingHorizontal: 12, marginBottom: 8 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, marginBottom: 8 },
-  btn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, marginBottom: 10 },
+  btn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  btnGhost: {},
+  btnPrimary: { borderWidth: 0 },
+  btnPrimaryTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
   hint: { paddingHorizontal: 12, marginBottom: 8, fontSize: 13 },
   list: { paddingHorizontal: 8, paddingBottom: 24 },
   center: { textAlign: 'center', marginTop: 24, paddingHorizontal: 16 },

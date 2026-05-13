@@ -29,12 +29,33 @@ export class OrderEntity {
   @JoinColumn({ name: 'buyer_id' })
   buyer!: UserEntity;
 
-  @Column({ name: 'address_id' })
-  addressId!: string;
+  @Column({ name: 'address_id', nullable: true })
+  addressId!: string | null;
 
-  @ManyToOne(() => AddressEntity)
+  @ManyToOne(() => AddressEntity, { nullable: true })
   @JoinColumn({ name: 'address_id' })
-  address!: AddressEntity;
+  address!: AddressEntity | null;
+
+  @Column({ name: 'guest_recipient_name', type: 'nvarchar', length: 256, nullable: true })
+  guestRecipientName!: string | null;
+
+  @Column({ name: 'guest_phone', type: 'nvarchar', length: 20, nullable: true })
+  guestPhone!: string | null;
+
+  @Column({ name: 'guest_email', type: 'nvarchar', length: 256, nullable: true })
+  guestEmail!: string | null;
+
+  @Column({ name: 'guest_province', type: 'nvarchar', length: 128, nullable: true })
+  guestProvince!: string | null;
+
+  @Column({ name: 'guest_district', type: 'nvarchar', length: 128, nullable: true })
+  guestDistrict!: string | null;
+
+  @Column({ name: 'guest_ward', type: 'nvarchar', length: 128, nullable: true })
+  guestWard!: string | null;
+
+  @Column({ name: 'guest_street', type: 'nvarchar', length: 512, nullable: true })
+  guestStreet!: string | null;
 
   @Column({ name: 'coupon_id', nullable: true })
   couponId!: string | null;

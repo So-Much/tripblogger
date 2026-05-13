@@ -1,5 +1,17 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 
 export class AddToCartDto {
   @IsUUID()
@@ -106,9 +118,39 @@ export class ValidateCouponDto {
   productIds?: string[];
 }
 
+export class GuestCheckoutInfoDto {
+  @IsString()
+  @MinLength(1)
+  recipientName!: string;
+
+  @IsString()
+  @MinLength(1)
+  phone!: string;
+
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(1)
+  province!: string;
+
+  @IsString()
+  @MinLength(1)
+  district!: string;
+
+  @IsString()
+  @MinLength(1)
+  ward!: string;
+
+  @IsString()
+  @MinLength(1)
+  street!: string;
+}
+
 export class CheckoutDto {
+  @IsOptional()
   @IsUUID()
-  addressId!: string;
+  addressId?: string;
 
   @IsOptional()
   @IsString()
@@ -117,6 +159,11 @@ export class CheckoutDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GuestCheckoutInfoDto)
+  guestInfo?: GuestCheckoutInfoDto;
 }
 
 export class QueryOrdersDto {

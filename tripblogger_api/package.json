@@ -13,6 +13,7 @@
     "seed:roles-statuses": "ts-node src/scripts/seed-roles-statuses.ts",
     "seed:categories": "ts-node src/scripts/seed-categories.ts",
     "seed:user": "ts-node src/scripts/seed-user.ts",
+    "seed:commerce-products": "ts-node src/scripts/seed-commerce-products.ts",
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {

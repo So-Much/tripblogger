@@ -27,6 +27,7 @@ const MAPPING = {
   'magnifyingglass': 'search',
   'ellipsis': 'more-horiz',
   'heart.fill': 'favorite',
+  heart: 'favorite-border',
   'bubble.left.and.bubble.right.fill': 'chat-bubble-outline',
   'ellipsis.circle': 'more-horiz',
   'gearshape.fill': 'settings',

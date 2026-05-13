@@ -85,7 +85,7 @@ export class OrdersService {
   ) {
     const includePayment = opts.includePayment ?? false;
     const viewerId = opts.viewerId;
-    const addr = o.address ?? (await this.addrRepo.findOne({ where: { id: o.addressId } }));
+    const addr = o.address ?? (o.addressId ? await this.addrRepo.findOne({ where: { id: o.addressId } }) : null);
     const lines = o.orderProducts?.length
       ? o.orderProducts
       : await this.opRepo.find({
@@ -135,6 +135,18 @@ export class OrdersService {
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
       address: addr ? this.serializeAddress(addr) : undefined,
+      guestAddress:
+        o.guestRecipientName || o.guestPhone || o.guestStreet
+          ? {
+              recipientName: o.guestRecipientName,
+              phone: o.guestPhone,
+              email: o.guestEmail,
+              province: o.guestProvince,
+              district: o.guestDistrict,
+              ward: o.guestWard,
+              street: o.guestStreet,
+            }
+          : null,
       items,
       payment: payment
         ? {
@@ -150,7 +162,7 @@ export class OrdersService {
     };
   }
 
-  async checkout(buyerId: string, dto: CheckoutDto) {
+  async checkout(buyerId: string, buyerRole: string, dto: CheckoutDto) {
     const cart = await this.cartRepo.findOne({
       where: { userId: buyerId, status: 'ACTIVE' },
       relations: ['items', 'items.product', 'items.product.category'],
@@ -164,8 +176,14 @@ export class OrdersService {
       if (p.sellerId === buyerId) throw new BadRequestException('Cannot purchase own product');
     }
 
-    const address = await this.addrRepo.findOne({ where: { id: dto.addressId, userId: buyerId } });
-    if (!address) throw new BadRequestException('Invalid address');
+    const isGuest = buyerRole === 'GUEST';
+    const address = isGuest
+      ? null
+      : await this.addrRepo.findOne({
+          where: { id: dto.addressId, userId: buyerId },
+        });
+    if (!isGuest && !address) throw new BadRequestException('Invalid address');
+    if (isGuest && !dto.guestInfo) throw new BadRequestException('Guest checkout requires recipient information');
 
     const subTotal = cart.items.reduce((s, l) => s + Number(l.priceSnapshot) * l.quantity, 0);
     let discountAmount = 0;
@@ -196,7 +214,14 @@ export class OrdersService {
       const order = oRepo.create({
         orderCode,
         buyerId,
-        addressId: address.id,
+        addressId: address?.id ?? null,
+        guestRecipientName: dto.guestInfo?.recipientName ?? null,
+        guestPhone: dto.guestInfo?.phone ?? null,
+        guestEmail: dto.guestInfo?.email ?? null,
+        guestProvince: dto.guestInfo?.province ?? null,
+        guestDistrict: dto.guestInfo?.district ?? null,
+        guestWard: dto.guestInfo?.ward ?? null,
+        guestStreet: dto.guestInfo?.street ?? null,
         couponId,
         status: 'PENDING',
         subTotal,

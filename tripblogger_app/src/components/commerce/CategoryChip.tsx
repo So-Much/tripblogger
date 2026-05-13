@@ -16,6 +16,9 @@ export function CategoryChip({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={[styles.chip, { borderColor: selected ? tint : borderColor, backgroundColor: selected ? `${tint}22` : 'transparent' }]}>
       <ThemedText style={styles.txt}>{label}</ThemedText>

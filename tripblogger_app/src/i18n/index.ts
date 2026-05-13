@@ -108,6 +108,7 @@ const vi = {
   shopCart: 'Giỏ hàng',
   shopWishlist: 'Yêu thích',
   shopMemberRequired: 'Đăng nhập thành viên để mua và bán sản phẩm.',
+  shopSellMemberRequired: 'Đăng nhập thành viên để đăng bán sản phẩm.',
   productNew: 'Mới',
   productSecondhand: 'Đã dùng',
   productCreate: 'Đăng sản phẩm',
@@ -120,6 +121,15 @@ const vi = {
   productPrice: 'Giá',
   productOutOfStock: 'Hết hàng',
   productInStock: 'Còn hàng',
+  productLowStockLine: 'Còn {{count}} {{unit}}',
+  productQuantityShort: 'Số lượng',
+  cartAddedSuccess: 'Đã thêm vào giỏ hàng.',
+  wishlistToggleA11y: 'Thêm hoặc gỡ khỏi danh sách yêu thích',
+  productCardA11yHint: 'Xem chi tiết sản phẩm',
+  cartBadgeA11y: 'Giỏ hàng, {{count}} món',
+  productMyProductsA11y: 'Sản phẩm của tôi',
+  productCreateA11y: 'Đăng sản phẩm mới',
+  ordersTitleA11y: 'Đơn hàng của tôi',
   productTitleLabel: 'Tiêu đề',
   productDescriptionLabel: 'Mô tả',
   productCategory: 'Danh mục',
@@ -191,6 +201,8 @@ const vi = {
   ratingTitle: 'Đánh giá',
   addressRecipient: 'Người nhận',
   addressPhone: 'Điện thoại',
+  guestEmail: 'Email',
+  guestCheckoutHint: 'Bạn đang mua với tư cách khách. Vui lòng nhập đầy đủ thông tin nhận hàng.',
   addressStreet: 'Địa chỉ',
   addressProvince: 'Tỉnh/TP',
   addressDistrict: 'Quận/Huyện',
@@ -307,6 +319,7 @@ const en: Record<keyof typeof vi, string> = {
   shopCart: 'Cart',
   shopWishlist: 'Wishlist',
   shopMemberRequired: 'Sign in as a member to buy and sell products.',
+  shopSellMemberRequired: 'Sign in as a member to list products for sale.',
   productNew: 'New',
   productSecondhand: 'Used',
   productCreate: 'List product',
@@ -319,6 +332,15 @@ const en: Record<keyof typeof vi, string> = {
   productPrice: 'Price',
   productOutOfStock: 'Out of stock',
   productInStock: 'In stock',
+  productLowStockLine: '{{count}} {{unit}} left',
+  productQuantityShort: 'Quantity',
+  cartAddedSuccess: 'Added to your cart.',
+  wishlistToggleA11y: 'Add or remove from wishlist',
+  productCardA11yHint: 'View product details',
+  cartBadgeA11y: 'Cart, {{count}} items',
+  productMyProductsA11y: 'My listings',
+  productCreateA11y: 'List a new product',
+  ordersTitleA11y: 'My orders',
   productTitleLabel: 'Title',
   productDescriptionLabel: 'Description',
   productCategory: 'Category',
@@ -390,6 +412,8 @@ const en: Record<keyof typeof vi, string> = {
   ratingTitle: 'Ratings',
   addressRecipient: 'Recipient',
   addressPhone: 'Phone',
+  guestEmail: 'Email',
+  guestCheckoutHint: 'You are checking out as guest. Please provide full delivery information.',
   addressStreet: 'Street',
   addressProvince: 'Province/City',
   addressDistrict: 'District',
@@ -402,9 +426,19 @@ const dict = { vi, en };
 
 export type TranslationKey = keyof typeof vi;
 
+function interpolate(template: string, vars?: Record<string, string | number>) {
+  if (!vars) return template;
+  let out = template;
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.split(`{{${k}}}`).join(String(v));
+  }
+  return out;
+}
+
 export function useI18n() {
   const language = useSettingsStore((s) => s.language);
-  const t = (key: TranslationKey) => dict[language][key];
+  const t = (key: TranslationKey, vars?: Record<string, string | number>) =>
+    interpolate(dict[language][key], vars);
   return { t, language };
 }
 

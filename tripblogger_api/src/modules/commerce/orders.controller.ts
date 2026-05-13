@@ -21,7 +21,7 @@ import { ShipmentsService } from './shipments.service';
 import { PaymentsService } from './payments.service';
 import { CheckoutDto, CreateShipmentDto, QueryOrdersDto } from './dto/shopping.dto';
 
-type AuthedRequest = Request & { user: { sub: string } };
+type AuthedRequest = Request & { user: { sub: string; role: string } };
 
 @Controller('commerce/orders')
 export class OrdersController {
@@ -33,10 +33,10 @@ export class OrdersController {
 
   @Post('checkout')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   checkout(@Req() req: AuthedRequest, @Body() dto: CheckoutDto) {
-    return this.ordersService.checkout(req.user.sub, dto);
+    return this.ordersService.checkout(req.user.sub, req.user.role, dto);
   }
 
   @Get('seller')
@@ -49,7 +49,7 @@ export class OrdersController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   listBuyer(@Req() req: AuthedRequest, @Query() query: QueryOrdersDto) {
     return this.ordersService.listBuyerOrders(req.user.sub, query);
@@ -77,7 +77,7 @@ export class OrdersController {
 
   @Post(':id/cancel')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   cancel(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.cancelOrder(req.user.sub, id);
@@ -93,7 +93,7 @@ export class OrdersController {
 
   @Post(':id/received')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   received(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.confirmReceived(req.user.sub, id);
@@ -101,7 +101,7 @@ export class OrdersController {
 
   @Get(':id/payment')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   async payment(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     await this.ordersService.getOrder(id, req.user.sub);
@@ -120,7 +120,7 @@ export class OrdersController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   one(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.getOrder(id, req.user.sub);
