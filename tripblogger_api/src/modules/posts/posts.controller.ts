@@ -33,7 +33,7 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import sharp from 'sharp';
 import { MediaResolver } from './media.resolver';
 import { MediaMigrationWorker } from './media.migration.worker';
@@ -226,9 +226,8 @@ export class PostsController {
     if (kind === 'image') {
       const variantsDir = join(process.cwd(), 'uploads', 'posts', 'variants');
       if (!existsSync(variantsDir)) mkdirSync(variantsDir, { recursive: true });
-      const image = sharp(localSourcePath);
-      const meta = readFileSync(localSourcePath);
-      const stats = await sharp(meta).metadata();
+      const oriented = sharp(localSourcePath).rotate();
+      const stats = await oriented.metadata();
       width = stats.width;
       height = stats.height;
 
@@ -236,11 +235,11 @@ export class PostsController {
       const previewName = `${file.filename}-preview.webp`;
       const thumbAbsolute = join(variantsDir, thumbName);
       const previewAbsolute = join(variantsDir, previewName);
-      await image.resize(320, 320, { fit: 'inside' }).webp({ quality: 72 }).toFile(thumbAbsolute);
-      await sharp(localSourcePath).resize(1280, 1280, { fit: 'inside' }).webp({ quality: 82 }).toFile(previewAbsolute);
+      await oriented.clone().resize(320, 320, { fit: 'inside' }).webp({ quality: 72 }).toFile(thumbAbsolute);
+      await oriented.clone().resize(1280, 1280, { fit: 'inside' }).webp({ quality: 82 }).toFile(previewAbsolute);
       thumbnailRelative = `/uploads/posts/variants/${thumbName}`;
       previewRelative = `/uploads/posts/variants/${previewName}`;
-      const tiny = await sharp(localSourcePath).resize(24, 24, { fit: 'inside' }).webp({ quality: 35 }).toBuffer();
+      const tiny = await oriented.clone().resize(24, 24, { fit: 'inside' }).webp({ quality: 35 }).toBuffer();
       placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
     }
 

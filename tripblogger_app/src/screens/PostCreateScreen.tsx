@@ -25,6 +25,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { uploadAllPendingMedia } from '@/src/utils/upload-editor-media';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
 import type { PostEditorMedia } from '@/src/types/post-editor-media';
@@ -134,7 +135,9 @@ export function PostCreateScreen() {
       if (!html) {
         throw new Error(t('postsValidationContent'));
       }
-      const submitMedia = media.map(({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height }) => ({
+      const uploadedMedia = await uploadAllPendingMedia(media);
+      setMedia(uploadedMedia);
+      const submitMedia = uploadedMedia.map(({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height }) => ({
         type,
         url,
         thumbnailUrl,
@@ -213,26 +216,17 @@ export function PostCreateScreen() {
     if (picked.canceled || !picked.assets.length) return;
     for (const a of picked.assets) {
       const kind = a.type === 'video' ? 'video' : 'image';
-      const uploaded = await postsService.uploadMedia(
-        {
-          uri: a.uri,
-          name: a.fileName ?? `${kind}-${Date.now()}.${kind === 'video' ? 'mp4' : 'jpg'}`,
-          type: a.mimeType ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg'),
-        },
-        kind,
-      );
       setMedia((prev) => [
         ...prev,
         {
           localId: `${Date.now()}-${Math.random()}`,
           type: kind,
-          url: uploaded.url,
-          thumbnailUrl: uploaded.thumbnailUrl,
-          previewUrl: uploaded.previewUrl,
-          originalUrl: uploaded.originalUrl,
-          placeholder: uploaded.placeholder,
-          width: uploaded.width,
-          height: uploaded.height,
+          url: a.uri,
+          width: a.width,
+          height: a.height,
+          pendingUpload: true,
+          mimeType: a.mimeType ?? (kind === 'video' ? 'video/mp4' : 'image/jpeg'),
+          fileName: a.fileName ?? undefined,
         },
       ]);
     }

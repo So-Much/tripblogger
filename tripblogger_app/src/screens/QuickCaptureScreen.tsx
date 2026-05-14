@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -7,22 +7,25 @@ import {
   View,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import type { FlashMode } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { CaptureCameraControls } from '@/src/components/capture/CaptureCameraControls';
 import { FrameOverlay } from '@/src/components/capture/FrameOverlay';
 import { FramePresetStrip } from '@/src/components/capture/FramePresetStrip';
 import type { CaptureFramePresetId } from '@/src/components/capture/captureFramePresets';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
-import { postsService } from '@/src/services/api/posts.service';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
 import { formatApiError } from '@/src/utils/format-api-error';
 
@@ -38,8 +41,32 @@ export function QuickCaptureScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(0);
+  const [flash, setFlash] = useState<FlashMode>('off');
+  const [torch, setTorch] = useState(false);
 
   const camRef = useRef<InstanceType<typeof CameraView> | null>(null);
+  const zoomShared = useSharedValue(0);
+  const pinchStartZoom = useSharedValue(0);
+
+  useEffect(() => {
+    zoomShared.value = zoom;
+  }, [zoom, zoomShared]);
+
+  const pinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .onBegin(() => {
+          'worklet';
+          pinchStartZoom.value = zoomShared.value;
+        })
+        .onUpdate((e) => {
+          'worklet';
+          const next = Math.min(1, Math.max(0, pinchStartZoom.value * e.scale));
+          runOnJS(setZoom)(next);
+        }),
+    [pinchStartZoom, zoomShared],
+  );
 
   const cta = useThemeColor({}, 'cta');
   const card = useThemeColor({}, 'card');
@@ -47,32 +74,40 @@ export function QuickCaptureScreen() {
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
 
-  const pushHandoffAndOpenComposer = useCallback(
-    async (uri: string, width?: number, height?: number, mimeType: string = 'image/jpeg') => {
-      const uploaded = await postsService.uploadMedia(
-        {
-          uri,
-          name: `capture-${Date.now()}.jpg`,
-          type: mimeType,
-        },
-        'image',
-      );
+  const pushLocalHandoff = useCallback(
+    (uri: string, width?: number, height?: number, mimeType: string = 'image/jpeg', fileName?: string) => {
       const item = {
         localId: `${Date.now()}-${Math.random()}`,
         type: 'image' as const,
-        url: uploaded.url,
-        thumbnailUrl: uploaded.thumbnailUrl,
-        previewUrl: uploaded.previewUrl,
-        originalUrl: uploaded.originalUrl,
-        placeholder: uploaded.placeholder,
-        width: uploaded.width ?? width,
-        height: uploaded.height ?? height,
+        url: uri,
+        width,
+        height,
+        pendingUpload: true,
+        mimeType,
+        fileName,
       };
       usePostComposerHandoffStore.getState().setPending([item]);
       router.push('/(tabs)/posts/create');
     },
     [router],
   );
+
+  const cycleFlash = useCallback(() => {
+    setFlash((f) => {
+      if (f === 'off') return 'on';
+      if (f === 'on') return 'auto';
+      return 'off';
+    });
+    setTorch(false);
+  }, []);
+
+  const toggleTorch = useCallback(() => {
+    setTorch((prev) => {
+      const next = !prev;
+      if (next) setFlash('off');
+      return next;
+    });
+  }, []);
 
   const onPickFromGallery = useCallback(async () => {
     setError(null);
@@ -88,15 +123,8 @@ export function QuickCaptureScreen() {
     });
     if (picked.canceled || !picked.assets[0]) return;
     const a = picked.assets[0];
-    setBusy(true);
-    try {
-      await pushHandoffAndOpenComposer(a.uri, a.width, a.height, a.mimeType ?? 'image/jpeg');
-    } catch (e) {
-      setError(formatApiError(e, t('captureError')));
-    } finally {
-      setBusy(false);
-    }
-  }, [pushHandoffAndOpenComposer, t]);
+    pushLocalHandoff(a.uri, a.width, a.height, a.mimeType ?? 'image/jpeg', a.fileName ?? undefined);
+  }, [pushLocalHandoff, t]);
 
   const onShutter = useCallback(async () => {
     if (!camRef.current || !cameraReady || busy) return;
@@ -107,13 +135,13 @@ export function QuickCaptureScreen() {
       if (process.env.EXPO_OS === 'ios') {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-      await pushHandoffAndOpenComposer(photo.uri, photo.width, photo.height);
+      pushLocalHandoff(photo.uri, photo.width, photo.height, 'image/jpeg', `capture-${Date.now()}.jpg`);
     } catch (e) {
       setError(formatApiError(e, t('captureError')));
     } finally {
       setBusy(false);
     }
-  }, [busy, cameraReady, pushHandoffAndOpenComposer, t]);
+  }, [busy, cameraReady, pushLocalHandoff, t]);
 
   if (meQuery.isLoading) {
     return (
@@ -179,7 +207,7 @@ export function QuickCaptureScreen() {
 
   return (
     <ThemedView style={styles.flex}>
-      <SafeAreaView style={styles.stripSafe} edges={['top']}>
+      <SafeAreaView style={[styles.stripSafe, styles.presetBar]} edges={['top']}>
         <FramePresetStrip selectedId={framePreset} onSelect={setFramePreset} />
       </SafeAreaView>
 
@@ -189,9 +217,27 @@ export function QuickCaptureScreen() {
           style={StyleSheet.absoluteFill}
           facing={facing}
           mode="picture"
+          zoom={zoom}
+          flash={flash}
+          enableTorch={torch}
+          autofocus={Platform.OS === 'ios' ? 'on' : 'off'}
           onCameraReady={() => setCameraReady(true)}
         />
+        <GestureDetector gesture={pinchGesture}>
+          <View style={styles.pinchLayer} collapsable={false} />
+        </GestureDetector>
         <FrameOverlay preset={framePreset} />
+        <View style={styles.controlsDock} pointerEvents="box-none">
+          <CaptureCameraControls
+            zoom={zoom}
+            onZoomChange={setZoom}
+            flash={flash}
+            onFlashCycle={cycleFlash}
+            torch={torch}
+            onTorchToggle={toggleTorch}
+            disabled={busy}
+          />
+        </View>
         {busy ? (
           <View style={styles.busyOverlay}>
             <ActivityIndicator size="large" color="#fff" />
@@ -243,12 +289,24 @@ const styles = StyleSheet.create({
   permMsg: { fontSize: 14, lineHeight: 20 },
   stripSafe: { backgroundColor: 'transparent' },
   cameraShell: { flex: 1, position: 'relative', overflow: 'hidden' },
+  pinchLayer: { ...StyleSheet.absoluteFillObject },
+  controlsDock: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+    zIndex: 2,
+  },
+  presetBar: {
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
   busyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.32)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    zIndex: 3,
   },
   busyTxt: { color: '#fff', fontWeight: '600' },
   bottomBar: { paddingTop: 8, paddingHorizontal: 16, gap: 8 },

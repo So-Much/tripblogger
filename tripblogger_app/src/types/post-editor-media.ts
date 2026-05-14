@@ -9,4 +9,10 @@ export type PostEditorMedia = {
   placeholder?: string;
   width?: number;
   height?: number;
+  /** When true, `url` is a local file URI and must be uploaded before submit. */
+  pendingUpload?: boolean;
+  /** Original MIME from picker/camera; used when uploading pending media. */
+  mimeType?: string;
+  /** Suggested filename for multipart upload. */
+  fileName?: string;
 };

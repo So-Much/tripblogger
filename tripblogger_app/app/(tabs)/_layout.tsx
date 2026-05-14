@@ -38,6 +38,7 @@ export default function TabLayout() {
         options={{
           title: t('tabCapture'),
           tabBarShowLabel: false,
+          tabBarLabel: () => null,
           tabBarButton: (props) => <CaptureTabBarButton {...props} />,
           tabBarIcon: () => <IconSymbol size={28} name="camera.fill" color="#FFFFFF" />,
         }}

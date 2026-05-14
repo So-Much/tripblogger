@@ -3,21 +3,34 @@ import { PlatformPressable } from '@react-navigation/elements';
 import * as Haptics from 'expo-haptics';
 import { StyleSheet, View } from 'react-native';
 
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useI18n } from '@/src/i18n';
 
+/**
+ * Center FAB for capture. Does not render `props.children` so the default tab label
+ * Text is never shown (tabBarShowLabel alone still injects children on some versions).
+ */
 export function CaptureTabBarButton(props: BottomTabBarButtonProps) {
+  const { t } = useI18n();
   const cta = useThemeColor({}, 'cta');
+  const { children: _children, style, ...pressableRest } = props;
+
   return (
     <PlatformPressable
-      {...props}
+      {...pressableRest}
+      accessibilityRole="button"
+      accessibilityLabel={t('tabCapture')}
       onPressIn={(ev) => {
         if (process.env.EXPO_OS === 'ios') {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
         props.onPressIn?.(ev);
       }}
-      style={[props.style, styles.outer]}>
-      <View style={[styles.fab, { backgroundColor: cta }]}>{props.children}</View>
+      style={[style, styles.outer]}>
+      <View style={[styles.fab, { backgroundColor: cta }]}>
+        <IconSymbol name="camera.fill" size={26} color="#FFFFFF" />
+      </View>
     </PlatformPressable>
   );
 }
