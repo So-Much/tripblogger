@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 
+import { CaptureTabBarButton } from '@/components/capture-tab-bar-button';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
@@ -30,6 +31,15 @@ export default function TabLayout() {
         options={{
           title: t('tabPosts'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="capture"
+        options={{
+          title: t('tabCapture'),
+          tabBarShowLabel: false,
+          tabBarButton: (props) => <CaptureTabBarButton {...props} />,
+          tabBarIcon: () => <IconSymbol size={28} name="camera.fill" color="#FFFFFF" />,
         }}
       />
       <Tabs.Screen

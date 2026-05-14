@@ -26,19 +26,11 @@ import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
+import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
+import type { PostEditorMedia } from '@/src/types/post-editor-media';
 import * as ImagePicker from 'expo-image-picker';
 
-type EditorMedia = {
-  localId: string;
-  type: 'icon' | 'image' | 'video';
-  url: string;
-  thumbnailUrl?: string;
-  previewUrl?: string;
-  originalUrl?: string;
-  placeholder?: string;
-  width?: number;
-  height?: number;
-};
+type EditorMedia = PostEditorMedia;
 
 function DraggableMediaThumb({
   item,
@@ -102,6 +94,13 @@ export function PostCreateScreen() {
     queryFn: () => postsService.getPost(String(postId)),
     enabled: Boolean(postId),
   });
+
+  useEffect(() => {
+    if (postId) return;
+    const pending = usePostComposerHandoffStore.getState().takePending();
+    if (!pending?.length) return;
+    setMedia((prev) => [...pending, ...prev]);
+  }, [postId]);
 
   useEffect(() => {
     if (!isEditDraft || !editingPostQuery.data) return;

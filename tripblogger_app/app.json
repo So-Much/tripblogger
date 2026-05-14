@@ -40,7 +40,14 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow TripBlogger to use the camera to take photos for your posts.",
+          "microphonePermission": "Allow TripBlogger to use the microphone when you record video for posts."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

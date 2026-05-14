@@ -33,6 +33,9 @@ const MAPPING = {
   'gearshape.fill': 'settings',
   'doc.text.fill': 'article',
   'plus.circle.fill': 'add-circle',
+  'camera.fill': 'photo-camera',
+  'camera.rotate': 'flip-camera-ios',
+  'photo.on.rectangle': 'photo-library',
 } as IconMapping;
 
 /**
