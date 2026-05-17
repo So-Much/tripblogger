@@ -16,7 +16,8 @@ import { QueryCommentsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CompositionEntity } from '../compositions/entities/composition.entity';
 import { CommentEntity } from './entities/comment.entity';
-import { MediaEntity } from './entities/media.entity';
+import { MediaEntity } from '../media/entities/media.entity';
+import { PostMediaEntity } from './entities/post-media.entity';
 import { PostEntity, PostStatus } from './entities/post.entity';
 import { ReactEntity } from './entities/react.entity';
 import { ReactTypeEntity, ReactTypeUseFor } from './entities/react-type.entity';
@@ -54,6 +55,7 @@ function parseJsonArray(raw: string | null): string[] {
 }
 
 type IncomingMediaDto = {
+  mediaId?: string;
   type: 'icon' | 'image' | 'video';
   url: string;
   thumbnailUrl?: string;
@@ -68,26 +70,29 @@ type IncomingMediaDto = {
   compositionId?: string;
 };
 
-function mediaEntitiesToItems(rows: MediaEntity[]): PostMediaItem[] {
-  const sorted = [...rows].sort((a, b) => a.position - b.position);
-  return sorted.map((row) =>
-    normalizePostMediaItem({
-      type: row.type,
-      kind: row.type === 'video' ? 'video' : 'image',
-      url: row.url,
-      thumbnailUrl: row.thumbnailUrl ?? undefined,
-      previewUrl: row.previewUrl ?? undefined,
-      originalUrl: row.originalUrl ?? undefined,
-      mimeType: row.mimeType ?? undefined,
-      width: row.width ?? undefined,
-      height: row.height ?? undefined,
-      size: row.size ? Number(row.size) : undefined,
-      placeholder: row.placeholder ?? undefined,
-      storage: (row.storage as 'local' | 'cloud' | undefined) ?? 'local',
-      sourcePath: row.sourcePath ?? undefined,
-      compositionId: row.compositionId ?? undefined,
+function postMediaLinksToItems(links: PostMediaEntity[]): PostMediaItem[] {
+  const sorted = [...links].sort((a, b) => a.position - b.position);
+  return sorted
+    .filter((link) => link.media)
+    .map((link) =>
+      normalizePostMediaItem({
+      id: link.media.id,
+      type: link.media.type,
+      kind: link.media.type === 'video' ? 'video' : 'image',
+      url: link.media.url,
+      thumbnailUrl: link.media.thumbnailUrl ?? undefined,
+      previewUrl: link.media.previewUrl ?? undefined,
+      originalUrl: link.media.originalUrl ?? undefined,
+      mimeType: link.media.mimeType ?? undefined,
+      width: link.media.width ?? undefined,
+      height: link.media.height ?? undefined,
+      size: link.media.size ? Number(link.media.size) : undefined,
+      placeholder: link.media.placeholder ?? undefined,
+      storage: (link.media.storage as 'local' | 'cloud' | undefined) ?? 'local',
+      sourcePath: link.media.sourcePath ?? undefined,
+      compositionId: link.media.compositionId ?? undefined,
     }),
-  );
+    );
 }
 
 function toLocalUploadPath(value?: string): string | undefined {
@@ -132,6 +137,7 @@ export class PostsService {
   constructor(
     @InjectRepository(PostEntity) private readonly postsRepo: Repository<PostEntity>,
     @InjectRepository(MediaEntity) private readonly mediaRepo: Repository<MediaEntity>,
+    @InjectRepository(PostMediaEntity) private readonly postMediaRepo: Repository<PostMediaEntity>,
     @InjectRepository(CompositionEntity) private readonly compositionsRepo: Repository<CompositionEntity>,
     @InjectRepository(CommentEntity) private readonly commentsRepo: Repository<CommentEntity>,
     @InjectRepository(ReactEntity) private readonly reactsRepo: Repository<ReactEntity>,
@@ -144,7 +150,7 @@ export class PostsService {
   private async loadPostWithMedia(postId: string): Promise<PostEntity | null> {
     return this.postsRepo.findOne({
       where: { id: postId },
-      relations: ['media'],
+      relations: ['postMedia', 'postMedia.media'],
     });
   }
 
@@ -160,37 +166,88 @@ export class PostsService {
     }
   }
 
+  private async unlinkPostMedia(postId: string): Promise<void> {
+    const links = await this.postMediaRepo.find({ where: { postId }, select: ['id', 'mediaId'] });
+    if (!links.length) return;
+
+    await this.postMediaRepo.delete({ postId });
+
+    for (const link of links) {
+      const refCount = await this.postMediaRepo.count({ where: { mediaId: link.mediaId } });
+      if (refCount === 0) {
+        await this.mediaRepo.delete({ id: link.mediaId });
+      }
+    }
+  }
+
   private async replacePostMedia(
     post: PostEntity,
     userId: string,
     items: IncomingMediaDto[],
-  ): Promise<MediaEntity[]> {
-    await this.mediaRepo.delete({ postId: post.id });
-    if (!items.length) return [];
+  ): Promise<PostMediaEntity[]> {
+    await this.unlinkPostMedia(post.id);
+    if (!items.length) {
+      post.postMedia = [];
+      return [];
+    }
 
     const compositionIds = items.map((i) => i.compositionId).filter((id): id is string => Boolean(id));
     await this.validateCompositionIds(compositionIds);
 
-    const rows = items.map((item, position) => {
-      return this.mediaRepo.create({
-        postId: post.id,
-        userId,
-        type: item.type,
-        url: item.url,
-        thumbnailUrl: item.thumbnailUrl ?? null,
-        previewUrl: item.previewUrl ?? null,
-        originalUrl: item.originalUrl ?? item.url,
-        mimeType: item.mimeType ?? null,
-        width: item.width ?? null,
-        height: item.height ?? null,
-        placeholder: item.placeholder ?? null,
-        storage: item.storage ?? 'local',
-        sourcePath: item.sourcePath ?? null,
-        compositionId: item.compositionId ?? null,
-        position,
-      });
-    });
-    return this.mediaRepo.save(rows);
+    const links: PostMediaEntity[] = [];
+    for (let position = 0; position < items.length; position++) {
+      const item = items[position];
+      let media: MediaEntity | null = null;
+
+      if (item.mediaId) {
+        media = await this.mediaRepo.findOne({ where: { id: item.mediaId, userId } });
+        if (!media) throw new BadRequestException('Invalid media reference');
+        media.type = item.type;
+        media.url = item.url;
+        media.thumbnailUrl = item.thumbnailUrl ?? media.thumbnailUrl;
+        media.previewUrl = item.previewUrl ?? media.previewUrl;
+        media.originalUrl = item.originalUrl ?? item.url;
+        media.mimeType = item.mimeType ?? media.mimeType;
+        media.width = item.width ?? media.width;
+        media.height = item.height ?? media.height;
+        media.placeholder = item.placeholder ?? media.placeholder;
+        media.storage = item.storage ?? media.storage;
+        media.sourcePath = item.sourcePath ?? media.sourcePath;
+        media.compositionId = item.compositionId ?? media.compositionId;
+        await this.mediaRepo.save(media);
+      } else {
+        media = await this.mediaRepo.save(
+          this.mediaRepo.create({
+            userId,
+            type: item.type,
+            url: item.url,
+            thumbnailUrl: item.thumbnailUrl ?? null,
+            previewUrl: item.previewUrl ?? null,
+            originalUrl: item.originalUrl ?? item.url,
+            mimeType: item.mimeType ?? null,
+            width: item.width ?? null,
+            height: item.height ?? null,
+            placeholder: item.placeholder ?? null,
+            storage: item.storage ?? 'local',
+            sourcePath: item.sourcePath ?? null,
+            compositionId: item.compositionId ?? null,
+          }),
+        );
+      }
+
+      const link = await this.postMediaRepo.save(
+        this.postMediaRepo.create({
+          postId: post.id,
+          mediaId: media.id,
+          position,
+        }),
+      );
+      link.media = media;
+      links.push(link);
+    }
+
+    post.postMedia = links;
+    return links;
   }
 
   private canViewPost(post: PostEntity, viewerUserId: string): boolean {
@@ -218,7 +275,7 @@ export class PostsService {
     },
   ) {
     const visibility = post.visibility;
-    const mediaItems = mediaEntitiesToItems(post.media ?? []);
+    const mediaItems = postMediaLinksToItems(post.postMedia ?? []);
     const resolvedMedia = mediaItems.map((item) => {
       const resolvePath = (path?: string) => {
         if (!path) return undefined;
@@ -367,7 +424,7 @@ export class PostsService {
       status: dto.status ?? 'DRAFT',
     });
     await this.postsRepo.save(post);
-    post.media = await this.replacePostMedia(post, userId, media);
+    await this.replacePostMedia(post, userId, media);
     await this.mediaMigrationWorker.enqueuePostMediaMigration(post.id);
     return this.serializePost(post, { commentCount: 0, shareCount: 0 });
   }
@@ -387,7 +444,7 @@ export class PostsService {
     if (dto.status !== undefined) post.status = dto.status as PostStatus;
     if (dto.category !== undefined) post.category = dto.category?.trim() ?? null;
     if (dto.media !== undefined) {
-      post.media = await this.replacePostMedia(post, userId, dto.media);
+      await this.replacePostMedia(post, userId, dto.media);
     }
     if (dto.tags !== undefined) post.tagsJson = dto.tags.length ? JSON.stringify(dto.tags) : null;
     if (dto.location !== undefined) {
@@ -458,11 +515,11 @@ export class PostsService {
     if (items.length) {
       const withMedia = await this.postsRepo.find({
         where: { id: In(items.map((p) => p.id)) },
-        relations: ['media'],
+        relations: ['postMedia', 'postMedia.media'],
       });
-      const mediaMap = new Map(withMedia.map((p) => [p.id, p.media ?? []]));
+      const mediaMap = new Map(withMedia.map((p) => [p.id, p.postMedia ?? []]));
       for (const p of items) {
-        p.media = mediaMap.get(p.id) ?? [];
+        p.postMedia = mediaMap.get(p.id) ?? [];
       }
     }
 
@@ -746,13 +803,13 @@ export class PostsService {
   }
 
   async enqueuePendingMediaMigrations(limit = 200): Promise<{ queued: number }> {
-    const rows = await this.mediaRepo
-      .createQueryBuilder('m')
-      .select('m.post_id', 'postId')
-      .where('m.post_id IS NOT NULL')
-      .andWhere("(m.storage IS NULL OR m.storage != 'cloud')")
+    const rows = await this.postMediaRepo
+      .createQueryBuilder('pm')
+      .innerJoin('pm.media', 'm')
+      .select('pm.post_id', 'postId')
+      .where("(m.storage IS NULL OR m.storage != 'cloud')")
       .andWhere('m.source_path IS NOT NULL')
-      .groupBy('m.post_id')
+      .groupBy('pm.post_id')
       .orderBy('MAX(m.created_at)', 'DESC')
       .take(limit)
       .getRawMany<{ postId: string }>();

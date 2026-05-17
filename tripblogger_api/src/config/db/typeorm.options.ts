@@ -11,7 +11,8 @@ import { CompositionGuideEntity } from '../../modules/compositions/entities/comp
 import { CompositionEntity } from '../../modules/compositions/entities/composition.entity';
 import { OverlayConfigEntity } from '../../modules/compositions/entities/overlay-config.entity';
 import { CommentEntity } from '../../modules/posts/entities/comment.entity';
-import { MediaEntity } from '../../modules/posts/entities/media.entity';
+import { MediaEntity } from '../../modules/media/entities/media.entity';
+import { PostMediaEntity } from '../../modules/posts/entities/post-media.entity';
 import { PostEntity } from '../../modules/posts/entities/post.entity';
 import { ReactEntity } from '../../modules/posts/entities/react.entity';
 import { ReactTypeEntity } from '../../modules/posts/entities/react-type.entity';
@@ -56,6 +57,7 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       CompositionGuideEntity,
       OverlayConfigEntity,
       PostEntity,
+      PostMediaEntity,
       MediaEntity,
       CommentEntity,
       ReactEntity,

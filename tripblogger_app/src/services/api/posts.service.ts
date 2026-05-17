@@ -63,6 +63,7 @@ export const postsService = {
     title: string;
     contentHtml: string;
     media?: {
+      mediaId?: string;
       type: 'icon' | 'image' | 'video';
       url: string;
       thumbnailUrl?: string;
@@ -94,6 +95,7 @@ export const postsService = {
       category: string | null;
       location: { lat?: number; lng?: number; name?: string } | null;
       media: {
+        mediaId?: string;
         type: 'icon' | 'image' | 'video';
         url: string;
         thumbnailUrl?: string;

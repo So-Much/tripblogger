@@ -8,6 +8,7 @@ export interface MediaVariants {
 }
 
 export interface PostMediaItem {
+  id?: string;
   type: 'icon' | 'image' | 'video';
   kind: MediaKind;
   url: string;
@@ -32,6 +33,7 @@ export function normalizePostMediaItem(input: Record<string, unknown>): PostMedi
   const kind = (input.kind as MediaKind | undefined) ?? ((input.type as 'video' | 'image' | undefined) ?? 'image');
   const originalUrl = String(input.originalUrl ?? input.url ?? '');
   return {
+    id: typeof input.id === 'string' ? input.id : undefined,
     type: (input.type as 'icon' | 'image' | 'video' | undefined) ?? (kind === 'video' ? 'video' : 'image'),
     kind,
     url: String(input.url ?? originalUrl),

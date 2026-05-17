@@ -110,6 +110,7 @@ export function PostCreateScreen() {
     setMedia(
       editingPostQuery.data.media.map((m, idx) => ({
         localId: `${Date.now()}-${idx}`,
+        mediaId: m.id,
         type: m.type ?? 'image',
         url: m.url,
         thumbnailUrl: m.thumbnailUrl,
@@ -139,7 +140,8 @@ export function PostCreateScreen() {
       const uploadedMedia = await uploadAllPendingMedia(media);
       setMedia(uploadedMedia);
       const submitMedia = uploadedMedia.map(
-        ({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height, compositionId }) => ({
+        ({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height, compositionId, mediaId }) => ({
+          mediaId,
           type,
           url,
           thumbnailUrl,

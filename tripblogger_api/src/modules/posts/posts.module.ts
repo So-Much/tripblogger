@@ -5,7 +5,8 @@ import { StatusesGuard } from '../../common/guards/statuses.guard';
 import { UsersModule } from '../users/users.module';
 import { CompositionsModule } from '../compositions/compositions.module';
 import { CommentEntity } from './entities/comment.entity';
-import { MediaEntity } from './entities/media.entity';
+import { MediaModule } from '../media/media.module';
+import { PostMediaEntity } from './entities/post-media.entity';
 import { PostEntity } from './entities/post.entity';
 import { ReactEntity } from './entities/react.entity';
 import { ReactTypeEntity } from './entities/react-type.entity';
@@ -17,7 +18,8 @@ import { MediaMigrationWorker } from './media.migration.worker';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PostEntity, MediaEntity, CommentEntity, ReactEntity, ReactTypeEntity]),
+    TypeOrmModule.forFeature([PostEntity, PostMediaEntity, CommentEntity, ReactEntity, ReactTypeEntity]),
+    MediaModule,
     UsersModule,
     CompositionsModule,
   ],

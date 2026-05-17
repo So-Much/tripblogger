@@ -8,19 +8,12 @@ import {
 } from 'typeorm';
 import { CompositionEntity } from '../../compositions/entities/composition.entity';
 import { UserEntity } from '../../users/entities/user.entity';
-import { PostEntity } from './post.entity';
 
+/** Shared media asset — attach to posts/products/avatars via junction tables, not post_id here. */
 @Entity('media')
 export class MediaEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
-
-  @Column({ name: 'post_id', nullable: true })
-  postId!: string | null;
-
-  @ManyToOne(() => PostEntity, (p) => p.media, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'post_id' })
-  post!: PostEntity | null;
 
   @Column({ name: 'user_id' })
   userId!: string;
@@ -71,9 +64,6 @@ export class MediaEntity {
   @ManyToOne(() => CompositionEntity, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'composition_id' })
   composition!: CompositionEntity | null;
-
-  @Column({ type: 'int', default: 0 })
-  position!: number;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

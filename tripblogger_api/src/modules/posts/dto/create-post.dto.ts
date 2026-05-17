@@ -30,6 +30,7 @@ export class CreatePostDto {
   @IsOptional()
   @IsArray()
   media?: Array<{
+    mediaId?: string;
     type: 'icon' | 'image' | 'video';
     url: string;
     thumbnailUrl?: string;

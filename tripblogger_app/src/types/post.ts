@@ -4,6 +4,7 @@ export interface PostDto {
   title: string;
   contentHtml: string;
   media: {
+    id?: string;
     type?: 'icon' | 'image' | 'video';
     url: string;
     thumbnailUrl?: string;

@@ -5,7 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import { PostEntity } from './entities/post.entity';
-import { MediaEntity } from './entities/media.entity';
+import { PostMediaEntity } from './entities/post-media.entity';
+import { MediaEntity } from '../media/entities/media.entity';
 import { Repository } from 'typeorm';
 import { IMAGE_QUEUE } from '../../config/queue/queue.module';
 
@@ -16,6 +17,7 @@ export class MediaMigrationWorker implements OnModuleInit {
 
   constructor(
     @InjectRepository(PostEntity) private readonly postsRepo: Repository<PostEntity>,
+    @InjectRepository(PostMediaEntity) private readonly postMediaRepo: Repository<PostMediaEntity>,
     @InjectRepository(MediaEntity) private readonly mediaRepo: Repository<MediaEntity>,
     @Inject(IMAGE_QUEUE) private readonly imageQueue: Queue,
     private readonly configService: ConfigService,
@@ -44,18 +46,20 @@ export class MediaMigrationWorker implements OnModuleInit {
     const post = await this.postsRepo.findOne({ where: { id: postId } });
     if (!post) return;
 
-    const mediaRows = await this.mediaRepo.find({
+    const links = await this.postMediaRepo.find({
       where: { postId },
+      relations: ['media'],
       order: { position: 'ASC' },
     });
-    if (!mediaRows.length) return;
+    if (!links.length) return;
 
     const cloudRoot = join(process.cwd(), 'uploads', 'cloud-posts');
     if (!existsSync(cloudRoot)) mkdirSync(cloudRoot, { recursive: true });
 
     let changed = false;
-    for (const row of mediaRows) {
-      if (row.storage === 'cloud' || !row.sourcePath) continue;
+    for (const link of links) {
+      const row = link.media;
+      if (!row || row.storage === 'cloud' || !row.sourcePath) continue;
       const sourceAbsolute = join(
         process.cwd(),
         row.sourcePath.startsWith('/') ? row.sourcePath.slice(1) : row.sourcePath,
@@ -73,7 +77,7 @@ export class MediaMigrationWorker implements OnModuleInit {
     }
 
     if (changed) {
-      await this.mediaRepo.save(mediaRows);
+      await this.mediaRepo.save(links.map((l) => l.media).filter(Boolean) as MediaEntity[]);
       this.logger.log(`Migrated media for post ${postId}`);
     }
   }
