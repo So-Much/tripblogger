@@ -14,6 +14,7 @@
     "seed:categories": "ts-node src/scripts/seed-categories.ts",
     "seed:user": "ts-node src/scripts/seed-user.ts",
     "seed:commerce-products": "ts-node src/scripts/seed-commerce-products.ts",
+    "seed:compositions": "ts-node src/scripts/seed-compositions.ts",
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {

@@ -118,6 +118,7 @@ export function PostCreateScreen() {
         placeholder: m.placeholder,
         width: m.width,
         height: m.height,
+        compositionId: m.compositionId,
       })),
     );
   }, [isEditDraft, editingPostQuery.data]);
@@ -137,16 +138,19 @@ export function PostCreateScreen() {
       }
       const uploadedMedia = await uploadAllPendingMedia(media);
       setMedia(uploadedMedia);
-      const submitMedia = uploadedMedia.map(({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height }) => ({
-        type,
-        url,
-        thumbnailUrl,
-        previewUrl,
-        originalUrl,
-        placeholder,
-        width,
-        height,
-      }));
+      const submitMedia = uploadedMedia.map(
+        ({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height, compositionId }) => ({
+          type,
+          url,
+          thumbnailUrl,
+          previewUrl,
+          originalUrl,
+          placeholder,
+          width,
+          height,
+          compositionId,
+        }),
+      );
       if (postId) {
         return postsService.updatePost(String(postId), { title: title.trim(), contentHtml: html, media: submitMedia });
       }

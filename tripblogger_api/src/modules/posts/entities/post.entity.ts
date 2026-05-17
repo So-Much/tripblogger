@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
 import { CommentEntity } from './comment.entity';
+import { MediaEntity } from './media.entity';
 import { ReactEntity } from './react.entity';
 
 export type PostStatus = 'DRAFT' | 'PUBLISHED' | 'DELETED';
@@ -33,9 +34,6 @@ export class PostEntity {
   @Column({ name: 'content_html', type: 'text' })
   contentHtml!: string;
 
-  @Column({ name: 'media_json', type: 'text', nullable: true })
-  mediaJson!: string | null;
-
   @Column({ type: 'nvarchar', length: 128, nullable: true })
   category!: string | null;
 
@@ -56,6 +54,9 @@ export class PostEntity {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
+
+  @OneToMany(() => MediaEntity, (m) => m.post)
+  media!: MediaEntity[];
 
   @OneToMany(() => CommentEntity, (c) => c.post)
   comments!: CommentEntity[];

@@ -8,7 +8,11 @@ import { StatusCatalogEntity } from '../../modules/users/entities/status-catalog
 import { UserStatusEntity } from '../../modules/users/entities/user-status.entity';
 import { RefreshTokenEntity } from '../../modules/auth/entities/refresh-token.entity';
 import { OAuthIdentityEntity } from '../../modules/auth/entities/oauth-identity.entity';
+import { CompositionGuideEntity } from '../../modules/compositions/entities/composition-guide.entity';
+import { CompositionEntity } from '../../modules/compositions/entities/composition.entity';
+import { OverlayConfigEntity } from '../../modules/compositions/entities/overlay-config.entity';
 import { CommentEntity } from '../../modules/posts/entities/comment.entity';
+import { MediaEntity } from '../../modules/posts/entities/media.entity';
 import { PostEntity } from '../../modules/posts/entities/post.entity';
 import { ReactEntity } from '../../modules/posts/entities/react.entity';
 import { ReactTypeEntity } from '../../modules/posts/entities/react-type.entity';
@@ -50,7 +54,11 @@ export default new DataSource({
     UserStatusEntity,
     RefreshTokenEntity,
     OAuthIdentityEntity,
+    CompositionEntity,
+    CompositionGuideEntity,
+    OverlayConfigEntity,
     PostEntity,
+    MediaEntity,
     CommentEntity,
     ReactEntity,
     ReactTypeEntity,

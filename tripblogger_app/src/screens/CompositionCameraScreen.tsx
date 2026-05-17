@@ -6,73 +6,145 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import type { FlashMode } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { runOnJS, useAnimatedReaction } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+} from 'react-native-vision-camera';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { CaptureCameraControls } from '@/src/components/capture/CaptureCameraControls';
-import { FrameOverlay } from '@/src/components/capture/FrameOverlay';
-import { FramePresetStrip } from '@/src/components/capture/FramePresetStrip';
-import type { CaptureFramePresetId } from '@/src/components/capture/captureFramePresets';
+import { CompositionGuideOverlay } from '@/src/components/capture/CompositionGuideOverlay';
+import { CompositionOverlay } from '@/src/components/capture/CompositionOverlay';
+import { CompositionStrip } from '@/src/components/capture/CompositionStrip';
+import { CompositionToggleButton } from '@/src/components/capture/CompositionToggleButton';
+import { HorizonLevel } from '@/src/components/capture/HorizonLevel';
+import { useCompositionDetail, useCompositionsList } from '@/src/hooks/useCompositions';
+import { useFaceAlignment } from '@/src/hooks/useFaceAlignment';
+import { useGyroscopeStability } from '@/src/hooks/useGyroscopeStability';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
+import type { CompositionListItem } from '@/src/types/composition';
 import { formatApiError } from '@/src/utils/format-api-error';
 
-export function QuickCaptureScreen() {
+export function CompositionCameraScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const meQuery = useMeQuery();
   const isMember = meQuery.data?.role === 'MEMBER';
 
-  const [permission, requestPermission] = useCameraPermissions();
+  const compositionsQuery = useCompositionsList();
+  const items = useMemo(() => compositionsQuery.data?.items ?? [], [compositionsQuery.data?.items]);
+
+  const [selected, setSelected] = useState<CompositionListItem | null>(null);
+  const [overlayVisible, setOverlayVisible] = useState(true);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
-  const [framePreset, setFramePreset] = useState<CaptureFramePresetId>('none');
-  const [cameraReady, setCameraReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0);
-  const [flash, setFlash] = useState<FlashMode>('off');
+  const [flash, setFlash] = useState<'off' | 'on' | 'auto'>('off');
   const [torch, setTorch] = useState(false);
+  const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
+  const [guideStep, setGuideStep] = useState(0);
 
-  const camRef = useRef<InstanceType<typeof CameraView> | null>(null);
-  const zoomShared = useSharedValue(0);
-  const pinchStartZoom = useSharedValue(0);
+  const camRef = useRef<Camera>(null);
+  const hapticLock = useRef(false);
+
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice(facing);
+
+  const detailQuery = useCompositionDetail(selected?.slug ?? null);
+  const composition = detailQuery.data;
+
+  const { steady, level, rollDeg } = useGyroscopeStability(Boolean(device) && overlayVisible);
+  const { frameProcessor, faceAligned } = useFaceAlignment(selected?.slug ?? 'rule-of-thirds', Boolean(device));
+
+  const [faceAlignedState, setFaceAlignedState] = useState(false);
+  useAnimatedReaction(
+    () => faceAligned.value,
+    (v, prev) => {
+      if (v === prev) return;
+      runOnJS(setFaceAlignedState)(v);
+    },
+  );
 
   useEffect(() => {
-    zoomShared.value = zoom;
-  }, [zoom, zoomShared]);
+    if (!items.length || selected) return;
+    setSelected(items[0]);
+  }, [items, selected]);
 
-  const pinchGesture = useMemo(
-    () =>
-      Gesture.Pinch()
-        .onBegin(() => {
-          'worklet';
-          pinchStartZoom.value = zoomShared.value;
-        })
-        .onUpdate((e) => {
-          'worklet';
-          const next = Math.min(1, Math.max(0, pinchStartZoom.value * e.scale));
-          runOnJS(setZoom)(next);
-        }),
-    [pinchStartZoom, zoomShared],
-  );
+  useEffect(() => {
+    if (!composition?.guides?.length) {
+      setGuideStep(0);
+      return;
+    }
+    const sorted = [...composition.guides].sort((a, b) => a.stepOrder - b.stepOrder);
+    let idx = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const g = sorted[i];
+      const ok =
+        (g.triggerCondition === 'phone_steady' && steady) ||
+        (g.triggerCondition === 'level_horizon' && level) ||
+        (g.triggerCondition === 'face_in_intersection' && faceAlignedState) ||
+        g.triggerCondition === 'manual';
+      if (!ok) {
+        idx = i;
+        break;
+      }
+      idx = Math.min(i + 1, sorted.length - 1);
+    }
+    setGuideStep(idx);
+  }, [composition?.guides, steady, level, faceAlignedState]);
+
+  useEffect(() => {
+    if (!steady || !level || !faceAlignedState || !overlayVisible) return;
+    if (hapticLock.current) return;
+    hapticLock.current = true;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const tmr = setTimeout(() => {
+      hapticLock.current = false;
+    }, 1200);
+    return () => clearTimeout(tmr);
+  }, [steady, level, faceAlignedState, overlayVisible]);
 
   const cta = useThemeColor({}, 'cta');
   const card = useThemeColor({}, 'card');
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
+
+  const selectByDelta = useCallback(
+    (delta: number) => {
+      if (!items.length || !selected) return;
+      const idx = items.findIndex((c) => c.id === selected.id);
+      const next = (idx + delta + items.length) % items.length;
+      setSelected(items[next]);
+      void Haptics.selectionAsync();
+    },
+    [items, selected],
+  );
+
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-24, 24])
+        .onEnd((e) => {
+          if (e.translationX > 40) runOnJS(selectByDelta)(-1);
+          else if (e.translationX < -40) runOnJS(selectByDelta)(1);
+        }),
+    [selectByDelta],
+  );
 
   const pushLocalHandoff = useCallback(
     (uri: string, width?: number, height?: number, mimeType: string = 'image/jpeg', fileName?: string) => {
@@ -85,19 +157,16 @@ export function QuickCaptureScreen() {
         pendingUpload: true,
         mimeType,
         fileName,
+        compositionId: selected?.id,
       };
       usePostComposerHandoffStore.getState().setPending([item]);
       router.push('/(tabs)/posts/create');
     },
-    [router],
+    [router, selected?.id],
   );
 
   const cycleFlash = useCallback(() => {
-    setFlash((f) => {
-      if (f === 'off') return 'on';
-      if (f === 'on') return 'auto';
-      return 'off';
-    });
+    setFlash((f) => (f === 'off' ? 'on' : f === 'on' ? 'auto' : 'off'));
     setTorch(false);
   }, []);
 
@@ -127,23 +196,24 @@ export function QuickCaptureScreen() {
   }, [pushLocalHandoff, t]);
 
   const onShutter = useCallback(async () => {
-    if (!camRef.current || !cameraReady || busy) return;
+    if (!camRef.current || !device || busy) return;
     setError(null);
     setBusy(true);
     try {
-      const photo = await camRef.current.takePictureAsync({ quality: 0.88 });
+      const photo = await camRef.current.takePhoto({ flash: flash === 'on' ? 'on' : 'off' });
       if (process.env.EXPO_OS === 'ios') {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
-      pushLocalHandoff(photo.uri, photo.width, photo.height, 'image/jpeg', `capture-${Date.now()}.jpg`);
+      const uri = Platform.OS === 'android' ? `file://${photo.path}` : photo.path;
+      pushLocalHandoff(uri, photo.width, photo.height, 'image/jpeg', `capture-${Date.now()}.jpg`);
     } catch (e) {
       setError(formatApiError(e, t('captureError')));
     } finally {
       setBusy(false);
     }
-  }, [busy, cameraReady, pushLocalHandoff, t]);
+  }, [busy, device, flash, pushLocalHandoff, t]);
 
-  if (meQuery.isLoading) {
+  if (meQuery.isLoading || compositionsQuery.isLoading) {
     return (
       <ThemedView style={styles.center}>
         <ActivityIndicator />
@@ -176,17 +246,12 @@ export function QuickCaptureScreen() {
             style={[styles.ctaSolid, { backgroundColor: cta }]}>
             {busy ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.ctaSolidTxt}>{t('capturePickFromGallery')}</ThemedText>}
           </Pressable>
-          {error ? (
-            <ThemedText style={styles.err} lightColor="#c00" darkColor="#f66">
-              {error}
-            </ThemedText>
-          ) : null}
         </ThemedView>
       </SafeAreaView>
     );
   }
 
-  if (!permission?.granted) {
+  if (!hasPermission) {
     return (
       <SafeAreaView style={styles.flex} edges={['bottom']}>
         <ThemedView style={styles.permWrap}>
@@ -195,38 +260,82 @@ export function QuickCaptureScreen() {
           <Pressable onPress={() => void requestPermission()} style={[styles.ctaSolid, { backgroundColor: cta }]}>
             <ThemedText style={styles.ctaSolidTxt}>{t('captureGrantPermission')}</ThemedText>
           </Pressable>
-          {permission && !permission.granted && !permission.canAskAgain ? (
-            <Pressable onPress={() => void Linking.openSettings()} style={[styles.ctaGhost, { borderColor: border }]}>
-              <ThemedText style={{ color: text }}>{t('captureOpenSettings')}</ThemedText>
-            </Pressable>
-          ) : null}
+          <Pressable onPress={() => void Linking.openSettings()} style={[styles.ctaGhost, { borderColor: border }]}>
+            <ThemedText style={{ color: text }}>{t('captureOpenSettings')}</ThemedText>
+          </Pressable>
         </ThemedView>
       </SafeAreaView>
+    );
+  }
+
+  if (!device) {
+    return (
+      <ThemedView style={styles.center}>
+        <ActivityIndicator />
+        <ThemedText style={{ color: muted, marginTop: 8 }}>{t('compositionLoadingCamera')}</ThemedText>
+      </ThemedView>
     );
   }
 
   return (
     <ThemedView style={styles.flex}>
       <SafeAreaView style={[styles.stripSafe, styles.presetBar]} edges={['top']}>
-        <FramePresetStrip selectedId={framePreset} onSelect={setFramePreset} />
+        <View style={styles.topRow}>
+          <CompositionToggleButton visible={overlayVisible} onToggle={() => setOverlayVisible((v) => !v)} />
+          {items.length ? (
+            <CompositionStrip
+              items={items}
+              selectedId={selected?.id ?? null}
+              onSelect={(item) => {
+                setSelected(item);
+                void Haptics.selectionAsync();
+              }}
+            />
+          ) : null}
+        </View>
       </SafeAreaView>
 
-      <View style={styles.cameraShell}>
-        <CameraView
-          ref={camRef}
-          style={StyleSheet.absoluteFill}
-          facing={facing}
-          mode="picture"
-          zoom={zoom}
-          flash={flash}
-          enableTorch={torch}
-          autofocus={Platform.OS === 'ios' ? 'on' : 'off'}
-          onCameraReady={() => setCameraReady(true)}
-        />
-        <GestureDetector gesture={pinchGesture}>
-          <View style={styles.pinchLayer} collapsable={false} />
+      <View
+        style={styles.cameraShell}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          setPreviewSize({ width, height });
+        }}>
+        <GestureDetector gesture={panGesture}>
+          <View style={styles.flex}>
+            <Camera
+              ref={camRef}
+              style={StyleSheet.absoluteFill}
+              device={device}
+              isActive
+              photo
+              zoom={zoom}
+              torch={torch ? 'on' : 'off'}
+              frameProcessor={frameProcessor}
+            />
+            {composition?.overlays?.length ? (
+              <CompositionOverlay
+                overlays={composition.overlays}
+                previewWidth={previewSize.width}
+                previewHeight={previewSize.height}
+                visible={overlayVisible}
+                steady={steady}
+                level={level}
+                faceAligned={faceAlignedState}
+              />
+            ) : null}
+            <HorizonLevel rollDeg={rollDeg} level={level} />
+            {composition?.guides?.length ? (
+              <CompositionGuideOverlay
+                guides={composition.guides}
+                activeStepIndex={guideStep}
+                steady={steady}
+                level={level}
+                faceAligned={faceAlignedState}
+              />
+            ) : null}
+          </View>
         </GestureDetector>
-        <FrameOverlay preset={framePreset} />
         <View style={styles.controlsDock} pointerEvents="box-none">
           <CaptureCameraControls
             zoom={zoom}
@@ -261,7 +370,7 @@ export function QuickCaptureScreen() {
           </Pressable>
           <Pressable
             onPress={() => void onShutter()}
-            disabled={!cameraReady || busy}
+            disabled={busy}
             style={[styles.shutter, { borderColor: border }]}
             accessibilityLabel={t('captureShutter')}>
             <View style={[styles.shutterInner, { backgroundColor: cta }]} />
@@ -288,8 +397,8 @@ const styles = StyleSheet.create({
   permWrap: { flex: 1, padding: 24, gap: 14, justifyContent: 'center' },
   permMsg: { fontSize: 14, lineHeight: 20 },
   stripSafe: { backgroundColor: 'transparent' },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
   cameraShell: { flex: 1, position: 'relative', overflow: 'hidden' },
-  pinchLayer: { ...StyleSheet.absoluteFillObject },
   controlsDock: {
     position: 'absolute',
     left: 8,
@@ -297,9 +406,7 @@ const styles = StyleSheet.create({
     bottom: 8,
     zIndex: 2,
   },
-  presetBar: {
-    backgroundColor: 'rgba(0,0,0,0.58)',
-  },
+  presetBar: { backgroundColor: 'rgba(0,0,0,0.58)' },
   busyOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.32)',
@@ -352,5 +459,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaSolidTxt: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  err: { marginTop: 8 },
 });

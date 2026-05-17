@@ -47,6 +47,15 @@
           "cameraPermission": "Allow TripBlogger to use the camera to take photos for your posts.",
           "microphonePermission": "Allow TripBlogger to use the microphone when you record video for posts."
         }
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Allow TripBlogger to use the camera for composition-guided photos.",
+          "enableMicrophonePermission": true,
+          "microphonePermissionText": "Allow TripBlogger to use the microphone when recording video.",
+          "enableFrameProcessors": true
+        }
       ]
     ],
     "experiments": {

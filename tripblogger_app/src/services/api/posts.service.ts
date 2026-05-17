@@ -62,7 +62,18 @@ export const postsService = {
   async createPost(body: {
     title: string;
     contentHtml: string;
-    media?: { type: 'icon' | 'image' | 'video'; url: string; thumbnailUrl?: string; iconCode?: string }[];
+    media?: {
+      type: 'icon' | 'image' | 'video';
+      url: string;
+      thumbnailUrl?: string;
+      previewUrl?: string;
+      originalUrl?: string;
+      placeholder?: string;
+      width?: number;
+      height?: number;
+      compositionId?: string;
+      iconCode?: string;
+    }[];
     category?: string;
     tags?: string[];
     visibility?: 'PUBLIC' | 'PRIVATE';
@@ -82,7 +93,18 @@ export const postsService = {
       status: 'DRAFT' | 'PUBLISHED' | 'DELETED';
       category: string | null;
       location: { lat?: number; lng?: number; name?: string } | null;
-      media: { type: 'icon' | 'image' | 'video'; url: string; thumbnailUrl?: string; iconCode?: string }[];
+      media: {
+        type: 'icon' | 'image' | 'video';
+        url: string;
+        thumbnailUrl?: string;
+        previewUrl?: string;
+        originalUrl?: string;
+        placeholder?: string;
+        width?: number;
+        height?: number;
+        compositionId?: string;
+        iconCode?: string;
+      }[];
       tags: string[];
     }>,
   ): Promise<PostDto> {

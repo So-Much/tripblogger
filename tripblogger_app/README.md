@@ -37,6 +37,19 @@ npm run start
 
 Hoặc `npm run ios` / `npm run android` / `npm run web`.
 
+### Composition camera (development build)
+
+Tab **Chụp nhanh** dùng `react-native-vision-camera` và face detector (native modules). **Expo Go không hỗ trợ** — cần dev client:
+
+```bash
+npx expo prebuild
+npx expo run:android
+# hoặc
+npx expo run:ios
+```
+
+Trên web, màn camera fallback sang chọn ảnh từ thư viện.
+
 Lint:
 
 ```bash

@@ -15,4 +15,6 @@ export type PostEditorMedia = {
   mimeType?: string;
   /** Suggested filename for multipart upload. */
   fileName?: string;
+  /** Composition used when capturing in-app (optional). */
+  compositionId?: string;
 };

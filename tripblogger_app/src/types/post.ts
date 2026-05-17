@@ -22,6 +22,7 @@ export interface PostDto {
     available?: boolean;
     missingVariants?: string[];
     loadFailedAt?: string;
+    compositionId?: string;
   }[];
   category: string | null;
   tags: string[];

@@ -21,6 +21,7 @@ export interface PostMediaItem {
   placeholder?: string;
   storage?: MediaStorage;
   sourcePath?: string;
+  compositionId?: string;
   migratedAt?: string;
   available?: boolean;
   missingVariants?: string[];
@@ -44,6 +45,7 @@ export function normalizePostMediaItem(input: Record<string, unknown>): PostMedi
     placeholder: typeof input.placeholder === 'string' ? input.placeholder : undefined,
     storage: (input.storage as MediaStorage | undefined) ?? 'local',
     sourcePath: typeof input.sourcePath === 'string' ? input.sourcePath : undefined,
+    compositionId: typeof input.compositionId === 'string' ? input.compositionId : undefined,
     migratedAt: typeof input.migratedAt === 'string' ? input.migratedAt : undefined,
     available: typeof input.available === 'boolean' ? input.available : undefined,
     missingVariants: Array.isArray(input.missingVariants) ? input.missingVariants.map(String) : undefined,

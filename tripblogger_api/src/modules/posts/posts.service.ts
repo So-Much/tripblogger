@@ -8,13 +8,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import sanitizeHtml from 'sanitize-html';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { QueryCommentsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { CompositionEntity } from '../compositions/entities/composition.entity';
 import { CommentEntity } from './entities/comment.entity';
+import { MediaEntity } from './entities/media.entity';
 import { PostEntity, PostStatus } from './entities/post.entity';
 import { ReactEntity } from './entities/react.entity';
 import { ReactTypeEntity, ReactTypeUseFor } from './entities/react-type.entity';
@@ -51,14 +53,41 @@ function parseJsonArray(raw: string | null): string[] {
   }
 }
 
-function parseMedia(raw: string | null): PostMediaItem[] {
-  if (!raw) return [];
-  try {
-    const v = JSON.parse(raw) as unknown;
-    return Array.isArray(v) ? (v as Array<Record<string, unknown>>).map((item) => normalizePostMediaItem(item)) : [];
-  } catch {
-    return [];
-  }
+type IncomingMediaDto = {
+  type: 'icon' | 'image' | 'video';
+  url: string;
+  thumbnailUrl?: string;
+  previewUrl?: string;
+  originalUrl?: string;
+  placeholder?: string;
+  width?: number;
+  height?: number;
+  mimeType?: string;
+  storage?: 'local' | 'cloud';
+  sourcePath?: string;
+  compositionId?: string;
+};
+
+function mediaEntitiesToItems(rows: MediaEntity[]): PostMediaItem[] {
+  const sorted = [...rows].sort((a, b) => a.position - b.position);
+  return sorted.map((row) =>
+    normalizePostMediaItem({
+      type: row.type,
+      kind: row.type === 'video' ? 'video' : 'image',
+      url: row.url,
+      thumbnailUrl: row.thumbnailUrl ?? undefined,
+      previewUrl: row.previewUrl ?? undefined,
+      originalUrl: row.originalUrl ?? undefined,
+      mimeType: row.mimeType ?? undefined,
+      width: row.width ?? undefined,
+      height: row.height ?? undefined,
+      size: row.size ? Number(row.size) : undefined,
+      placeholder: row.placeholder ?? undefined,
+      storage: (row.storage as 'local' | 'cloud' | undefined) ?? 'local',
+      sourcePath: row.sourcePath ?? undefined,
+      compositionId: row.compositionId ?? undefined,
+    }),
+  );
 }
 
 function toLocalUploadPath(value?: string): string | undefined {
@@ -102,6 +131,8 @@ function validateReactTypeForTarget(useFor: ReactTypeUseFor, target: 'POST' | 'C
 export class PostsService {
   constructor(
     @InjectRepository(PostEntity) private readonly postsRepo: Repository<PostEntity>,
+    @InjectRepository(MediaEntity) private readonly mediaRepo: Repository<MediaEntity>,
+    @InjectRepository(CompositionEntity) private readonly compositionsRepo: Repository<CompositionEntity>,
     @InjectRepository(CommentEntity) private readonly commentsRepo: Repository<CommentEntity>,
     @InjectRepository(ReactEntity) private readonly reactsRepo: Repository<ReactEntity>,
     @InjectRepository(ReactTypeEntity) private readonly reactTypesRepo: Repository<ReactTypeEntity>,
@@ -109,6 +140,58 @@ export class PostsService {
     private readonly mediaResolver: MediaResolver,
     private readonly mediaMigrationWorker: MediaMigrationWorker,
   ) {}
+
+  private async loadPostWithMedia(postId: string): Promise<PostEntity | null> {
+    return this.postsRepo.findOne({
+      where: { id: postId },
+      relations: ['media'],
+    });
+  }
+
+  private async validateCompositionIds(compositionIds: string[]): Promise<void> {
+    const unique = [...new Set(compositionIds.filter(Boolean))];
+    if (!unique.length) return;
+    const found = await this.compositionsRepo.find({
+      where: { id: In(unique), isActive: true },
+      select: ['id'],
+    });
+    if (found.length !== unique.length) {
+      throw new BadRequestException('Invalid or inactive composition');
+    }
+  }
+
+  private async replacePostMedia(
+    post: PostEntity,
+    userId: string,
+    items: IncomingMediaDto[],
+  ): Promise<MediaEntity[]> {
+    await this.mediaRepo.delete({ postId: post.id });
+    if (!items.length) return [];
+
+    const compositionIds = items.map((i) => i.compositionId).filter((id): id is string => Boolean(id));
+    await this.validateCompositionIds(compositionIds);
+
+    const rows = items.map((item, position) => {
+      return this.mediaRepo.create({
+        postId: post.id,
+        userId,
+        type: item.type,
+        url: item.url,
+        thumbnailUrl: item.thumbnailUrl ?? null,
+        previewUrl: item.previewUrl ?? null,
+        originalUrl: item.originalUrl ?? item.url,
+        mimeType: item.mimeType ?? null,
+        width: item.width ?? null,
+        height: item.height ?? null,
+        placeholder: item.placeholder ?? null,
+        storage: item.storage ?? 'local',
+        sourcePath: item.sourcePath ?? null,
+        compositionId: item.compositionId ?? null,
+        position,
+      });
+    });
+    return this.mediaRepo.save(rows);
+  }
 
   private canViewPost(post: PostEntity, viewerUserId: string): boolean {
     if (post.status === 'DELETED') return false;
@@ -135,7 +218,8 @@ export class PostsService {
     },
   ) {
     const visibility = post.visibility;
-    const resolvedMedia = parseMedia(post.mediaJson).map((item) => {
+    const mediaItems = mediaEntitiesToItems(post.media ?? []);
+    const resolvedMedia = mediaItems.map((item) => {
       const resolvePath = (path?: string) => {
         if (!path) return undefined;
         const localPath = toLocalUploadPath(path);
@@ -276,7 +360,6 @@ export class PostsService {
       userId,
       title: dto.title.trim(),
       contentHtml,
-      mediaJson: media.length ? JSON.stringify(media) : null,
       category: dto.category?.trim() ?? null,
       tagsJson: tags.length ? JSON.stringify(tags) : null,
       visibility: dto.visibility ?? 'PUBLIC',
@@ -284,12 +367,13 @@ export class PostsService {
       status: dto.status ?? 'DRAFT',
     });
     await this.postsRepo.save(post);
+    post.media = await this.replacePostMedia(post, userId, media);
     await this.mediaMigrationWorker.enqueuePostMediaMigration(post.id);
     return this.serializePost(post, { commentCount: 0, shareCount: 0 });
   }
 
   async updatePost(userId: string, postId: string, dto: UpdatePostDto) {
-    const post = await this.postsRepo.findOne({ where: { id: postId } });
+    const post = await this.loadPostWithMedia(postId);
     if (!post) throw new NotFoundException('Post not found');
     if (post.userId !== userId) throw new ForbiddenException('Not your post');
     if (post.status === 'DELETED') throw new NotFoundException('Post not found');
@@ -302,13 +386,17 @@ export class PostsService {
     if (dto.visibility !== undefined) post.visibility = dto.visibility;
     if (dto.status !== undefined) post.status = dto.status as PostStatus;
     if (dto.category !== undefined) post.category = dto.category?.trim() ?? null;
-    if (dto.media !== undefined) post.mediaJson = dto.media.length ? JSON.stringify(dto.media) : null;
+    if (dto.media !== undefined) {
+      post.media = await this.replacePostMedia(post, userId, dto.media);
+    }
     if (dto.tags !== undefined) post.tagsJson = dto.tags.length ? JSON.stringify(dto.tags) : null;
     if (dto.location !== undefined) {
       post.locationJson = dto.location ? JSON.stringify(dto.location) : null;
     }
     await this.postsRepo.save(post);
-    await this.mediaMigrationWorker.enqueuePostMediaMigration(post.id);
+    if (dto.media !== undefined) {
+      await this.mediaMigrationWorker.enqueuePostMediaMigration(post.id);
+    }
     const meta = await this.getPostReactionMeta(post.id, userId);
     const commentCount = await this.getPostCommentCount(post.id);
     return this.serializePost(post, { ...meta, commentCount });
@@ -325,7 +413,7 @@ export class PostsService {
   }
 
   async publishPost(userId: string, postId: string) {
-    const post = await this.postsRepo.findOne({ where: { id: postId } });
+    const post = await this.loadPostWithMedia(postId);
     if (!post) throw new NotFoundException('Post not found');
     if (post.userId !== userId) throw new ForbiddenException('Not your post');
     if (post.status === 'DELETED') throw new NotFoundException('Post not found');
@@ -367,6 +455,17 @@ export class PostsService {
     const nextCursor =
       hasMore && last ? encodePostCursor(last.createdAt, last.id) : null;
 
+    if (items.length) {
+      const withMedia = await this.postsRepo.find({
+        where: { id: In(items.map((p) => p.id)) },
+        relations: ['media'],
+      });
+      const mediaMap = new Map(withMedia.map((p) => [p.id, p.media ?? []]));
+      for (const p of items) {
+        p.media = mediaMap.get(p.id) ?? [];
+      }
+    }
+
     const payloads = await Promise.all(
       items.map(async (p) => {
         const meta = await this.getPostReactionMeta(p.id, userId);
@@ -379,7 +478,7 @@ export class PostsService {
   }
 
   async findOne(postId: string, viewerUserId: string) {
-    const post = await this.postsRepo.findOne({ where: { id: postId } });
+    const post = await this.loadPostWithMedia(postId);
     if (!post) throw new NotFoundException('Post not found');
     if (!this.canViewPost(post, viewerUserId)) throw new NotFoundException('Post not found');
 
@@ -389,7 +488,7 @@ export class PostsService {
   }
 
   async togglePostReaction(userId: string, postId: string, typeCode: string) {
-    const post = await this.postsRepo.findOne({ where: { id: postId } });
+    const post = await this.loadPostWithMedia(postId);
     if (!post) throw new NotFoundException('Post not found');
     if (!this.canViewPost(post, userId)) throw new NotFoundException('Post not found');
     this.ensurePostPublishedForInteraction(post);
@@ -647,20 +746,21 @@ export class PostsService {
   }
 
   async enqueuePendingMediaMigrations(limit = 200): Promise<{ queued: number }> {
-    const rows = await this.postsRepo
-      .createQueryBuilder('p')
-      .where('p.media_json IS NOT NULL')
-      .orderBy('p.created_at', 'DESC')
+    const rows = await this.mediaRepo
+      .createQueryBuilder('m')
+      .select('m.post_id', 'postId')
+      .where('m.post_id IS NOT NULL')
+      .andWhere("(m.storage IS NULL OR m.storage != 'cloud')")
+      .andWhere('m.source_path IS NOT NULL')
+      .groupBy('m.post_id')
+      .orderBy('MAX(m.created_at)', 'DESC')
       .take(limit)
-      .getMany();
+      .getRawMany<{ postId: string }>();
 
     let queued = 0;
     for (const row of rows) {
-      if (!row.mediaJson) continue;
-      const media = parseMedia(row.mediaJson);
-      const hasLocal = media.some((item) => item.storage !== 'cloud' && Boolean(item.sourcePath));
-      if (!hasLocal) continue;
-      await this.mediaMigrationWorker.enqueuePostMediaMigration(row.id);
+      if (!row.postId) continue;
+      await this.mediaMigrationWorker.enqueuePostMediaMigration(row.postId);
       queued += 1;
     }
     return { queued };
