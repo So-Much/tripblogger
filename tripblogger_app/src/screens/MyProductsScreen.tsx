@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigation, useRouter, type Href } from 'expo-router';
@@ -49,13 +49,29 @@ export function MyProductsScreen() {
         <ProductCard
           product={item}
           onPress={() => router.push(`/(tabs)/shop/${item.id}` as Href)}
+          onLongPress={() =>
+            Alert.alert(item.title, undefined, [
+              { text: t('cancel'), style: 'cancel' },
+              {
+                text: t('productEdit'),
+                onPress: () => router.push(`/(tabs)/shop/edit/${item.id}` as Href),
+              },
+              {
+                text: t('productDelete'),
+                style: 'destructive',
+                onPress: () => {
+                  void commerceService.deleteProduct(item.id).then(() => void q.refetch());
+                },
+              },
+            ])
+          }
           borderColor={border}
           cardColor={card}
           tint={tint}
         />
       </View>
     ),
-    [router, border, card, tint],
+    [router, border, card, tint, t, q],
   );
 
   if (me.data?.role !== 'MEMBER') {

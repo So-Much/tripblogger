@@ -1,23 +1,30 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useI18n } from '@/src/i18n';
 
 export function PromoBanner() {
+  const router = useRouter();
+  const { t } = useI18n();
   const cta = useThemeColor({}, 'cta');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
 
   return (
-    <View style={[styles.wrap, { borderColor: cta, backgroundColor: card }]}>
+    <Pressable
+      onPress={() => router.push('/(tabs)/shop')}
+      style={[styles.wrap, { borderColor: cta, backgroundColor: card }]}
+    >
       <View style={[styles.iconWrap, { borderColor: cta }]}>
         <IconSymbol size={22} name="bolt.fill" color={cta} />
       </View>
       <View style={styles.textCol}>
-        <ThemedText type="defaultSemiBold">Flash window — free ship from 50k</ThemedText>
-        <ThemedText style={{ color: muted, marginTop: 2 }}>Ends in 02:14:33 · Shopee-style deals below</ThemedText>
+        <ThemedText type="defaultSemiBold">{t('homePromoTitle')}</ThemedText>
+        <ThemedText style={{ color: muted, marginTop: 2 }}>{t('homePromoSubtitle')}</ThemedText>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

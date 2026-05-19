@@ -12,6 +12,7 @@ import { SellerBadge } from './SellerBadge';
 function ProductCardInner({
   product,
   onPress,
+  onLongPress,
   borderColor,
   cardColor,
   tint,
@@ -20,6 +21,7 @@ function ProductCardInner({
 }: {
   product: ProductDto;
   onPress: () => void;
+  onLongPress?: () => void;
   borderColor: string;
   cardColor: string;
   tint: string;
@@ -53,6 +55,7 @@ function ProductCardInner({
         accessibilityLabel={product.title}
         accessibilityHint={t('productCardA11yHint')}
         onPress={onPress}
+        onLongPress={onLongPress}
         style={styles.cardMain}>
         {cover ? (
           <Image source={{ uri: cover }} style={styles.img} contentFit="cover" cachePolicy="disk" transition={120} />

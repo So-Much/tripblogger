@@ -2,20 +2,22 @@ import { Pressable, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useI18n } from '@/src/i18n';
 
 interface HomeSearchBarProps {
   hint?: string;
+  onPress?: () => void;
 }
 
-export function HomeSearchBar({
-  hint = 'Search trips, shops, hashtags',
-}: HomeSearchBarProps) {
+export function HomeSearchBar({ hint, onPress }: HomeSearchBarProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
 
   return (
     <Pressable
+      onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel="Search"
       style={({ pressed }) => [
@@ -27,7 +29,7 @@ export function HomeSearchBar({
     >
       <IconSymbol size={22} name="magnifyingglass" color={muted} />
       <ThemedText style={[styles.placeholder, { color: muted }]} numberOfLines={1}>
-        {hint}
+        {hint ?? t('homeSearchHint')}
       </ThemedText>
     </Pressable>
   );

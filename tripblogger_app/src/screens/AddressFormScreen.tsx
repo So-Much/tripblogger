@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
@@ -11,10 +11,21 @@ import { formatApiError } from '@/src/utils/format-api-error';
 
 export function AddressFormScreen() {
   const { t } = useI18n();
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const qc = useQueryClient();
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
+  const isEdit = Boolean(id);
+
+  const existingQ = useQuery({
+    queryKey: ['commerce', 'addresses', id],
+    queryFn: async () => {
+      const list = await commerceService.listAddresses();
+      return list.find((a) => a.id === id);
+    },
+    enabled: isEdit,
+  });
 
   const [label, setLabel] = useState('Nhà');
   const [recipientName, setRecipientName] = useState('');
@@ -25,18 +36,42 @@ export function AddressFormScreen() {
   const [street, setStreet] = useState('');
   const [isDefault, setIsDefault] = useState(true);
 
+  useEffect(() => {
+    const a = existingQ.data;
+    if (!a) return;
+    setLabel(a.label);
+    setRecipientName(a.recipientName);
+    setPhone(a.phone);
+    setProvince(a.province);
+    setDistrict(a.district);
+    setWard(a.ward);
+    setStreet(a.street);
+    setIsDefault(a.isDefault);
+  }, [existingQ.data]);
+
   const save = useMutation({
     mutationFn: () =>
-      commerceService.createAddress({
-        label,
-        recipientName,
-        phone,
-        province,
-        district,
-        ward,
-        street,
-        isDefault,
-      }),
+      isEdit && id
+        ? commerceService.updateAddress(id, {
+            label,
+            recipientName,
+            phone,
+            province,
+            district,
+            ward,
+            street,
+            isDefault,
+          })
+        : commerceService.createAddress({
+            label,
+            recipientName,
+            phone,
+            province,
+            district,
+            ward,
+            street,
+            isDefault,
+          }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['commerce', 'addresses'] });
       router.back();
@@ -54,7 +89,7 @@ export function AddressFormScreen() {
         <Field label={t('addressDistrict')} value={district} onChangeText={setDistrict} border={border} text={text} />
         <Field label={t('addressWard')} value={ward} onChangeText={setWard} border={border} text={text} />
         <Field label={t('addressStreet')} value={street} onChangeText={setStreet} border={border} text={text} />
-        <ThemedText>Default address</ThemedText>
+        <ThemedText>{t('addressDefault')}</ThemedText>
         <Switch value={isDefault} onValueChange={setIsDefault} />
         <Pressable style={[styles.cta, { borderColor: border }]} onPress={() => save.mutate()} disabled={save.isPending}>
           <ThemedText type="link">{t('save')}</ThemedText>

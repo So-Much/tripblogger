@@ -9,9 +9,10 @@ interface CommerceWidgetRowProps {
   deals: CommerceDeal[];
   /** Opens full shop / marketplace (e.g. expo-router push). */
   onSeeAllPress?: () => void;
+  onDealPress?: (productId: string) => void;
 }
 
-export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowProps) {
+export function CommerceWidgetRow({ deals, onSeeAllPress, onDealPress }: CommerceWidgetRowProps) {
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
   const border = useThemeColor({}, 'border');
@@ -47,7 +48,7 @@ export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowPro
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {deals.map((deal) => (
-          <DealCard key={deal.id} deal={deal} />
+          <DealCard key={deal.id} deal={deal} onPress={onDealPress ? () => onDealPress(deal.id) : undefined} />
         ))}
       </ScrollView>
     </View>

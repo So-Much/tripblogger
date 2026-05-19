@@ -1,4 +1,4 @@
-import { Alert, FlatList, Pressable, StyleSheet } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -26,6 +26,11 @@ export function AddressListScreen() {
 
   const del = useMutation({
     mutationFn: (id: string) => commerceService.deleteAddress(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['commerce', 'addresses'] }),
+  });
+
+  const setDefault = useMutation({
+    mutationFn: (id: string) => commerceService.setDefaultAddress(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['commerce', 'addresses'] }),
   });
 
@@ -58,17 +63,27 @@ export function AddressListScreen() {
             <ThemedText style={styles.small}>
               {item.street}, {item.ward}, {item.district}, {item.province}
             </ThemedText>
-            <Pressable
-              onPress={() =>
-                Alert.alert('Delete', '', [
-                  { text: t('cancel'), style: 'cancel' },
-                  { text: t('productDelete'), style: 'destructive', onPress: () => del.mutate(item.id) },
-                ])
-              }>
-              <ThemedText type="link" style={{ color: '#b91c1c' }}>
-                {t('productDelete')}
-              </ThemedText>
-            </Pressable>
+            <View style={styles.row}>
+              {!item.isDefault ? (
+                <Pressable onPress={() => setDefault.mutate(item.id)}>
+                  <ThemedText type="link">{t('addressSetDefault')}</ThemedText>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={() => router.push(`/(tabs)/shop/address-form?id=${item.id}`)}>
+                <ThemedText type="link">{t('productEdit')}</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() =>
+                  Alert.alert(t('productDelete'), '', [
+                    { text: t('cancel'), style: 'cancel' },
+                    { text: t('productDelete'), style: 'destructive', onPress: () => del.mutate(item.id) },
+                  ])
+                }>
+                <ThemedText type="link" style={{ color: '#b91c1c' }}>
+                  {t('productDelete')}
+                </ThemedText>
+              </Pressable>
+            </View>
           </ThemedView>
         )}
         ListEmptyComponent={<ThemedText style={styles.center}>{q.isError ? formatApiError(q.error, '') : '—'}</ThemedText>}
@@ -83,4 +98,5 @@ const styles = StyleSheet.create({
   add: { padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 12, alignItems: 'center' },
   card: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10, gap: 4 },
   small: { fontSize: 13, opacity: 0.8 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
 });

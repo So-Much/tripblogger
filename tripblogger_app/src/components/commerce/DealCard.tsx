@@ -7,9 +7,10 @@ import { CommerceDeal } from '@/src/types/commerce';
 
 interface DealCardProps {
   deal: CommerceDeal;
+  onPress?: () => void;
 }
 
-function DealCardInner({ deal }: DealCardProps) {
+function DealCardInner({ deal, onPress }: DealCardProps) {
   const card = useThemeColor({}, 'card');
   const border = useThemeColor({}, 'border');
   const cta = useThemeColor({}, 'cta');
@@ -18,6 +19,7 @@ function DealCardInner({ deal }: DealCardProps) {
 
   return (
     <Pressable
+      onPress={onPress}
       hitSlop={{ top: 4, bottom: 4 }}
       style={({ pressed }) => [
         styles.card,

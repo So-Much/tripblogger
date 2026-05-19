@@ -5,16 +5,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { CommerceWidgetRow } from '@/src/components/commerce/CommerceWidgetRow';
 import { FeedSection } from '@/src/components/feed/FeedSection';
-import { StoriesRow } from '@/src/components/feed/StoriesRow';
+import { HomeCommerceDeals } from '@/src/components/home/HomeCommerceDeals';
 import { PromoBanner } from '@/src/components/home/PromoBanner';
 import { HomeSearchBar } from '@/src/components/home/HomeSearchBar';
 import { QuickActionsStrip } from '@/src/components/home/QuickActionsStrip';
 import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
-import { COMMERCE_DEALS } from '@/src/mocks/commerce.mock';
 import { FEED_POSTS } from '@/src/mocks/feed.mock';
-import { FEED_STORIES } from '@/src/mocks/stories.mock';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { useAuthStore } from '@/src/store/auth.store';
@@ -112,10 +109,15 @@ export function HomeScreen() {
           ) : null}
         </View>
 
-        <HomeSearchBar />
-        <StoriesRow stories={FEED_STORIES} />
+        <HomeSearchBar onPress={() => router.push('/(tabs)/shop/search')} />
         <PromoBanner />
-        <QuickActionsStrip />
+        <QuickActionsStrip
+          onActionPress={(key) => {
+            if (key === 'shop') router.push('/(tabs)/shop');
+            else if (key === 'live') router.push('/(tabs)/capture');
+            else if (key === 'inbox') router.push('/explore');
+          }}
+        />
 
         <ThemedText type="subtitle" style={styles.sectionTitle}>
           {t('homeToday')}
@@ -128,7 +130,7 @@ export function HomeScreen() {
           <ProfileSummaryCard profile={memberProfile} />
         ) : null}
 
-        <CommerceWidgetRow deals={COMMERCE_DEALS} onSeeAllPress={() => router.push('/(tabs)/shop')} />
+        <HomeCommerceDeals />
         <FeedSection posts={FEED_POSTS} />
       </ScrollView>
     </ThemedView>
