@@ -19,6 +19,8 @@ import { ProductRatingEntity } from './entities/product-rating.entity';
 import { CheckoutDto, QueryOrdersDto } from './dto/shopping.dto';
 import { CouponsService } from './coupons.service';
 import { PaymentsService } from './payments.service';
+import { toIsoString } from '../../common/utils/iso-date';
+import { parseProductMediaJson } from './commerce-media.util';
 import { FREE_SHIPPING_THRESHOLD, ORDER_STATUSES, SHIPPING_FEE } from './constants';
 
 function orderCursorFrom(row: OrderEntity) {
@@ -104,7 +106,13 @@ export class OrdersService {
         ? {
             id: l.product.id,
             title: l.product.title,
-            media: [],
+            media: parseProductMediaJson(l.product.mediaJson).map((m) => ({
+              type: m.type === 'video' ? 'video' : 'image',
+              url: m.url,
+              thumbnailUrl: m.thumbnailUrl,
+              previewUrl: m.previewUrl,
+              originalUrl: m.originalUrl,
+            })),
             price: Number(l.product.price),
             status: l.product.status,
           }
@@ -132,8 +140,8 @@ export class OrdersService {
       discountAmount: Number(o.discountAmount),
       totalAmount: Number(o.totalAmount),
       note: o.note,
-      createdAt: o.createdAt.toISOString(),
-      updatedAt: o.updatedAt.toISOString(),
+      createdAt: toIsoString(o.createdAt)!,
+      updatedAt: toIsoString(o.updatedAt)!,
       address: addr ? this.serializeAddress(addr) : undefined,
       guestAddress:
         o.guestRecipientName || o.guestPhone || o.guestStreet
@@ -155,8 +163,8 @@ export class OrdersService {
             method: payment.method,
             status: payment.status,
             amount: Number(payment.amount),
-            paidAt: payment.paidAt?.toISOString() ?? null,
-            createdAt: payment.createdAt.toISOString(),
+            paidAt: toIsoString(payment.paidAt),
+            createdAt: toIsoString(payment.createdAt)!,
           }
         : undefined,
     };

@@ -10,7 +10,7 @@ import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { MemberProfileEntity } from '../users/entities/member-profile.entity';
 import { MediaResolver } from '../posts/media.resolver';
-import { normalizePostMediaItem } from '../posts/media.types';
+import { parseProductMediaJson } from './commerce-media.util';
 import { DEFAULT_ANALYTICS_JSON, DEFAULT_STOCK_UNIT } from './constants';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryMyProductsDto, QueryPublicProductsDto } from './dto/query-products.dto';
@@ -44,17 +44,6 @@ function parseTagsJson(raw: string | null): string[] {
   try {
     const v = JSON.parse(raw) as unknown;
     return Array.isArray(v) ? v.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseMediaJson(raw: string | null): ReturnType<typeof normalizePostMediaItem>[] {
-  if (!raw) return [];
-  try {
-    const v = JSON.parse(raw) as unknown;
-    if (!Array.isArray(v)) return [];
-    return v.map((item) => normalizePostMediaItem(item as Record<string, unknown>));
   } catch {
     return [];
   }
@@ -124,7 +113,7 @@ export class CommerceService {
       return path;
     };
 
-    const media = parseMediaJson(product.mediaJson).map((item) => ({
+    const media = parseProductMediaJson(product.mediaJson).map((item) => ({
       ...item,
       url: resolveUrl(item.url) ?? item.url,
       thumbnailUrl: resolveUrl(item.thumbnailUrl),
@@ -351,7 +340,7 @@ export class CommerceService {
     if (!product) throw new NotFoundException('Product not found');
     if (product.sellerId !== sellerId) throw new ForbiddenException('Not owner');
 
-    const media = parseMediaJson(product.mediaJson);
+    const media = parseProductMediaJson(product.mediaJson);
     if (media.length === 0) throw new BadRequestException('At least one image is required');
     if (!product.title?.trim()) throw new BadRequestException('Title required');
     if (product.price <= 0) throw new BadRequestException('Price must be positive');

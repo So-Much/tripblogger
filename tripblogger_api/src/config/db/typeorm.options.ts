@@ -44,7 +44,12 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
     username: configService.getOrThrow<string>('DB_USERNAME'),
     password: configService.getOrThrow<string>('DB_PASSWORD'),
     database: configService.getOrThrow<string>('DB_NAME'),
-    options: { encrypt: false, ...(instanceName ? { instanceName } : {}) },
+    options: {
+      encrypt: false,
+      /** Read/write SQL datetime2 as UTC (matches GETUTCDATE() in DB). */
+      useUTC: true,
+      ...(instanceName ? { instanceName } : {}),
+    },
     entities: [
       RoleEntity,
       UserEntity,

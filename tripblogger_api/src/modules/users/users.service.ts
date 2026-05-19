@@ -5,6 +5,8 @@ import { In, Repository } from 'typeorm';
 import { UserEntity } from './entities/user.entity';
 import { UserStatusEntity } from './entities/user-status.entity';
 import { UserStatusCode } from './enums/status.enum';
+import { PostEntity } from '../posts/entities/post.entity';
+import { ProductEntity } from '../commerce/entities/product.entity';
 
 @Injectable()
 export class UsersService {
@@ -12,6 +14,8 @@ export class UsersService {
     @InjectRepository(UserEntity) private readonly usersRepo: Repository<UserEntity>,
     @InjectRepository(UserStatusEntity) private readonly userStatusesRepo: Repository<UserStatusEntity>,
     @InjectRepository(MemberProfileEntity) private readonly memberProfilesRepo: Repository<MemberProfileEntity>,
+    @InjectRepository(PostEntity) private readonly postsRepo: Repository<PostEntity>,
+    @InjectRepository(ProductEntity) private readonly productsRepo: Repository<ProductEntity>,
   ) {}
 
   async findByIdOrThrow(id: string): Promise<UserEntity> {
@@ -33,7 +37,10 @@ export class UsersService {
     return statuses.map((s) => s.statusCode as UserStatusCode);
   }
 
-  async updateMyProfile(userId: string, payload: { displayName?: string; avatarUrl?: string | null }) {
+  async updateMyProfile(
+    userId: string,
+    payload: { displayName?: string; avatarUrl?: string | null; email?: string | null },
+  ) {
     const profile = await this.memberProfilesRepo.findOne({ where: { userId } });
     if (!profile) throw new NotFoundException('Member profile not found');
 
@@ -44,9 +51,21 @@ export class UsersService {
     if (payload.avatarUrl !== undefined) {
       profile.avatarUrl = payload.avatarUrl;
     }
+    if (payload.email !== undefined) {
+      const trimmed = payload.email?.trim() ?? '';
+      profile.email = trimmed.length > 0 ? trimmed : null;
+    }
 
     await this.memberProfilesRepo.save(profile);
     return this.getMeProfile(userId);
+  }
+
+  async getMemberStats(userId: string) {
+    const [postsCount, productsCount] = await Promise.all([
+      this.postsRepo.count({ where: { userId, status: 'PUBLISHED' } }),
+      this.productsRepo.count({ where: { sellerId: userId, status: 'PUBLISHED' } }),
+    ]);
+    return { postsCount, productsCount };
   }
 
   async getMeProfile(userId: string) {

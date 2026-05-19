@@ -12,7 +12,7 @@ import { In, Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
-import { QueryCommentsDto, QueryMinePostsDto } from './dto/query-posts.dto';
+import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CompositionEntity } from '../compositions/entities/composition.entity';
 import { CommentEntity } from './entities/comment.entity';
@@ -25,6 +25,7 @@ import { PostsRealtimeGateway } from './posts.realtime.gateway';
 import { MediaResolver } from './media.resolver';
 import { MediaMigrationWorker } from './media.migration.worker';
 import { normalizePostMediaItem, PostMediaItem } from './media.types';
+import { toIsoString } from '../../common/utils/iso-date';
 
 const POST_SANITIZE: sanitizeHtml.IOptions = {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'img', 'span']),
@@ -150,8 +151,23 @@ export class PostsService {
   private async loadPostWithMedia(postId: string): Promise<PostEntity | null> {
     return this.postsRepo.findOne({
       where: { id: postId },
-      relations: ['postMedia', 'postMedia.media'],
+      relations: ['postMedia', 'postMedia.media', 'user', 'user.memberProfile'],
     });
+  }
+
+  private serializeAuthor(user?: PostEntity['user']): {
+    displayName: string;
+    username?: string;
+    avatarUrl: string | null;
+  } | null {
+    const profile = user?.memberProfile;
+    if (!profile) return null;
+    const customDisplay = profile.displayName?.trim();
+    return {
+      displayName: customDisplay || profile.username,
+      ...(customDisplay ? {} : { username: profile.username }),
+      avatarUrl: profile.avatarUrl ?? null,
+    };
   }
 
   private async validateCompositionIds(compositionIds: string[]): Promise<void> {
@@ -252,8 +268,13 @@ export class PostsService {
 
   private canViewPost(post: PostEntity, viewerUserId: string): boolean {
     if (post.status === 'DELETED') return false;
-    if (post.status === 'PUBLISHED') return true;
-    return post.userId === viewerUserId;
+    if (post.status !== 'PUBLISHED') {
+      return post.userId === viewerUserId;
+    }
+    if (post.visibility === 'PRIVATE') {
+      return post.userId === viewerUserId;
+    }
+    return true;
   }
 
   private ensurePostPublishedForInteraction(post: PostEntity): void {
@@ -312,6 +333,7 @@ export class PostsService {
     return {
       id: post.id,
       userId: post.userId,
+      author: this.serializeAuthor(post.user),
       title: post.title,
       contentHtml: post.contentHtml,
       media: resolvedMedia,
@@ -320,8 +342,8 @@ export class PostsService {
       visibility: post.visibility,
       location: parseLocation(post.locationJson),
       status: post.status,
-      createdAt: post.createdAt.toISOString(),
-      updatedAt: post.updatedAt.toISOString(),
+      createdAt: toIsoString(post.createdAt)!,
+      updatedAt: toIsoString(post.updatedAt)!,
       reactionCounts: extras?.reactionCounts ?? {},
       myReactionCodes: extras?.myReactionCodes ?? [],
       commentCount: extras?.commentCount ?? 0,
@@ -391,7 +413,10 @@ export class PostsService {
       .leftJoin('react_types', 'rt', 'rt.id = r.type_id')
       .leftJoin('users', 'u', 'u.id = r.user_id')
       .leftJoin('member_profiles', 'mp', 'mp.user_id = u.id')
-      .select('COALESCE(mp.display_name, mp.username)', 'displayName')
+      .select(
+        `CASE WHEN NULLIF(LTRIM(RTRIM(mp.display_name)), '') IS NOT NULL THEN LTRIM(RTRIM(mp.display_name)) ELSE mp.username END`,
+        'displayName',
+      )
       .addSelect('rt.code', 'reactionCode')
       .addSelect('rt.name', 'reactionName')
       .where('r.post_id = :postId', { postId })
@@ -515,17 +540,71 @@ export class PostsService {
     if (items.length) {
       const withMedia = await this.postsRepo.find({
         where: { id: In(items.map((p) => p.id)) },
-        relations: ['postMedia', 'postMedia.media'],
+        relations: ['postMedia', 'postMedia.media', 'user', 'user.memberProfile'],
       });
-      const mediaMap = new Map(withMedia.map((p) => [p.id, p.postMedia ?? []]));
+      const enriched = new Map(withMedia.map((p) => [p.id, p]));
       for (const p of items) {
-        p.postMedia = mediaMap.get(p.id) ?? [];
+        const full = enriched.get(p.id);
+        if (full) {
+          p.postMedia = full.postMedia ?? [];
+          p.user = full.user;
+        }
       }
     }
 
     const payloads = await Promise.all(
       items.map(async (p) => {
         const meta = await this.getPostReactionMeta(p.id, userId);
+        const commentCount = await this.getPostCommentCount(p.id);
+        return this.serializePost(p, { ...meta, commentCount });
+      }),
+    );
+
+    return { items: payloads, nextCursor };
+  }
+
+  async findFeed(viewerUserId: string, query: QueryFeedPostsDto) {
+    const limit = query.limit;
+    const qb = this.postsRepo
+      .createQueryBuilder('p')
+      .where('p.status = :status', { status: 'PUBLISHED' })
+      .andWhere('p.visibility = :visibility', { visibility: 'PUBLIC' })
+      .orderBy('p.created_at', 'DESC')
+      .addOrderBy('p.id', 'DESC')
+      .take(limit + 1);
+
+    if (query.cursor) {
+      const { createdAt, id } = decodePostCursor(query.cursor);
+      qb.andWhere('(p.created_at < :c OR (p.created_at = :c AND p.id < :i))', {
+        c: createdAt,
+        i: id,
+      });
+    }
+
+    const rows = await qb.getMany();
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const last = items[items.length - 1];
+    const nextCursor = hasMore && last ? encodePostCursor(last.createdAt, last.id) : null;
+
+    if (items.length) {
+      const withRelations = await this.postsRepo.find({
+        where: { id: In(items.map((p) => p.id)) },
+        relations: ['postMedia', 'postMedia.media', 'user', 'user.memberProfile'],
+      });
+      const enriched = new Map(withRelations.map((p) => [p.id, p]));
+      for (const p of items) {
+        const full = enriched.get(p.id);
+        if (full) {
+          p.postMedia = full.postMedia ?? [];
+          p.user = full.user;
+        }
+      }
+    }
+
+    const payloads = await Promise.all(
+      items.map(async (p) => {
+        const meta = await this.getPostReactionMeta(p.id, viewerUserId);
         const commentCount = await this.getPostCommentCount(p.id);
         return this.serializePost(p, { ...meta, commentCount });
       }),
@@ -685,8 +764,8 @@ export class PostsService {
       displayName: 'Bạn',
       content: comment.content,
       parentCommentId: comment.parentCommentId,
-      createdAt: comment.createdAt.toISOString(),
-      updatedAt: comment.updatedAt.toISOString(),
+      createdAt: toIsoString(comment.createdAt)!,
+      updatedAt: toIsoString(comment.updatedAt)!,
     };
     const commentCount = await this.getPostCommentCount(postId);
     this.realtimeGateway.emitCommentCreated({
@@ -732,7 +811,10 @@ export class PostsService {
           .leftJoin('c.user', 'u')
           .leftJoin('u.memberProfile', 'mp')
           .select('c.id', 'id')
-          .addSelect('COALESCE(mp.display_name, mp.username)', 'displayName')
+          .addSelect(
+            `CASE WHEN NULLIF(LTRIM(RTRIM(mp.display_name)), '') IS NOT NULL THEN LTRIM(RTRIM(mp.display_name)) ELSE mp.username END`,
+            'displayName',
+          )
           .where('c.id IN (:...ids)', { ids: items.map((i) => i.id) })
           .getRawMany<{ id: string; displayName: string | null }>()
       : [];
@@ -744,8 +826,8 @@ export class PostsService {
       postId: c.postId,
       content: c.content,
       parentCommentId: c.parentCommentId,
-      createdAt: c.createdAt.toISOString(),
-      updatedAt: c.updatedAt.toISOString(),
+      createdAt: toIsoString(c.createdAt)!,
+      updatedAt: toIsoString(c.updatedAt)!,
     }));
     const roots = serialized.filter((c) => !c.parentCommentId);
     const repliesByParent = serialized

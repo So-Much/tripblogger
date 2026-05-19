@@ -23,7 +23,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
-import { QueryCommentsDto, QueryMinePostsDto } from './dto/query-posts.dto';
+import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { ToggleReactionDto } from './dto/reaction.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
@@ -62,6 +62,14 @@ export class PostsController {
     return this.postsService.findMine(req.user.sub, query);
   }
 
+  @Get('feed')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER', 'GUEST')
+  @RequiredStatuses('ACTIVE')
+  findFeed(@Req() req: { user: { sub: string } }, @Query() query: QueryFeedPostsDto) {
+    return this.postsService.findFeed(req.user.sub, query);
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')
@@ -72,7 +80,7 @@ export class PostsController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   findOne(@Req() req: { user: { sub: string } }, @Param('id', ParseUUIDPipe) id: string) {
     return this.postsService.findOne(id, req.user.sub);

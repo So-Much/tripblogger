@@ -239,14 +239,20 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.usersRepo.findOne({
       where: { id: userId },
-      relations: ['role', 'memberProfile', 'statuses'],
+      relations: ['role', 'memberProfile', 'statuses', 'statuses.status'],
     });
     if (!user) throw new UnauthorizedException('User not found');
+
+    const activeStatuses = user.statuses.filter((s) => s.isActive);
 
     return {
       id: user.id,
       role: user.role.code,
-      statuses: user.statuses.filter((s) => s.isActive).map((s) => s.statusCode),
+      statuses: activeStatuses.map((s) => s.statusCode as UserStatusCode),
+      statusDetails: activeStatuses.map((s) => ({
+        code: s.statusCode as UserStatusCode,
+        displayName: s.status?.displayName ?? s.statusCode,
+      })),
       profile: user.memberProfile
         ? {
             username: user.memberProfile.username,

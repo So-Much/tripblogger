@@ -8,6 +8,8 @@ import { RoleEntity } from './entities/role.entity';
 import { GuestProfileEntity } from './entities/guest-profile.entity';
 import { MemberProfileEntity } from './entities/member-profile.entity';
 import { StatusCatalogEntity } from './entities/status-catalog.entity';
+import { PostEntity } from '../posts/entities/post.entity';
+import { ProductEntity } from '../commerce/entities/product.entity';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StatusesGuard } from '../../common/guards/statuses.guard';
 
@@ -20,6 +22,8 @@ import { StatusesGuard } from '../../common/guards/statuses.guard';
       GuestProfileEntity,
       MemberProfileEntity,
       StatusCatalogEntity,
+      PostEntity,
+      ProductEntity,
     ]),
   ],
   controllers: [UsersController],

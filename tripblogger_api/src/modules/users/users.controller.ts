@@ -28,17 +28,12 @@ const AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Get(':id')
-  async getUser(@Param('id') id: string) {
-    const user = await this.usersService.findByIdOrThrow(id);
-    const statuses = await this.usersService.getActiveStatuses(id);
-    return {
-      id: user.id,
-      role: user.role.code,
-      statuses,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+  @Get('me/stats')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  async getMyStats(@Req() req: { user: { sub: string } }) {
+    return this.usersService.getMemberStats(req.user.sub);
   }
 
   @Get('me/profile')
@@ -72,6 +67,7 @@ export class UsersController {
     @Req() req: { user: { sub: string }; protocol: string; headers: { host?: string; 'x-forwarded-proto'?: string } },
     @UploadedFile() avatar?: { filename: string; mimetype: string },
     @Body('displayName') displayName?: string,
+    @Body('email') email?: string,
     @Body('removeAvatar') removeAvatarRaw?: string | boolean,
   ) {
     if (avatar && !AVATAR_MIME.has(avatar.mimetype)) {
@@ -84,7 +80,21 @@ export class UsersController {
 
     return this.usersService.updateMyProfile(req.user.sub, {
       displayName,
+      email: email !== undefined ? email : undefined,
       avatarUrl,
     });
+  }
+
+  @Get(':id')
+  async getUser(@Param('id') id: string) {
+    const user = await this.usersService.findByIdOrThrow(id);
+    const statuses = await this.usersService.getActiveStatuses(id);
+    return {
+      id: user.id,
+      role: user.role.code,
+      statuses,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }

@@ -44,6 +44,7 @@ export default new DataSource({
   options: {
     encrypt: false,
     trustServerCertificate: true,
+    useUTC: true,
     ...(process.env.DB_INSTANCE ? { instanceName: process.env.DB_INSTANCE } : {}),
   },
   entities: [
