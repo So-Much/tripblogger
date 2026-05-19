@@ -46,14 +46,23 @@ export const authService = {
     await apiClient.post('/auth/logout', payload);
   },
 
+  async getMemberStats(): Promise<{ postsCount: number; productsCount: number }> {
+    const response = await apiClient.get<{ postsCount: number; productsCount: number }>('/users/me/stats');
+    return response.data;
+  },
+
   async updateProfile(payload: {
     displayName?: string;
+    email?: string;
     removeAvatar?: boolean;
     avatarFile?: { uri: string; name: string; type: string };
   }): Promise<MeResponse> {
     const body = new FormData();
     if (payload.displayName !== undefined) {
       body.append('displayName', payload.displayName);
+    }
+    if (payload.email !== undefined) {
+      body.append('email', payload.email);
     }
     if (payload.removeAvatar) {
       body.append('removeAvatar', 'true');

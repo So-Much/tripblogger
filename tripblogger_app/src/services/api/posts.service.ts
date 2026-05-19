@@ -43,6 +43,16 @@ export const postsService = {
     return res.data;
   },
 
+  async listFeed(params: { limit?: number; cursor?: string }): Promise<PaginatedPosts> {
+    const res = await apiClient.get<PaginatedPosts>('/posts/feed', {
+      params: {
+        limit: params.limit ?? 20,
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+      },
+    });
+    return { ...res.data, items: res.data.items.map(normalizePost) };
+  },
+
   async listMine(params: { limit?: number; cursor?: string; status?: 'DRAFT' | 'PUBLISHED' }): Promise<PaginatedPosts> {
     const res = await apiClient.get<PaginatedPosts>('/posts/mine', {
       params: {

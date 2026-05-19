@@ -1,22 +1,10 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useI18n } from '@/src/i18n';
+import { formatSocialTimestamp } from '@/src/utils/datetime';
+import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import type { CommentDto, ThreadedCommentDto } from '@/src/types/post';
-
-function formatRelativeMinutes(createdAt: string): string {
-  const ms = Date.now() - new Date(createdAt).getTime();
-  if (ms < 60000) return 'Bây giờ';
-  const minutes = Math.floor(ms / 60000);
-  if (minutes < 60) return `${minutes}p`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}th`;
-  const years = Math.floor(months / 12);
-  return `${years}y`;
-}
 
 export function CommentThread({
   threaded,
@@ -43,15 +31,29 @@ export function CommentThread({
 }
 
 function CommentBubble({ comment, onReply }: { comment: CommentDto; onReply: (comment: CommentDto) => void }) {
+  const { t } = useI18n();
   const textMuted = useThemeColor({}, 'textMuted');
   const card = useThemeColor({}, 'card');
   const border = useThemeColor({}, 'border');
+  const relative = formatSocialTimestamp(comment.createdAt, {
+    now: t('timeRelativeNow'),
+    minutes: (n) => t('timeRelativeMinutes', { count: n }),
+    hours: (n) => t('timeRelativeHours', { count: n }),
+    days: (n) => t('timeRelativeDays', { count: n }),
+    weeks: (n) => t('timeRelativeWeeks', { count: n }),
+    months: (n) => t('timeRelativeMonths', { count: n }),
+    years: (n) => t('timeRelativeYears', { count: n }),
+    localTime: (time) => t('timeLocalClock', { time }),
+    yesterday: (time) => t('timeYesterday', { time }),
+  });
 
   return (
     <View style={[styles.bubble, { backgroundColor: card, borderColor: border }]}>
       <View style={styles.metaRow}>
-        <ThemedText style={[styles.user, { color: textMuted }]}>{comment.displayName}</ThemedText>
-        <ThemedText style={[styles.time, { color: textMuted }]}>{formatRelativeMinutes(comment.createdAt)}</ThemedText>
+        <ThemedText style={[styles.user, { color: textMuted }]}>
+          {resolvePublicDisplayName(comment.displayName, null)}
+        </ThemedText>
+        <ThemedText style={[styles.time, { color: textMuted }]}>{relative}</ThemedText>
       </View>
       <ThemedText>{comment.content}</ThemedText>
       <Pressable onPress={() => onReply(comment)}>

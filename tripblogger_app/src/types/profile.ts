@@ -1,8 +1,7 @@
 export interface ProfileSummary {
   displayName: string;
-  handle: string;
-  followers: string;
-  following: string;
-  posts: string;
+  handle?: string;
+  postsCount?: number;
+  productsCount?: number;
   bio: string;
 }

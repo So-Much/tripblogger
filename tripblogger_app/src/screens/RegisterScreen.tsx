@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ActionPulse } from '@/src/components/feedback/ActionPulse';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -41,6 +43,7 @@ export function RegisterScreen() {
   const registerMutation = useRegisterMutation();
   const meQuery = useMeQuery();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successPulse, setSuccessPulse] = useState(0);
 
   const borderColor = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
@@ -65,7 +68,8 @@ export function RegisterScreen() {
       const tokens = await registerMutation.mutateAsync({ ...values, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
-      router.replace('/');
+      setSuccessPulse((k) => k + 1);
+      setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('registerFailed')));
     }
@@ -153,11 +157,13 @@ export function RegisterScreen() {
 
               {submitError ? <ThemedText style={styles.error}>{submitError}</ThemedText> : null}
 
-              <Pressable style={[styles.signUpButton, { backgroundColor: cta }]} onPress={onSubmit}>
-                <ThemedText type="defaultSemiBold" style={styles.signUpText}>
-                  {registerMutation.isPending ? t('creatingAccount') : t('createAccount')}
-                </ThemedText>
-              </Pressable>
+              <ActionPulse pulseKey={successPulse}>
+                <PressableScale style={[styles.signUpButton, { backgroundColor: cta }]} onPress={onSubmit}>
+                  <ThemedText type="defaultSemiBold" style={styles.signUpText}>
+                    {registerMutation.isPending ? t('creatingAccount') : t('createAccount')}
+                  </ThemedText>
+                </PressableScale>
+              </ActionPulse>
 
               <Pressable onPress={() => router.push('/login')}>
                 <ThemedText style={[styles.switchText, { color: muted }]}>{t('hasAccountLogin')}</ThemedText>

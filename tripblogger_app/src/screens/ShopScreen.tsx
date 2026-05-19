@@ -36,6 +36,8 @@ export function ShopScreen() {
   const muted = useThemeColor({}, 'textMuted');
 
   const [categoryId, setCategoryId] = useState<string | undefined>();
+  const [productType, setProductType] = useState<'NEW' | 'SECONDHAND' | undefined>();
+  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest');
 
   const categoriesQuery = useQuery({
     queryKey: ['commerce', 'categories'],
@@ -43,12 +45,14 @@ export function ShopScreen() {
   });
 
   const productsQuery = useInfiniteQuery({
-    queryKey: ['commerce', 'products', 'public', categoryId],
+    queryKey: ['commerce', 'products', 'public', categoryId, productType, sortBy],
     queryFn: ({ pageParam }) =>
       commerceService.listPublicProducts({
         limit: 20,
         cursor: pageParam as string | undefined,
         categoryId,
+        productType,
+        sortBy,
       }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -153,6 +157,32 @@ export function ShopScreen() {
             />
           ))}
         </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+          {(['newest', 'price_asc', 'price_desc', 'popular'] as const).map((s) => (
+            <CategoryChip
+              key={s}
+              label={t(`shopSort_${s}`)}
+              selected={sortBy === s}
+              onPress={() => setSortBy(s)}
+              borderColor={border}
+              tint={tint}
+            />
+          ))}
+          <CategoryChip
+            label={t('productNew')}
+            selected={productType === 'NEW'}
+            onPress={() => setProductType(productType === 'NEW' ? undefined : 'NEW')}
+            borderColor={border}
+            tint={tint}
+          />
+          <CategoryChip
+            label={t('productSecondhand')}
+            selected={productType === 'SECONDHAND'}
+            onPress={() => setProductType(productType === 'SECONDHAND' ? undefined : 'SECONDHAND')}
+            borderColor={border}
+            tint={tint}
+          />
+        </ScrollView>
         {isMember ? (
           <View style={styles.actions}>
             <Pressable
@@ -161,6 +191,11 @@ export function ShopScreen() {
               style={[styles.btn, styles.btnGhost, { borderColor: border }]}
               onPress={() => router.push('/(tabs)/shop/my-products')}>
               <ThemedText type="link">{t('productMyProducts')}</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.btn, styles.btnGhost, { borderColor: border }]}
+              onPress={() => router.push('/(tabs)/shop/seller-verify')}>
+              <ThemedText type="link">{t('sellerVerificationTitle')}</ThemedText>
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -228,6 +263,7 @@ const styles = StyleSheet.create({
   },
   cartBadgeTxt: { color: '#fff', fontSize: 10, fontWeight: '700' },
   catRow: { maxHeight: 44, paddingHorizontal: 12, marginBottom: 8 },
+  filterRow: { maxHeight: 44, paddingHorizontal: 12, marginBottom: 8 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, marginBottom: 10 },
   btn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   btnGhost: {},

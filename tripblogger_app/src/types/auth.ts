@@ -15,10 +15,16 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+export type StatusDetailDto = {
+  code: UserStatusCode;
+  displayName: string;
+};
+
 export interface MeResponse {
   id: string;
   role: RoleCode;
   statuses: UserStatusCode[];
+  statusDetails?: StatusDetailDto[];
   profile: {
     username: string;
     email: string | null;

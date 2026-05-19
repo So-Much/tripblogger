@@ -49,6 +49,15 @@ export default function RootLayout() {
         useAuthStore.getState().setTokens(currentTokens);
       }
 
+      const hydrateMe = async () => {
+        try {
+          const me = await authService.me();
+          if (!cancelled) useAuthStore.getState().setMe(me);
+        } catch {
+          // me optional until API is up
+        }
+      };
+
       if (currentTokens?.refreshToken && deviceId) {
         try {
           const refreshed = await axios.post(`${apiBaseUrl}/auth/refresh`, {
@@ -58,6 +67,7 @@ export default function RootLayout() {
           if (!cancelled) {
             useAuthStore.getState().setTokens(refreshed.data);
             await persistAuthTokens(refreshed.data);
+            await hydrateMe();
             return;
           }
         } catch {
@@ -71,6 +81,7 @@ export default function RootLayout() {
         if (!cancelled) {
           setTokens(tokens);
           await persistAuthTokens(tokens);
+          await hydrateMe();
         }
       } catch {
         // Keep guest browsing without tokens if server not reachable.

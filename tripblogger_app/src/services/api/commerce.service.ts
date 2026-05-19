@@ -348,7 +348,24 @@ export const commerceService = {
 
   async getOrder(id: string): Promise<OrderDto> {
     const res = await apiClient.get<OrderDto>(`/commerce/orders/${id}`);
-    return res.data;
+    return {
+      ...res.data,
+      items: (res.data.items ?? []).map((line) => ({
+        ...line,
+        product: line.product
+          ? {
+              ...line.product,
+              media: (line.product.media ?? []).map((m) => ({
+                ...m,
+                url: toAbsolute(m.url) ?? m.url,
+                thumbnailUrl: toAbsolute(m.thumbnailUrl),
+                previewUrl: toAbsolute(m.previewUrl),
+                originalUrl: toAbsolute(m.originalUrl),
+              })),
+            }
+          : line.product,
+      })),
+    };
   },
 
   async getOrderPayment(orderId: string): Promise<PaymentDto> {

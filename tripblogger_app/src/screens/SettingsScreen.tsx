@@ -8,6 +8,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { SectionCard } from '@/src/components/SectionCard';
+import { StatusBadges } from '@/src/components/profile/StatusBadges';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useAuthStore } from '@/src/store/auth.store';
 import { AppLanguage, ThemePreference, useSettingsStore } from '@/src/store/settings.store';
@@ -28,19 +30,14 @@ function OptionPill({
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.pill,
-        { borderColor: active ? accent : border, backgroundColor: card },
-        pressed && { opacity: 0.85 },
-      ]}
+    <PressableScale
+      style={[styles.pill, { borderColor: active ? accent : border, backgroundColor: card }]}
       onPress={onPress}
-      hitSlop={8}
-    >
+      hitSlop={8}>
       <ThemedText type="defaultSemiBold" style={{ color: active ? accent : undefined }}>
         {label}
       </ThemedText>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -72,7 +69,9 @@ export function SettingsScreen() {
     [me?.profile],
   );
   const initialAvatar = useMemo(() => (me?.profile ? me.profile.avatarUrl ?? '' : ''), [me?.profile]);
+  const initialEmail = useMemo(() => me?.profile?.email ?? '', [me?.profile?.email]);
   const [displayNameDraft, setDisplayNameDraft] = useState(initialDisplay);
+  const [emailDraft, setEmailDraft] = useState(initialEmail);
   const [avatarUrlDraft, setAvatarUrlDraft] = useState(initialAvatar);
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
@@ -81,19 +80,22 @@ export function SettingsScreen() {
   const avatarGlyph = (isMember ? profileName : 'G').trim().charAt(0).toUpperCase();
   const isProfileDirty =
     displayNameDraft.trim() !== initialDisplay.trim() ||
+    emailDraft.trim() !== initialEmail.trim() ||
     Boolean(selectedAvatarFile) ||
     removeAvatar ||
     avatarUrlDraft.trim() !== initialAvatar.trim();
 
   useEffect(() => {
     setDisplayNameDraft(initialDisplay);
+    setEmailDraft(initialEmail);
     setAvatarUrlDraft(initialAvatar);
     setSelectedAvatarFile(null);
     setRemoveAvatar(false);
-  }, [initialDisplay, initialAvatar]);
+  }, [initialDisplay, initialEmail, initialAvatar]);
 
   const openProfileModal = () => {
     setDisplayNameDraft(initialDisplay);
+    setEmailDraft(initialEmail);
     setAvatarUrlDraft(initialAvatar);
     setSelectedAvatarFile(null);
     setRemoveAvatar(false);
@@ -102,6 +104,7 @@ export function SettingsScreen() {
 
   const closeProfileModal = () => {
     setDisplayNameDraft(initialDisplay);
+    setEmailDraft(initialEmail);
     setAvatarUrlDraft(initialAvatar);
     setSelectedAvatarFile(null);
     setRemoveAvatar(false);
@@ -113,6 +116,7 @@ export function SettingsScreen() {
     try {
       const updated = await authService.updateProfile({
         displayName: displayNameDraft.trim() || me.profile.username,
+        email: emailDraft.trim(),
         removeAvatar,
         avatarFile: selectedAvatarFile ?? undefined,
       });
@@ -242,6 +246,12 @@ export function SettingsScreen() {
               <Pressable style={[styles.secondaryButton, { borderColor: border }]} onPress={openProfileModal}>
                 <ThemedText type="defaultSemiBold">{t('editProfile')}</ThemedText>
               </Pressable>
+              {me?.statusDetails?.length ? (
+                <View style={styles.statusBadgesWrap}>
+                  <ThemedText style={{ color: muted, fontSize: 12 }}>{t('accountStatusTitle')}</ThemedText>
+                  <StatusBadges statuses={me.statusDetails} />
+                </View>
+              ) : null}
             </>
           ) : (
             <>
@@ -279,25 +289,33 @@ export function SettingsScreen() {
         </SectionCard>
 
         {isMember ? (
-          <Pressable
+          <PressableScale
             style={[styles.inlineLogoutButton, { borderColor: border }]}
-            onPress={async () => {
-              if (tokens?.refreshToken && deviceId) {
-                try {
-                  await authService.logout({ refreshToken: tokens.refreshToken, deviceId });
-                } catch {
-                  // Keep local logout resilient even if network/logout endpoint fails.
-                }
-              }
-              await clearPersistedAuthTokens();
-              logout();
-              router.replace('/');
-            }}
-          >
+            onPress={() => {
+              Alert.alert(t('logout'), t('logoutConfirm'), [
+                { text: t('cancel'), style: 'cancel' },
+                {
+                  text: t('logout'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    if (tokens?.refreshToken && deviceId) {
+                      try {
+                        await authService.logout({ refreshToken: tokens.refreshToken, deviceId });
+                      } catch {
+                        // Keep local logout resilient even if network/logout endpoint fails.
+                      }
+                    }
+                    await clearPersistedAuthTokens();
+                    logout();
+                    router.replace('/');
+                  },
+                },
+              ]);
+            }}>
             <ThemedText type="defaultSemiBold" style={{ color: muted }}>
               {t('logout')}
             </ThemedText>
-          </Pressable>
+          </PressableScale>
         ) : null}
       </ScrollView>
       {isMember ? (
@@ -346,6 +364,19 @@ export function SettingsScreen() {
                   placeholderTextColor={muted}
                 />
               </View>
+              <View style={styles.modalFieldGroup}>
+                <ThemedText style={{ color: muted }}>{t('email')}</ThemedText>
+                <TextInput
+                  value={emailDraft}
+                  onChangeText={setEmailDraft}
+                  style={[styles.input, { borderColor: border, color: text }]}
+                  placeholder={t('noEmail')}
+                  placeholderTextColor={muted}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
               <View style={styles.modalFooter}>
                 <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={saveProfile}>
                   <ThemedText type="defaultSemiBold" style={styles.ctaText}>
@@ -373,6 +404,7 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'center',
   },
+  statusBadgesWrap: { alignItems: 'center', gap: 6, marginTop: 4, width: '100%' },
   avatarCircle: {
     width: 72,
     height: 72,

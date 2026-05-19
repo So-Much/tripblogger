@@ -29,27 +29,19 @@ import { formatApiError } from '@/src/utils/format-api-error';
 import { PostMediaBlock } from '@/src/components/posts/PostMediaBlock';
 import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
 import { CommentThread } from '@/src/components/posts/CommentThread';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { ShakeView, type ShakeViewHandle } from '@/src/components/feedback/ShakeView';
+import { formatLocalDateTime } from '@/src/utils/datetime';
+import { getPostBodyPlainText } from '@/src/utils/post-hashtag-content';
+import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
 import { applyCommentCreated, applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
+import { useAuthStore } from '@/src/store/auth.store';
 
 const SINGLE_TAP_DELAY_MS = 240;
 
 function postReactionTypes(types: ReactionTypeDto[]): ReactionTypeDto[] {
   return types.filter((t) => (t.useFor === 'POST' || t.useFor === 'BOTH') && t.code !== 'SHARE');
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function formatDateTime(value: string): string {
-  const d = new Date(value);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy}, ${hh}:${min}`;
 }
 
 export function PostDetailScreen() {
@@ -59,6 +51,7 @@ export function PostDetailScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const meQuery = useMeQuery();
+  const hasAccessToken = Boolean(useAuthStore((s) => s.tokens?.accessToken));
   const isMember = meQuery.data?.role === 'MEMBER';
 
   const text = useThemeColor({}, 'text');
@@ -76,7 +69,7 @@ export function PostDetailScreen() {
   const postQuery = useQuery({
     queryKey: ['posts', id],
     queryFn: () => postsService.getPost(String(id)),
-    enabled: Boolean(id) && isMember === true,
+    enabled: Boolean(id) && hasAccessToken,
   });
 
   const commentsQuery = useInfiniteQuery({
@@ -115,6 +108,7 @@ export function PostDetailScreen() {
   const [pickerAnchor, setPickerAnchor] = useState<{ x: number; y: number } | null>(null);
   const [commentInputHeight, setCommentInputHeight] = useState(42);
   const [showReactors, setShowReactors] = useState(false);
+  const composerShakeRef = useRef<ShakeViewHandle>(null);
   const lastTapRef = useRef(0);
   const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaInteractingRef = useRef(false);
@@ -127,8 +121,8 @@ export function PostDetailScreen() {
     Object.entries(post?.reactionCounts ?? {}).reduce((acc, [code, count]) => acc + (code === 'SHARE' ? 0 : count), 0),
     0,
   );
-  const canInteract = post?.status === 'PUBLISHED';
-  const canDelete = post?.status !== 'DELETED' && post?.userId === meQuery.data?.id;
+  const canInteract = isMember && post?.status === 'PUBLISHED';
+  const canDelete = isMember && post?.status !== 'DELETED' && post?.userId === meQuery.data?.id;
 
   useEffect(() => {
     return () => {
@@ -201,7 +195,11 @@ export function PostDetailScreen() {
       const optimisticComment = {
         id: `local-${Date.now()}`,
         postId: String(id),
-        displayName: meQuery.data?.profile?.displayName || meQuery.data?.profile?.username || 'Bạn',
+        displayName: resolvePublicDisplayName(
+          meQuery.data?.profile?.displayName,
+          meQuery.data?.profile?.username,
+          'Bạn',
+        ),
         content: commentText.trim(),
         parentCommentId: replyTo?.id ?? null,
         createdAt: new Date().toISOString(),
@@ -216,7 +214,10 @@ export function PostDetailScreen() {
       setReplyTo(null);
       await queryClient.invalidateQueries({ queryKey: ['posts', id, 'comments'] });
     },
-    onError: (e) => setActionErr(formatApiError(e, 'Không thể gửi bình luận.')),
+    onError: (e) => {
+      composerShakeRef.current?.shake();
+      setActionErr(formatApiError(e, 'Không thể gửi bình luận.'));
+    },
   });
 
   const deletePostMut = useMutation({
@@ -228,7 +229,22 @@ export function PostDetailScreen() {
     onError: (e) => setActionErr(formatApiError(e, 'Không thể xóa bài viết.')),
   });
 
-  if (!isMember) {
+  const sharePostMut = useMutation({
+    mutationFn: () => postsService.sharePost(String(id)),
+    onSuccess: (result) => {
+      applyPostPatch(queryClient, {
+        postId: result.post.id,
+        reactionCounts: result.post.reactionCounts,
+        myReactionCodes: result.post.myReactionCodes,
+        commentCount: result.post.commentCount,
+        shareCount: result.post.shareCount,
+      });
+      setActionErr(null);
+    },
+    onError: (e) => setActionErr(formatApiError(e, 'Không thể chia sẻ bài viết.')),
+  });
+
+  if (!hasAccessToken) {
     return (
       <ThemedView style={styles.centered}>
         <ThemedText>{t('postsMemberRequired')}</ThemedText>
@@ -303,7 +319,34 @@ export function PostDetailScreen() {
               </Pressable>
             ) : null}
           </View>
-          <ThemedText style={[styles.date, { color: muted }]}>{formatDateTime(post.createdAt)}</ThemedText>
+          {post.author ? (
+            <ThemedText style={[styles.date, { color: muted }]}>
+              {resolvePublicDisplayName(post.author.displayName, post.author.username)}
+            </ThemedText>
+          ) : null}
+          <ThemedText style={[styles.date, { color: muted }]}>
+            {formatLocalDateTime(post.createdAt)}
+            {post.updatedAt !== post.createdAt ? ` · ${t('postUpdatedAt')} ${formatLocalDateTime(post.updatedAt)}` : ''}
+          </ThemedText>
+          {post.category || post.tags.length || post.location?.name ? (
+            <View style={styles.metaChips}>
+              {post.category ? (
+                <View style={[styles.chip, { borderColor: border }]}>
+                  <ThemedText style={styles.chipTxt}>{post.category}</ThemedText>
+                </View>
+              ) : null}
+              {post.tags.map((tag) => (
+                <View key={tag} style={[styles.chip, { borderColor: border }]}>
+                  <ThemedText style={styles.chipTxt}>#{tag}</ThemedText>
+                </View>
+              ))}
+              {typeof post.location?.name === 'string' && post.location.name ? (
+                <View style={[styles.chip, { borderColor: border }]}>
+                  <ThemedText style={styles.chipTxt}>{post.location.name}</ThemedText>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           <Pressable
             onPress={() => {
               runDeferredPostAction(() => {});
@@ -321,7 +364,9 @@ export function PostDetailScreen() {
               deferViewerOpen={runDeferredPostAction}
             />
             <View style={[styles.section, { borderColor: border }]}>
-              <ThemedText style={{ color: text }}>{stripHtml(post.contentHtml)}</ThemedText>
+              <ThemedText style={{ color: text }}>
+                {getPostBodyPlainText(post.contentHtml, post.tags)}
+              </ThemedText>
             </View>
           </Pressable>
           {actionErr ? (
@@ -365,7 +410,10 @@ export function PostDetailScreen() {
                 <IconSymbol name="bubble.left.and.bubble.right.fill" size={17} color={muted} />
                 <ThemedText style={styles.actionText}>{post.commentCount}</ThemedText>
               </Pressable>
-              <Pressable disabled style={styles.actionBtn}>
+              <Pressable
+                onPress={() => sharePostMut.mutate()}
+                disabled={sharePostMut.isPending}
+                style={styles.actionBtn}>
                 <IconSymbol name="paperplane.fill" size={17} color={muted} />
                 <ThemedText style={styles.actionText}>{post.shareCount}</ThemedText>
               </Pressable>
@@ -375,7 +423,9 @@ export function PostDetailScreen() {
           <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
             {t('postDetailComments')}
           </ThemedText>
-          {!canInteract ? (
+          {!isMember ? (
+            <ThemedText style={{ color: muted }}>{t('postsMemberRequired')}</ThemedText>
+          ) : !canInteract ? (
             <ThemedText style={{ color: muted }}>{t('postDraftNoInteraction')}</ThemedText>
           ) : commentsQuery.isLoading ? (
             <ActivityIndicator />
@@ -389,7 +439,9 @@ export function PostDetailScreen() {
           )}
         </View>
       </ScrollView>
-      <View style={[styles.composer, { borderTopColor: border, backgroundColor: bg, paddingBottom: insets.bottom, opacity: canInteract ? 1 : 0.5 }]}>
+      <ShakeView
+        ref={composerShakeRef}
+        style={[styles.composer, { borderTopColor: border, backgroundColor: bg, paddingBottom: insets.bottom, opacity: canInteract ? 1 : 0.5 }]}>
         {replyTo ? (
           <View style={styles.replyBanner}>
             <ThemedText style={{ color: muted }}>
@@ -413,7 +465,7 @@ export function PostDetailScreen() {
             }}
             style={[styles.input, { borderColor: border, color: text, height: commentInputHeight }]}
           />
-          <Pressable
+          <PressableScale
             onPress={() => addCommentMut.mutate()}
             disabled={addCommentMut.isPending || !commentText.trim() || !canInteract}
             style={[styles.sendBtn, { backgroundColor: cta }]}>
@@ -422,9 +474,9 @@ export function PostDetailScreen() {
             ) : (
               <ThemedText style={styles.sendTxt}>{t('postDetailSendComment')}</ThemedText>
             )}
-          </Pressable>
+          </PressableScale>
         </View>
-      </View>
+      </ShakeView>
       <ReactionPicker
         open={pickerOpen}
         anchor={pickerAnchor}
@@ -479,6 +531,14 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   date: { fontSize: 12 },
+  metaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  chipTxt: { fontSize: 11, fontWeight: '600' },
   sectionTitle: { marginTop: 12, marginBottom: 6 },
   actionRow: {
     marginTop: 4,

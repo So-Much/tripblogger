@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ActionPulse } from '@/src/components/feedback/ActionPulse';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -38,6 +40,7 @@ export function LoginScreen() {
   const googleLoginMutation = useGoogleLoginMutation();
   const meQuery = useMeQuery();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successPulse, setSuccessPulse] = useState(0);
   const borderColor = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
@@ -60,7 +63,8 @@ export function LoginScreen() {
       const tokens = await loginMutation.mutateAsync({ ...values, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
-      router.replace('/');
+      setSuccessPulse((k) => k + 1);
+      setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('loginFailed')));
     }
@@ -74,7 +78,8 @@ export function LoginScreen() {
       const tokens = await googleLoginMutation.mutateAsync({ idToken, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
-      router.replace('/');
+      setSuccessPulse((k) => k + 1);
+      setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('googleSignInFailed')));
     }
@@ -148,15 +153,17 @@ export function LoginScreen() {
                 <ThemedText style={[styles.devHint, { color: muted }]} selectable>{`API: ${apiBaseUrl}`}</ThemedText>
               ) : null}
 
-              <Pressable style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
-                <ThemedText type="defaultSemiBold" style={styles.signInText}>
-                  {loginMutation.isPending ? t('signingIn') : t('signIn')}
-                </ThemedText>
-              </Pressable>
+              <ActionPulse pulseKey={successPulse}>
+                <PressableScale style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
+                  <ThemedText type="defaultSemiBold" style={styles.signInText}>
+                    {loginMutation.isPending ? t('signingIn') : t('signIn')}
+                  </ThemedText>
+                </PressableScale>
+              </ActionPulse>
 
-              <Pressable style={[styles.googleButton, { borderColor }]} onPress={onGoogle} disabled={googleLoginMutation.isPending}>
+              <PressableScale style={[styles.googleButton, { borderColor }]} onPress={onGoogle} disabled={googleLoginMutation.isPending}>
                 <ThemedText type="defaultSemiBold">{googleLoginMutation.isPending ? 'Connecting…' : t('loginWithGoogle')}</ThemedText>
-              </Pressable>
+              </PressableScale>
 
               <Pressable onPress={() => router.push('/register')}>
                 <ThemedText style={[styles.skip, { color: muted }]}>{t('noAccountRegister')}</ThemedText>

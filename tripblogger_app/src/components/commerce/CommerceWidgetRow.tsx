@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useI18n } from '@/src/i18n';
 import { CommerceDeal } from '@/src/types/commerce';
 import { DealCard } from './DealCard';
 
@@ -9,9 +10,11 @@ interface CommerceWidgetRowProps {
   deals: CommerceDeal[];
   /** Opens full shop / marketplace (e.g. expo-router push). */
   onSeeAllPress?: () => void;
+  onDealPress?: (productId: string) => void;
 }
 
-export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowProps) {
+export function CommerceWidgetRow({ deals, onSeeAllPress, onDealPress }: CommerceWidgetRowProps) {
+  const { t } = useI18n();
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
   const border = useThemeColor({}, 'border');
@@ -24,13 +27,13 @@ export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowPro
         <View style={styles.headerLeft}>
           <View style={[styles.kicker, { backgroundColor: `${cta}18` }]}>
             <IconSymbol name="cart.fill" size={14} color={cta} />
-            <ThemedText style={[styles.kickerText, { color: cta }]}>Marketplace</ThemedText>
+            <ThemedText style={[styles.kickerText, { color: cta }]}>{t('homeCommerceKicker')}</ThemedText>
           </View>
           <ThemedText type="subtitle" style={[styles.title, { color: text }]}>
-            Gợi ý cho chuyến đi
+            {t('homeCommerceTitle')}
           </ThemedText>
           <ThemedText style={[styles.subtitle, { color: muted }]}>
-            Flash sale · Mall · Freeship · Đổi trả minh bạch
+            {t('homeCommerceSubtitle')}
           </ThemedText>
         </View>
         {onSeeAllPress ? (
@@ -39,7 +42,7 @@ export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowPro
             onPress={onSeeAllPress}
             style={({ pressed }) => [styles.seeAll, pressed && { opacity: 0.75 }]}>
             <ThemedText type="defaultSemiBold" style={{ color: cta }}>
-              Vào sàn
+              {t('homeCommerceSeeAll')}
             </ThemedText>
             <IconSymbol name="chevron.right" size={14} color={cta} />
           </Pressable>
@@ -47,7 +50,7 @@ export function CommerceWidgetRow({ deals, onSeeAllPress }: CommerceWidgetRowPro
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {deals.map((deal) => (
-          <DealCard key={deal.id} deal={deal} />
+          <DealCard key={deal.id} deal={deal} onPress={onDealPress ? () => onDealPress(deal.id) : undefined} />
         ))}
       </ScrollView>
     </View>

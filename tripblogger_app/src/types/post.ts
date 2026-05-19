@@ -1,6 +1,14 @@
+export interface PostAuthorDto {
+  displayName: string;
+  /** Omitted when user has a custom display name (privacy). */
+  username?: string;
+  avatarUrl: string | null;
+}
+
 export interface PostDto {
   id: string;
   userId: string;
+  author?: PostAuthorDto | null;
   title: string;
   contentHtml: string;
   media: {

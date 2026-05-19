@@ -103,6 +103,19 @@ export function MyPostsScreen() {
     },
   });
 
+  const shareMutation = useMutation({
+    mutationFn: (postId: string) => postsService.sharePost(postId),
+    onSuccess: (result) => {
+      applyPostPatch(queryClient, {
+        postId: result.post.id,
+        reactionCounts: result.post.reactionCounts,
+        myReactionCodes: result.post.myReactionCodes,
+        commentCount: result.post.commentCount,
+        shareCount: result.post.shareCount,
+      });
+    },
+  });
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () =>
@@ -142,10 +155,11 @@ export function MyPostsScreen() {
         cardColor={card}
         borderColor={border}
         mutedColor={muted}
+        onShare={() => shareMutation.mutate(item.id)}
         reactionTypes={postReactionTypes}
       />
     ),
-    [router, reactMutation, card, border, muted, postReactionTypes],
+    [router, reactMutation, shareMutation, card, border, muted, postReactionTypes],
   );
 
   if (meQuery.isLoading) {

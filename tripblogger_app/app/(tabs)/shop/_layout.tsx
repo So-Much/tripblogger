@@ -10,6 +10,8 @@ export default function ShopLayout() {
       <Stack.Screen name="search" options={{ title: t('shopSearch') }} />
       <Stack.Screen name="my-products" options={{ title: t('productMyProducts') }} />
       <Stack.Screen name="create" options={{ title: t('productCreate') }} />
+      <Stack.Screen name="edit/[id]" options={{ title: t('productEdit') }} />
+      <Stack.Screen name="seller-verify" options={{ title: t('sellerVerificationTitle') }} />
       <Stack.Screen name="cart" options={{ title: t('cartTitle') }} />
       <Stack.Screen name="wishlist" options={{ title: t('wishlistTitle') }} />
       <Stack.Screen name="checkout" options={{ title: t('checkoutTitle') }} />

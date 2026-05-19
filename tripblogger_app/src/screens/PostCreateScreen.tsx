@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -16,7 +16,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -27,11 +27,22 @@ import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { uploadAllPendingMedia } from '@/src/utils/upload-editor-media';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
+import { HashtagChipInput } from '@/src/components/posts/HashtagChipInput';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { ShakeView, type ShakeViewHandle } from '@/src/components/feedback/ShakeView';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
+import {
+  dedupeTags,
+  mergeHashtagsIntoContentHtml,
+  parseTagsFromContentHtml,
+  stripTrailingHashtagBlock,
+} from '@/src/utils/post-hashtag-content';
 import type { PostEditorMedia } from '@/src/types/post-editor-media';
 import * as ImagePicker from 'expo-image-picker';
 
 type EditorMedia = PostEditorMedia;
+
+const TRAVEL_CATEGORIES = ['Biển', 'Núi', 'Thành phố', 'Ẩm thực', 'Văn hóa', 'Khác'] as const;
 
 function DraggableMediaThumb({
   item,
@@ -82,8 +93,16 @@ export function PostCreateScreen() {
   const isEditDraft = Boolean(postId);
   const [title, setTitle] = useState('');
   const [contentHtml, setContentHtml] = useState('');
+  const [category, setCategory] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const formShakeRef = useRef<ShakeViewHandle>(null);
+  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
+  const [locationName, setLocationName] = useState('');
   const [media, setMedia] = useState<EditorMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const loadedPostIdRef = useRef<string | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -96,17 +115,55 @@ export function PostCreateScreen() {
     enabled: Boolean(postId),
   });
 
-  useEffect(() => {
-    if (postId) return;
-    const pending = usePostComposerHandoffStore.getState().takePending();
-    if (!pending?.length) return;
-    setMedia((prev) => [...pending, ...prev]);
-  }, [postId]);
+  const postMetaPayload = useMemo(() => {
+    const normalizedTags = dedupeTags(tags);
+    const trimmedCategory = category.trim();
+    const trimmedLocation = locationName.trim();
+    return {
+      category: trimmedCategory || undefined,
+      tags: normalizedTags.length ? normalizedTags : undefined,
+      visibility,
+      location: trimmedLocation ? { name: trimmedLocation } : undefined,
+    };
+  }, [category, tags, visibility, locationName]);
+
+  const buildSubmitContentHtml = useCallback(
+    (forPublish: boolean) => {
+      const trimmed = contentHtml.trim();
+      if (forPublish) return mergeHashtagsIntoContentHtml(trimmed, tags);
+      return stripTrailingHashtagBlock(trimmed);
+    },
+    [contentHtml, tags],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      usePostComposerHandoffStore.getState().setReturnPostId(postId ? String(postId) : null);
+      const pending = usePostComposerHandoffStore.getState().takePending();
+      if (!pending?.length) return;
+      setMedia((prev) => [...pending, ...prev]);
+    }, [postId]),
+  );
+
+  const isPublishedDraft = editingPostQuery.data?.status === 'PUBLISHED';
 
   useEffect(() => {
-    if (!isEditDraft || !editingPostQuery.data) return;
+    if (!postId || !editingPostQuery.data) return;
+    if (loadedPostIdRef.current === postId) return;
+    if (editingPostQuery.data.status === 'PUBLISHED') {
+      router.replace(`/(tabs)/posts/${postId}`);
+      return;
+    }
+    loadedPostIdRef.current = postId;
     setTitle(editingPostQuery.data.title);
-    setContentHtml(editingPostQuery.data.contentHtml);
+    setCategory(editingPostQuery.data.category ?? '');
+    const fromApi = editingPostQuery.data.tags ?? [];
+    const fromContent = parseTagsFromContentHtml(editingPostQuery.data.contentHtml);
+    setTags(dedupeTags([...fromApi, ...fromContent]));
+    setContentHtml(stripTrailingHashtagBlock(editingPostQuery.data.contentHtml));
+    setVisibility(editingPostQuery.data.visibility ?? 'PUBLIC');
+    const locName = editingPostQuery.data.location?.name;
+    setLocationName(typeof locName === 'string' ? locName : '');
     setMedia(
       editingPostQuery.data.media.map((m, idx) => ({
         localId: `${Date.now()}-${idx}`,
@@ -122,7 +179,7 @@ export function PostCreateScreen() {
         compositionId: m.compositionId,
       })),
     );
-  }, [isEditDraft, editingPostQuery.data]);
+  }, [postId, editingPostQuery.data, router]);
 
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
@@ -131,8 +188,9 @@ export function PostCreateScreen() {
   const cta = useThemeColor({}, 'cta');
 
   const saveDraftMutation = useMutation({
-    mutationFn: async () => {
-      const html = contentHtml.trim();
+    mutationFn: async (opts?: { forPublish?: boolean; silent?: boolean }) => {
+      const forPublish = opts?.forPublish ?? false;
+      const html = buildSubmitContentHtml(forPublish);
       if (!title.trim()) throw new Error(t('postsValidationTitle'));
       if (!html) {
         throw new Error(t('postsValidationContent'));
@@ -154,22 +212,49 @@ export function PostCreateScreen() {
         }),
       );
       if (postId) {
-        return postsService.updatePost(String(postId), { title: title.trim(), contentHtml: html, media: submitMedia });
+        return postsService.updatePost(String(postId), {
+          title: title.trim(),
+          contentHtml: html,
+          media: submitMedia,
+          ...postMetaPayload,
+        });
       }
-      return postsService.createPost({ title: title.trim(), contentHtml: html, media: submitMedia, status: 'DRAFT' });
+      return postsService.createPost({
+        title: title.trim(),
+        contentHtml: html,
+        media: submitMedia,
+        status: 'DRAFT',
+        ...postMetaPayload,
+      });
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
-      router.back();
+      if (variables?.silent) {
+        setAutoSaveStatus('saved');
+        if (data?.id && !postId) {
+          router.setParams({ postId: data.id });
+        }
+        return;
+      }
+      if (!variables?.forPublish) {
+        router.back();
+      }
     },
-    onError: (e: unknown) => {
-      setError(formatApiError(e, 'Không thể lưu bài viết.'));
+    onMutate: (variables) => {
+      if (variables?.silent) setAutoSaveStatus('saving');
+    },
+    onError: (e: unknown, variables) => {
+      if (!variables?.silent) {
+        formShakeRef.current?.shake();
+        setError(formatApiError(e, 'Không thể lưu bài viết.'));
+      }
+      setAutoSaveStatus('idle');
     },
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      const draft = await saveDraftMutation.mutateAsync();
+      const draft = await saveDraftMutation.mutateAsync({ forPublish: true });
       return postsService.publishPost(draft.id);
     },
     onSuccess: () => {
@@ -177,9 +262,13 @@ export function PostCreateScreen() {
       router.replace('/(tabs)/posts');
     },
     onError: (e: unknown) => {
+      formShakeRef.current?.shake();
       setError(formatApiError(e, 'Không thể xuất bản bài viết.'));
     },
   });
+
+  const saveDraftMutateRef = useRef(saveDraftMutation.mutate);
+  saveDraftMutateRef.current = saveDraftMutation.mutate;
 
   const deleteDraftMutation = useMutation({
     mutationFn: () => postsService.deletePost(String(postId)),
@@ -195,16 +284,34 @@ export function PostCreateScreen() {
     publishMutation.mutate();
   }, [publishMutation]);
 
+  const canAutoSave =
+    !isPublishedDraft &&
+    !publishMutation.isPending &&
+    !saveDraftMutation.isPending &&
+    Boolean(title.trim()) &&
+    Boolean(contentHtml.trim());
+
+  useEffect(() => {
+    if (!canAutoSave) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      saveDraftMutateRef.current({ silent: true });
+    }, 2500);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [title, contentHtml, category, tags, visibility, locationName, media, postId, canAutoSave]);
+
   useEffect(() => {
     navigation.setOptions({
       headerRight: isEditDraft
         ? () => (
-            <Pressable
+            <PressableScale
               onPress={handlePublishPress}
               disabled={saveDraftMutation.isPending || publishMutation.isPending}
               style={styles.headerPublishBtn}>
               <ThemedText style={styles.headerPublishTxt}>{t('postsPublishNow')}</ThemedText>
-            </Pressable>
+            </PressableScale>
           )
         : undefined,
     });
@@ -260,9 +367,16 @@ export function PostCreateScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.editorTopRow}>
-          <ThemedText style={[styles.label, { color: muted }]}>
-            {isEditDraft ? 'Chỉnh sửa bản nháp' : t('postsTitleLabel')}
-          </ThemedText>
+          <View style={styles.editorTopLeft}>
+            <ThemedText style={[styles.label, { color: muted }]}>
+              {isEditDraft ? 'Chỉnh sửa bản nháp' : t('postsTitleLabel')}
+            </ThemedText>
+            {autoSaveStatus === 'saving' ? (
+              <ThemedText style={[styles.autoSaveHint, { color: muted }]}>{t('postsAutoSaving')}</ThemedText>
+            ) : autoSaveStatus === 'saved' ? (
+              <ThemedText style={[styles.autoSaveHint, { color: muted }]}>{t('postsAutoSaved')}</ThemedText>
+            ) : null}
+          </View>
           {isEditDraft ? (
             <Pressable
               onPress={() =>
@@ -294,6 +408,67 @@ export function PostCreateScreen() {
             style={[styles.contentInput, { borderColor: border, color: text, backgroundColor: card }]}
           />
 
+        <ThemedText style={[styles.label, { color: muted }]}>{t('postsCategoryLabel')}</ThemedText>
+        <View style={styles.chipRow}>
+          {TRAVEL_CATEGORIES.map((item) => (
+            <Pressable
+              key={item}
+              onPress={() => setCategory(item)}
+              style={[
+                styles.chip,
+                {
+                  borderColor: category === item ? cta : border,
+                  backgroundColor: category === item ? `${cta}18` : card,
+                },
+              ]}>
+              <ThemedText style={styles.chipTxt}>{item}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          value={category}
+          onChangeText={setCategory}
+          placeholder={t('postsCategoryPlaceholder')}
+          placeholderTextColor={muted}
+          style={[styles.metaInput, { borderColor: border, color: text, backgroundColor: card }]}
+        />
+
+        <ThemedText style={[styles.label, { color: muted }]}>{t('postsTagsLabel')}</ThemedText>
+        <HashtagChipInput
+          tags={tags}
+          onChangeTags={setTags}
+          placeholder={t('postsTagsPlaceholder')}
+        />
+
+        <ThemedText style={[styles.label, { color: muted }]}>{t('postsVisibilityLabel')}</ThemedText>
+        <View style={styles.chipRow}>
+          {(['PUBLIC', 'PRIVATE'] as const).map((value) => (
+            <Pressable
+              key={value}
+              onPress={() => setVisibility(value)}
+              style={[
+                styles.chip,
+                {
+                  borderColor: visibility === value ? cta : border,
+                  backgroundColor: visibility === value ? `${cta}18` : card,
+                },
+              ]}>
+              <ThemedText style={styles.chipTxt}>
+                {value === 'PUBLIC' ? t('postsVisibilityPublic') : t('postsVisibilityPrivate')}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+
+        <ThemedText style={[styles.label, { color: muted }]}>{t('postsLocationLabel')}</ThemedText>
+        <TextInput
+          value={locationName}
+          onChangeText={setLocationName}
+          placeholder={t('postsLocationPlaceholder')}
+          placeholderTextColor={muted}
+          style={[styles.metaInput, { borderColor: border, color: text, backgroundColor: card }]}
+        />
+
         <View style={styles.row}>
           <Pressable onPress={() => void pickMedia()} style={[styles.mediaBtn, { borderColor: border }]}>
             <IconSymbol name="video.fill" size={18} color={text} />
@@ -318,39 +493,28 @@ export function PostCreateScreen() {
           />
         ) : null}
 
-        {error ? (
-          <ThemedText style={styles.err} lightColor="#c00" darkColor="#f66">
-            {error}
-          </ThemedText>
-        ) : null}
-
-        <View style={styles.actionRow}>
-          <Pressable
-            onPress={() => {
-              setError(null);
-              saveDraftMutation.mutate();
-            }}
-            disabled={saveDraftMutation.isPending || publishMutation.isPending}
-            style={[styles.submit, styles.submitGhost, { borderColor: border }]}>
-            {saveDraftMutation.isPending ? (
-              <ActivityIndicator />
-            ) : (
-              <ThemedText>{isEditDraft ? 'Lưu' : t('postsSaveDraft')}</ThemedText>
-            )}
-          </Pressable>
-          {!isEditDraft ? (
-            <Pressable
-              onPress={handlePublishPress}
-              disabled={saveDraftMutation.isPending || publishMutation.isPending}
-              style={[styles.submit, { backgroundColor: cta }]}>
-              {publishMutation.isPending ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <ThemedText style={styles.submitTxt}>{t('postsPublishNow')}</ThemedText>
-              )}
-            </Pressable>
+        <ShakeView ref={formShakeRef}>
+          {error ? (
+            <ThemedText style={styles.err} lightColor="#c00" darkColor="#f66">
+              {error}
+            </ThemedText>
           ) : null}
-        </View>
+
+          <View style={styles.actionRow}>
+            {!isEditDraft ? (
+              <PressableScale
+                onPress={handlePublishPress}
+                disabled={saveDraftMutation.isPending || publishMutation.isPending}
+                style={[styles.submit, { backgroundColor: cta }]}>
+                {publishMutation.isPending ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.submitTxt}>{t('postsPublishNow')}</ThemedText>
+                )}
+              </PressableScale>
+            ) : null}
+          </View>
+        </ShakeView>
         </ScrollView>
       </KeyboardAvoidingView>
       <Modal transparent visible={previewIndex !== null} animationType="fade" onRequestClose={() => setPreviewIndex(null)}>
@@ -396,7 +560,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { padding: 16, paddingBottom: 40, gap: 10 },
   label: { fontSize: 13, marginTop: 6 },
-  editorTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editorTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  editorTopLeft: { flex: 1, gap: 2 },
+  autoSaveHint: { fontSize: 11, marginTop: 2 },
   titleInput: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
@@ -413,6 +579,21 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   row: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipTxt: { fontSize: 12, fontWeight: '600' },
+  metaInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
   mediaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   mediaList: { marginTop: 8 },
   thumb: { width: 72, height: 72, borderRadius: 10 },

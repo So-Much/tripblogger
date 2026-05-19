@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
@@ -10,7 +10,10 @@ import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { PriceLabel } from '@/src/components/commerce/PriceLabel';
+import { formatLocalDateTime } from '@/src/utils/datetime';
 import type { AddressDto } from '@/src/types/commerce';
+import { ActionPulse } from '@/src/components/feedback/ActionPulse';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
 
 const FREE_SHIP = 500_000;
 const SHIP_FEE = 30_000;
@@ -30,6 +33,8 @@ export function CheckoutScreen() {
   const [coupon, setCoupon] = useState('');
   const [note, setNote] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
+  const [highlightCoupon, setHighlightCoupon] = useState<string | null>(null);
+  const [orderPulse, setOrderPulse] = useState(0);
   const [guestRecipientName, setGuestRecipientName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
@@ -77,6 +82,7 @@ export function CheckoutScreen() {
     onSuccess: (r) => {
       if (r.valid && r.discountAmount != null) {
         setAppliedDiscount(r.discountAmount);
+        setHighlightCoupon(coupon.trim().toUpperCase());
         return;
       }
       setAppliedDiscount(0);
@@ -103,8 +109,9 @@ export function CheckoutScreen() {
           : undefined,
       }),
     onSuccess: (o) => {
+      setOrderPulse((k) => k + 1);
       void qc.invalidateQueries({ queryKey: ['commerce'] });
-      router.replace(`/(tabs)/shop/order/${o.id}` as Href);
+      setTimeout(() => router.replace(`/(tabs)/shop/order/${o.id}` as Href), 180);
     },
     onError: (e) => Alert.alert('Error', formatApiError(e, '')),
   });
@@ -162,24 +169,41 @@ export function CheckoutScreen() {
             }}
             style={[styles.inp, { borderColor: border, color: text, flex: 1 }]}
           />
-          <Pressable onPress={() => validateCoupon.mutate()} style={[styles.apply, { borderColor: border }]}>
+          <PressableScale onPress={() => validateCoupon.mutate()} style={[styles.apply, { borderColor: border }]}>
             <ThemedText>{t('couponApply')}</ThemedText>
-          </Pressable>
+          </PressableScale>
         </View>
         {couponsAvailQ.data?.length ? (
           <>
             <ThemedText type="subtitle">{t('couponsAvailable')}</ThemedText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.couponRow}>
               {couponsAvailQ.data.map((c) => (
-                <Pressable
+                <PressableScale
                   key={c.id}
                   onPress={() => {
                     setCoupon(c.code);
                     setAppliedDiscount(0);
+                    setHighlightCoupon(c.code.toUpperCase());
                   }}
-                  style={[styles.couponChip, { borderColor: border }]}>
-                  <ThemedText type="defaultSemiBold">{c.code}</ThemedText>
-                </Pressable>
+                  style={[
+                    styles.couponChip,
+                    {
+                      borderColor: highlightCoupon === c.code.toUpperCase() ? tint : border,
+                      backgroundColor: highlightCoupon === c.code.toUpperCase() ? `${tint}18` : undefined,
+                    },
+                  ]}>
+                  <View>
+                    <ThemedText type="defaultSemiBold">{c.code}</ThemedText>
+                    <ThemedText style={styles.couponMeta}>
+                      {t('couponExpires', { date: formatLocalDateTime(c.expiresAt).split(', ')[1] ?? formatLocalDateTime(c.expiresAt) })}
+                    </ThemedText>
+                    {c.minOrderValue != null && c.minOrderValue > 0 ? (
+                      <ThemedText style={styles.couponMeta}>
+                        {t('couponMinOrder', { amount: String(c.minOrderValue) })}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                </PressableScale>
               ))}
             </ScrollView>
           </>
@@ -202,17 +226,23 @@ export function CheckoutScreen() {
         <ThemedText type="title" style={{ marginTop: 8 }}>
           {t('totalLabel')}: <PriceLabel amount={totalPreview} />
         </ThemedText>
-        <Pressable
-          style={[styles.cta, { backgroundColor: tint }]}
-          disabled={
-            (!isGuest && !effectiveAddressId) ||
-            (isGuest && !guestInfoValid) ||
-            checkout.isPending ||
-            (cartQ.data?.itemCount ?? 0) === 0
-          }
-          onPress={() => checkout.mutate(effectiveAddressId ?? undefined)}>
-          <ThemedText style={styles.ctaTxt}>{t('orderPlace')}</ThemedText>
-        </Pressable>
+        <ActionPulse pulseKey={orderPulse}>
+          <PressableScale
+            style={[styles.cta, { backgroundColor: tint }]}
+            disabled={
+              (!isGuest && !effectiveAddressId) ||
+              (isGuest && !guestInfoValid) ||
+              checkout.isPending ||
+              (cartQ.data?.itemCount ?? 0) === 0
+            }
+            onPress={() => checkout.mutate(effectiveAddressId ?? undefined)}>
+            {checkout.isPending ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.ctaTxt}>{t('orderPlace')}</ThemedText>
+            )}
+          </PressableScale>
+        </ActionPulse>
       </ScrollView>
     </SafeAreaView>
   );
@@ -227,7 +257,8 @@ const styles = StyleSheet.create({
   inp: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 15 },
   apply: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8, borderWidth: 1 },
   couponRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
-  couponChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  couponChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, minWidth: 120 },
+  couponMeta: { fontSize: 11, opacity: 0.75, marginTop: 2 },
   cta: { marginTop: 16, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
   ctaTxt: { color: '#fff', fontWeight: '700' },
 });

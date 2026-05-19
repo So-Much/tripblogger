@@ -1,23 +1,22 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { CommerceWidgetRow } from '@/src/components/commerce/CommerceWidgetRow';
-import { FeedSection } from '@/src/components/feed/FeedSection';
-import { StoriesRow } from '@/src/components/feed/StoriesRow';
+import { HomePostsFeed } from '@/src/components/feed/HomePostsFeed';
+import { HomeCommerceDeals } from '@/src/components/home/HomeCommerceDeals';
 import { PromoBanner } from '@/src/components/home/PromoBanner';
 import { HomeSearchBar } from '@/src/components/home/HomeSearchBar';
 import { QuickActionsStrip } from '@/src/components/home/QuickActionsStrip';
 import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
-import { COMMERCE_DEALS } from '@/src/mocks/commerce.mock';
-import { FEED_POSTS } from '@/src/mocks/feed.mock';
-import { FEED_STORIES } from '@/src/mocks/stories.mock';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
+import { authService } from '@/src/services/api/auth.service';
 import { useAuthStore } from '@/src/store/auth.store';
+import { hasCustomDisplayName, resolvePublicDisplayName } from '@/src/utils/display-name';
 
 export function HomeScreen() {
   const router = useRouter();
@@ -35,14 +34,19 @@ export function HomeScreen() {
 
   const isMember = hasAccessToken && me?.role === 'MEMBER';
 
+  const { data: memberStats } = useQuery({
+    queryKey: ['users', 'me', 'stats'],
+    queryFn: () => authService.getMemberStats(),
+    enabled: isMember,
+  });
+
   const memberProfile =
     isMember && me?.profile
       ? {
-          displayName: me.profile.displayName ?? me.profile.username,
-          handle: `@${me.profile.username}`,
-          followers: '12.4k',
-          following: '620',
-          posts: '89',
+          displayName: resolvePublicDisplayName(me.profile.displayName, me.profile.username),
+          handle: hasCustomDisplayName(me.profile.displayName) ? undefined : `@${me.profile.username}`,
+          postsCount: memberStats?.postsCount,
+          productsCount: memberStats?.productsCount,
           bio: 'Creator profile with social + commerce experiences.',
         }
       : null;
@@ -112,10 +116,15 @@ export function HomeScreen() {
           ) : null}
         </View>
 
-        <HomeSearchBar />
-        <StoriesRow stories={FEED_STORIES} />
+        <HomeSearchBar onPress={() => router.push('/(tabs)/shop/search')} />
         <PromoBanner />
-        <QuickActionsStrip />
+        <QuickActionsStrip
+          onActionPress={(key) => {
+            if (key === 'shop') router.push('/(tabs)/shop');
+            else if (key === 'live') router.push('/(tabs)/capture');
+            else if (key === 'inbox') router.push('/explore');
+          }}
+        />
 
         <ThemedText type="subtitle" style={styles.sectionTitle}>
           {t('homeToday')}
@@ -128,8 +137,8 @@ export function HomeScreen() {
           <ProfileSummaryCard profile={memberProfile} />
         ) : null}
 
-        <CommerceWidgetRow deals={COMMERCE_DEALS} onSeeAllPress={() => router.push('/(tabs)/shop')} />
-        <FeedSection posts={FEED_POSTS} />
+        <HomeCommerceDeals />
+        <HomePostsFeed />
       </ScrollView>
     </ThemedView>
   );

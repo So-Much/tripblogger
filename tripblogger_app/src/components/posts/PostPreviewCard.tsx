@@ -3,23 +3,17 @@ import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PostMediaBlock } from './PostMediaBlock';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { formatLocalDateTime } from '@/src/utils/datetime';
+import { getPostBodyPlainText } from '@/src/utils/post-hashtag-content';
+import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import type { PostDto, ReactionTypeDto } from '@/src/types/post';
 
 const SINGLE_TAP_DELAY_MS = 240;
 
-function previewFromHtml(html: string, max = 160): string {
-  const t = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+function previewFromHtml(html: string, tags: string[], max = 160): string {
+  const t = getPostBodyPlainText(html, tags);
   return t.length > max ? `${t.slice(0, max)}…` : t;
-}
-
-function formatDateTime(value: string): string {
-  const d = new Date(value);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy}, ${hh}:${min}`;
 }
 
 export function PostPreviewCard({
@@ -27,6 +21,7 @@ export function PostPreviewCard({
   onPress,
   onDoubleTapHeart,
   onOpenReactionPicker,
+  onShare,
   reactionTypes,
   cardColor,
   borderColor,
@@ -36,6 +31,7 @@ export function PostPreviewCard({
   onPress: () => void;
   onDoubleTapHeart: () => void;
   onOpenReactionPicker: (anchor: { x: number; y: number }) => void;
+  onShare?: () => void;
   reactionTypes: ReactionTypeDto[];
   cardColor: string;
   borderColor: string;
@@ -121,8 +117,18 @@ export function PostPreviewCard({
         <ThemedText type="defaultSemiBold" numberOfLines={2}>
           {post.title}
         </ThemedText>
+        {post.author ? (
+          <ThemedText style={[styles.meta, { color: mutedColor }]} numberOfLines={1}>
+            {resolvePublicDisplayName(post.author.displayName, post.author.username)}
+            {post.category ? ` · ${post.category}` : ''}
+          </ThemedText>
+        ) : post.category ? (
+          <ThemedText style={[styles.meta, { color: mutedColor }]} numberOfLines={1}>
+            {post.category}
+          </ThemedText>
+        ) : null}
         <ThemedText style={[styles.meta, { color: mutedColor }]}>
-          {formatDateTime(post.createdAt)}
+          {formatLocalDateTime(post.createdAt)}
         </ThemedText>
         <PostMediaBlock
           media={post.media}
@@ -137,7 +143,7 @@ export function PostPreviewCard({
           deferViewerOpen={runDeferredPostAction}
         />
         <ThemedText style={{ color: mutedColor }} numberOfLines={2}>
-          {previewFromHtml(post.contentHtml)}
+          {previewFromHtml(post.contentHtml, post.tags)}
         </ThemedText>
       </Pressable>
 
@@ -163,10 +169,13 @@ export function PostPreviewCard({
             <IconSymbol name="bubble.left.and.bubble.right.fill" size={16} color={mutedColor} />
             <ThemedText style={styles.actionText}>{post.commentCount}</ThemedText>
           </Pressable>
-          <Pressable disabled style={styles.actionBtn}>
+          <PressableScale
+            onPress={() => onShare?.()}
+            disabled={!onShare}
+            style={[styles.actionBtn, !onShare ? styles.actionBtnDisabled : null]}>
             <IconSymbol name="paperplane.fill" size={16} color={mutedColor} />
             <ThemedText style={styles.actionText}>{post.shareCount}</ThemedText>
-          </Pressable>
+          </PressableScale>
         </View>
       ) : (
         <View style={[styles.draftHintRow, { borderTopColor: borderColor }]}>
@@ -192,6 +201,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  actionBtnDisabled: { opacity: 0.55 },
   actionText: { fontSize: 12, fontWeight: '600' },
   reactIconWrap: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   reactImage: { width: 18, height: 18, borderRadius: 9 },

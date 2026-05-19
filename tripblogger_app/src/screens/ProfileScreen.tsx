@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -6,14 +7,24 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
+import { useMeQuery } from '@/src/hooks/useAuth';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useI18n } from '@/src/i18n';
+import { authService } from '@/src/services/api/auth.service';
+import { hasCustomDisplayName, resolvePublicDisplayName } from '@/src/utils/display-name';
 
 export function ProfileScreen() {
   const router = useRouter();
+  useMeQuery();
   const { t } = useI18n();
   const me = useAuthStore((s) => s.me);
   const isMember = me?.role === 'MEMBER';
+
+  const { data: memberStats } = useQuery({
+    queryKey: ['users', 'me', 'stats'],
+    queryFn: () => authService.getMemberStats(),
+    enabled: isMember,
+  });
   const logout = useAuthStore((s) => s.logout);
   const accent = useThemeColor({}, 'accent');
   const surface = useThemeColor({}, 'surface');
@@ -24,19 +35,14 @@ export function ProfileScreen() {
 
   const profile = me?.profile
     ? {
-        displayName: me.profile.displayName ?? me.profile.username,
-        handle: `@${me.profile.username}`,
-        followers: '12.4k',
-        following: '620',
-        posts: '89',
+        displayName: resolvePublicDisplayName(me.profile.displayName, me.profile.username),
+        handle: hasCustomDisplayName(me.profile.displayName) ? undefined : `@${me.profile.username}`,
+        postsCount: memberStats?.postsCount,
+        productsCount: memberStats?.productsCount,
         bio: t('profileMemberBio'),
       }
     : {
         displayName: 'Member',
-        handle: '@member',
-        followers: '—',
-        following: '—',
-        posts: '—',
         bio: t('profileLoadingBio'),
       };
 

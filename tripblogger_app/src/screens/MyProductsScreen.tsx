@@ -49,6 +49,7 @@ export function MyProductsScreen() {
         <ProductCard
           product={item}
           onPress={() => router.push(`/(tabs)/shop/${item.id}` as Href)}
+          onLongPress={() => router.push(`/(tabs)/shop/edit/${item.id}` as Href)}
           borderColor={border}
           cardColor={card}
           tint={tint}

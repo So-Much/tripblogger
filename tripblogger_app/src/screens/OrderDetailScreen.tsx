@@ -19,6 +19,7 @@ import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { Image } from 'expo-image';
 import { PriceLabel } from '@/src/components/commerce/PriceLabel';
 import type { ShipmentCarrier, ShipmentDto, ShipmentStatus } from '@/src/types/commerce';
 
@@ -234,8 +235,13 @@ export function OrderDetailScreen() {
           </View>
         ) : null}
 
-        {(o.items ?? []).map((line) => (
+        {(o.items ?? []).map((line) => {
+          const thumb = line.product?.media?.[0]?.thumbnailUrl ?? line.product?.media?.[0]?.url;
+          return (
           <View key={line.id} style={[styles.line, { borderColor: border }]}>
+            <View style={styles.lineRow}>
+              {thumb ? <Image source={{ uri: thumb }} style={styles.lineThumb} contentFit="cover" /> : null}
+              <View style={styles.lineBody}>
             <ThemedText>{line.productTitleSnapshot}</ThemedText>
             <ThemedText>
               x{line.quantity} · <PriceLabel amount={line.priceSnapshot} />
@@ -258,8 +264,11 @@ export function OrderDetailScreen() {
             {isBuyer && line.rated ? (
               <ThemedText style={styles.small}>{t('ratingDone')}</ThemedText>
             ) : null}
+              </View>
+            </View>
           </View>
-        ))}
+        );
+        })}
 
         {isBuyer && o.status === 'PENDING' ? (
           <Pressable style={[styles.btn, { borderColor: '#b91c1c' }]} onPress={() => cancel.mutate()}>
@@ -369,6 +378,9 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 6, marginTop: 4 },
   small: { fontSize: 12, opacity: 0.8 },
   line: { borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 8, gap: 4 },
+  lineRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  lineThumb: { width: 56, height: 56, borderRadius: 8 },
+  lineBody: { flex: 1, gap: 4 },
   btn: { marginTop: 12, padding: 14, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
   btnW: { color: '#fff', fontWeight: '700' },
   linkBtn: { marginTop: 8, padding: 8, borderRadius: 8, borderWidth: 1, alignSelf: 'flex-start' },

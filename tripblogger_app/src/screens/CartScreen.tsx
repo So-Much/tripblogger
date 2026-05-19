@@ -11,6 +11,7 @@ import { formatApiError } from '@/src/utils/format-api-error';
 import { Image } from 'expo-image';
 import { PriceLabel } from '@/src/components/commerce/PriceLabel';
 import { SellerBadge } from '@/src/components/commerce/SellerBadge';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
 
 export function CartScreen() {
   const { t } = useI18n();
@@ -89,9 +90,11 @@ export function CartScreen() {
           <ThemedText type="subtitle" style={{ marginTop: 12 }}>
             {t('subtotalLabel')}: <PriceLabel amount={q.data?.subTotal ?? 0} />
           </ThemedText>
-          <Pressable style={[styles.checkout, { backgroundColor: tint }]} onPress={() => router.push('/(tabs)/shop/checkout')}>
+          <PressableScale
+            style={[styles.checkout, { backgroundColor: tint }]}
+            onPress={() => router.push('/(tabs)/shop/checkout')}>
             <ThemedText style={styles.checkoutTxt}>{t('orderCheckout')}</ThemedText>
-          </Pressable>
+          </PressableScale>
         </ScrollView>
       )}
     </SafeAreaView>

@@ -1,5 +1,5 @@
-import { useLayoutEffect, useState } from 'react';
-import { Alert, ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Alert, ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useNavigation, useRouter, type Href } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,8 @@ import { PriceLabel } from '@/src/components/commerce/PriceLabel';
 import { ProductTypeBadge } from '@/src/components/commerce/ProductTypeBadge';
 import { SellerBadge } from '@/src/components/commerce/SellerBadge';
 import { StockInfo } from '@/src/components/commerce/StockInfo';
+import { ActionPulse } from '@/src/components/feedback/ActionPulse';
+import { PressableScale } from '@/src/components/feedback/PressableScale';
 
 export function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,6 +31,8 @@ export function ProductDetailScreen() {
   const text = useThemeColor({}, 'text');
   const card = useThemeColor({}, 'card');
   const [qty, setQty] = useState('1');
+  const [cartPulse, setCartPulse] = useState(0);
+  const cartBounce = useRef(new Animated.Value(1)).current;
 
   const q = useQuery({
     queryKey: ['commerce', 'product', id],
@@ -52,6 +56,12 @@ export function ProductDetailScreen() {
     mutationFn: () =>
       commerceService.addToCart({ productId: String(id), quantity: Math.max(1, parseInt(qty, 10) || 1) }),
     onSuccess: () => {
+      setCartPulse((k) => k + 1);
+      cartBounce.setValue(1);
+      Animated.sequence([
+        Animated.timing(cartBounce, { toValue: 1.2, duration: 100, useNativeDriver: true }),
+        Animated.spring(cartBounce, { toValue: 1, speed: 18, bounciness: 10, useNativeDriver: true }),
+      ]).start();
       void qc.invalidateQueries({ queryKey: ['commerce', 'cart'] });
       Alert.alert(t('cartTitle'), t('cartAddedSuccess'));
     },
@@ -120,6 +130,13 @@ export function ProductDetailScreen() {
             </View>
           ) : null}
           <ThemedText style={styles.desc}>{p.description.replace(/<[^>]+>/g, ' ')}</ThemedText>
+          {isOwn ? (
+            <Pressable
+              style={[styles.cta, { backgroundColor: tint, marginTop: 12 }]}
+              onPress={() => router.push(`/(tabs)/shop/edit/${p.id}` as Href)}>
+              <ThemedText style={styles.ctaTxt}>{t('productEdit')}</ThemedText>
+            </Pressable>
+          ) : null}
           {canBuy && p.status === 'PUBLISHED' && !isOwn ? (
             <View style={styles.buyRow}>
               <TextInput
@@ -129,14 +146,18 @@ export function ProductDetailScreen() {
                 accessibilityLabel={t('productQuantityShort')}
                 style={[styles.qty, { borderColor: border, color: text }]}
               />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('addToCart')}
-                style={[styles.cta, { backgroundColor: tint, opacity: addCart.isPending ? 0.65 : 1 }]}
-                onPress={() => addCart.mutate()}
-                disabled={addCart.isPending}>
-                <ThemedText style={styles.ctaTxt}>{t('addToCart')}</ThemedText>
-              </Pressable>
+              <ActionPulse pulseKey={cartPulse} style={{ flex: 1 }}>
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel={t('addToCart')}
+                  style={[styles.cta, { backgroundColor: tint, opacity: addCart.isPending ? 0.65 : 1 }]}
+                  onPress={() => addCart.mutate()}
+                  disabled={addCart.isPending}>
+                  <Animated.View style={{ transform: [{ scale: cartBounce }], alignItems: 'center' }}>
+                    <ThemedText style={styles.ctaTxt}>{t('addToCart')}</ThemedText>
+                  </Animated.View>
+                </PressableScale>
+              </ActionPulse>
               {isMember ? (
                 <Pressable
                   accessibilityRole="button"
