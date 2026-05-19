@@ -20,6 +20,7 @@ import { CheckoutDto, QueryOrdersDto } from './dto/shopping.dto';
 import { CouponsService } from './coupons.service';
 import { PaymentsService } from './payments.service';
 import { FREE_SHIPPING_THRESHOLD, ORDER_STATUSES, SHIPPING_FEE } from './constants';
+import { parseProductMediaJson } from './commerce-media.util';
 
 function orderCursorFrom(row: OrderEntity) {
   return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`, 'utf8').toString('base64url');
@@ -104,7 +105,13 @@ export class OrdersService {
         ? {
             id: l.product.id,
             title: l.product.title,
-            media: [],
+            media: parseProductMediaJson(l.product.mediaJson).map((m) => ({
+              type: m.type,
+              url: m.url,
+              thumbnailUrl: m.thumbnailUrl,
+              previewUrl: m.previewUrl,
+              originalUrl: m.originalUrl,
+            })),
             price: Number(l.product.price),
             status: l.product.status,
           }
