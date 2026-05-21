@@ -20,7 +20,7 @@ import type { PostDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { PostPreviewCard } from '@/src/components/posts/PostPreviewCard';
 import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
-import { applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
+import { applyPostPatch, optimisticTogglePostReaction } from '@/src/services/realtime/posts-realtime.sync';
 
 export function MyPostsScreen() {
   const { t } = useI18n();
@@ -69,25 +69,8 @@ export function MyPostsScreen() {
     mutationFn: ({ postId, typeCode }: { postId: string; typeCode: string }) =>
       postsService.togglePostReaction(postId, typeCode),
     onMutate: async ({ postId, typeCode }) => {
-      const prev = queryClient.getQueryData(['posts', postId]) as PostDto | undefined;
-      if (!prev) return { prev };
-      const existedCode = prev.myReactionCodes.find((code) => code !== 'SHARE');
-      const isSame = existedCode === typeCode;
-      const nextCounts = { ...prev.reactionCounts };
-      const nextMyReactionCodes: string[] = prev.myReactionCodes.filter((code) => code === 'SHARE');
-      if (existedCode) {
-        nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
-      }
-      if (!isSame) {
-        nextCounts[typeCode] = (nextCounts[typeCode] ?? 0) + 1;
-        nextMyReactionCodes.push(typeCode);
-      }
-      applyPostPatch(queryClient, {
-        postId,
-        reactionCounts: nextCounts,
-        myReactionCodes: nextMyReactionCodes,
-      });
-      return { prev };
+      const snapshot = optimisticTogglePostReaction(queryClient, postId, typeCode);
+      return { snapshot };
     },
     onSuccess: (result) => {
       applyPostPatch(queryClient, {
@@ -98,8 +81,16 @@ export function MyPostsScreen() {
         shareCount: result.post.shareCount,
       });
     },
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+    onError: (e, _vars, context) => {
+      if (context?.snapshot) {
+        applyPostPatch(queryClient, {
+          postId: context.snapshot.id,
+          reactionCounts: context.snapshot.reactionCounts,
+          myReactionCodes: context.snapshot.myReactionCodes,
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
+      }
     },
   });
 
@@ -214,6 +205,7 @@ export function MyPostsScreen() {
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
+        extraData={items.map((p) => `${p.id}:${p.myReactionCodes.join(',')}:${JSON.stringify(p.reactionCounts)}`).join('|')}
         renderItem={renderItem}
         contentContainerStyle={items.length === 0 ? styles.emptyContainer : styles.listContent}
         refreshControl={

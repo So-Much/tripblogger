@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -28,8 +28,11 @@ import { formatApiError } from '@/src/utils/format-api-error';
 import { uploadAllPendingMedia } from '@/src/utils/upload-editor-media';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 import { HashtagChipInput } from '@/src/components/posts/HashtagChipInput';
+import { PostCategoryPicker } from '@/src/components/posts/PostCategoryPicker';
+import { PostLocationPicker } from '@/src/components/posts/PostLocationPicker';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { ShakeView, type ShakeViewHandle } from '@/src/components/feedback/ShakeView';
+import { useMeQuery } from '@/src/hooks/useAuth';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
 import {
   dedupeTags,
@@ -38,11 +41,12 @@ import {
   stripTrailingHashtagBlock,
 } from '@/src/utils/post-hashtag-content';
 import type { PostEditorMedia } from '@/src/types/post-editor-media';
+import type { ComposerLocation } from '@/src/types/place';
 import * as ImagePicker from 'expo-image-picker';
 
 type EditorMedia = PostEditorMedia;
-
-const TRAVEL_CATEGORIES = ['Biển', 'Núi', 'Thành phố', 'Ẩm thực', 'Văn hóa', 'Khác'] as const;
+type SaveTier = 'create' | 'meta' | 'core' | 'media';
+const EMPTY_DRAFT_HTML = '<p></p>';
 
 function DraggableMediaThumb({
   item,
@@ -91,41 +95,66 @@ export function PostCreateScreen() {
   const { postId } = useLocalSearchParams<{ postId?: string }>();
   const queryClient = useQueryClient();
   const isEditDraft = Boolean(postId);
+  const isMember = meQuery.data?.role === 'MEMBER';
   const [title, setTitle] = useState('');
   const [contentHtml, setContentHtml] = useState('');
   const [category, setCategory] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const formShakeRef = useRef<ShakeViewHandle>(null);
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
-  const [locationName, setLocationName] = useState('');
+  const [location, setLocation] = useState<ComposerLocation | null>(null);
   const [media, setMedia] = useState<EditorMedia[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const loadedPostIdRef = useRef<string | null>(null);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const createTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const metaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveRetriedRef = useRef(false);
+  const lastSaveTierRef = useRef<SaveTier>('core');
+  const skipMediaAutosaveRef = useRef(false);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const viewerWidth = Math.round(screenWidth);
   const viewerHeight = Math.round(screenHeight);
 
+  const meQuery = useMeQuery();
+
+  useEffect(() => {
+    if (meQuery.isLoading) return;
+    if (meQuery.data?.role !== 'MEMBER') {
+      router.replace('/(auth)/login');
+    }
+  }, [meQuery.isLoading, meQuery.data?.role, router]);
+
   const editingPostQuery = useQuery({
     queryKey: ['posts', postId],
     queryFn: () => postsService.getPost(String(postId)),
-    enabled: Boolean(postId),
+    enabled: Boolean(postId) && isMember,
   });
 
   const postMetaPayload = useMemo(() => {
     const normalizedTags = dedupeTags(tags);
     const trimmedCategory = category.trim();
-    const trimmedLocation = locationName.trim();
     return {
       category: trimmedCategory || undefined,
       tags: normalizedTags.length ? normalizedTags : undefined,
       visibility,
-      location: trimmedLocation ? { name: trimmedLocation } : undefined,
     };
-  }, [category, tags, visibility, locationName]);
+  }, [category, tags, visibility]);
+
+  const locationPayload = useCallback(
+    (forUpdate: boolean) => {
+      if (location) {
+        return { location: { name: location.name, lat: location.lat, lng: location.lng } };
+      }
+      return forUpdate ? { location: null as { name?: string; lat?: number; lng?: number } | null } : {};
+    },
+    [location],
+  );
 
   const buildSubmitContentHtml = useCallback(
     (forPublish: boolean) => {
@@ -155,6 +184,7 @@ export function PostCreateScreen() {
       return;
     }
     loadedPostIdRef.current = postId;
+    skipMediaAutosaveRef.current = true;
     setTitle(editingPostQuery.data.title);
     setCategory(editingPostQuery.data.category ?? '');
     const fromApi = editingPostQuery.data.tags ?? [];
@@ -162,8 +192,18 @@ export function PostCreateScreen() {
     setTags(dedupeTags([...fromApi, ...fromContent]));
     setContentHtml(stripTrailingHashtagBlock(editingPostQuery.data.contentHtml));
     setVisibility(editingPostQuery.data.visibility ?? 'PUBLIC');
-    const locName = editingPostQuery.data.location?.name;
-    setLocationName(typeof locName === 'string' ? locName : '');
+    const loc = editingPostQuery.data.location;
+    if (loc && typeof loc.name === 'string' && loc.name.trim()) {
+      const lat = typeof loc.lat === 'number' ? loc.lat : Number(loc.lat);
+      const lng = typeof loc.lng === 'number' ? loc.lng : Number(loc.lng);
+      setLocation({
+        name: loc.name,
+        lat: Number.isFinite(lat) ? lat : 0,
+        lng: Number.isFinite(lng) ? lng : 0,
+      });
+    } else {
+      setLocation(null);
+    }
     setMedia(
       editingPostQuery.data.media.map((m, idx) => ({
         localId: `${Date.now()}-${idx}`,
@@ -187,50 +227,72 @@ export function PostCreateScreen() {
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
 
+  const mapSubmitMedia = useCallback((items: EditorMedia[]) => {
+    return items.map(
+      ({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height, compositionId, mediaId }) => {
+        const row: {
+          mediaId?: string;
+          type: EditorMedia['type'];
+          url: string;
+          thumbnailUrl?: string;
+          previewUrl?: string;
+          originalUrl?: string;
+          placeholder?: string;
+          width?: number;
+          height?: number;
+          compositionId?: string;
+        } = { type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height, compositionId };
+        if (mediaId) row.mediaId = mediaId;
+        return row;
+      },
+    );
+  }, []);
+
   const saveDraftMutation = useMutation({
-    mutationFn: async (opts?: { forPublish?: boolean; silent?: boolean }) => {
+    mutationFn: async (opts?: { forPublish?: boolean; silent?: boolean; tier?: SaveTier }) => {
       const forPublish = opts?.forPublish ?? false;
+      const tier = opts?.tier ?? 'core';
       const html = buildSubmitContentHtml(forPublish);
+      const draftHtml = html || EMPTY_DRAFT_HTML;
+
       if (!title.trim()) throw new Error(t('postsValidationTitle'));
-      if (!html) {
-        throw new Error(t('postsValidationContent'));
+      if (forPublish && !html) throw new Error(t('postsValidationContent'));
+
+      const shouldUploadMedia = tier === 'media' || forPublish;
+
+      let submitMedia: ReturnType<typeof mapSubmitMedia> | undefined;
+      if (shouldUploadMedia) {
+        const uploadedMedia = await uploadAllPendingMedia(media);
+        setMedia(uploadedMedia);
+        submitMedia = mapSubmitMedia(uploadedMedia);
       }
-      const uploadedMedia = await uploadAllPendingMedia(media);
-      setMedia(uploadedMedia);
-      const submitMedia = uploadedMedia.map(
-        ({ type, url, thumbnailUrl, previewUrl, originalUrl, placeholder, width, height, compositionId, mediaId }) => ({
-          mediaId,
-          type,
-          url,
-          thumbnailUrl,
-          previewUrl,
-          originalUrl,
-          placeholder,
-          width,
-          height,
-          compositionId,
-        }),
-      );
+
+      const base = {
+        title: title.trim(),
+        contentHtml: forPublish ? html : draftHtml,
+        ...postMetaPayload,
+        ...locationPayload(Boolean(postId)),
+      };
+
       if (postId) {
         return postsService.updatePost(String(postId), {
-          title: title.trim(),
-          contentHtml: html,
-          media: submitMedia,
-          ...postMetaPayload,
+          ...base,
+          ...(submitMedia !== undefined ? { media: submitMedia } : {}),
         });
       }
+
       return postsService.createPost({
-        title: title.trim(),
-        contentHtml: html,
-        media: submitMedia,
+        ...base,
+        media: submitMedia ?? [],
         status: 'DRAFT',
-        ...postMetaPayload,
       });
     },
     onSuccess: (data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
       if (variables?.silent) {
         setAutoSaveStatus('saved');
+        setAutoSaveError(null);
+        autoSaveRetriedRef.current = false;
         if (data?.id && !postId) {
           router.setParams({ postId: data.id });
         }
@@ -241,12 +303,23 @@ export function PostCreateScreen() {
       }
     },
     onMutate: (variables) => {
-      if (variables?.silent) setAutoSaveStatus('saving');
+      if (variables?.silent) {
+        setAutoSaveStatus('saving');
+        setAutoSaveError(null);
+      }
     },
     onError: (e: unknown, variables) => {
       if (!variables?.silent) {
         formShakeRef.current?.shake();
         setError(formatApiError(e, 'Không thể lưu bài viết.'));
+      } else {
+        const msg = formatApiError(e, t('postsAutoSaveFailed'));
+        setAutoSaveError(msg);
+        const tier = variables?.tier ?? lastSaveTierRef.current;
+        if (!autoSaveRetriedRef.current) {
+          autoSaveRetriedRef.current = true;
+          setTimeout(() => saveDraftMutateRef.current({ silent: true, tier }), 2000);
+        }
       }
       setAutoSaveStatus('idle');
     },
@@ -284,23 +357,56 @@ export function PostCreateScreen() {
     publishMutation.mutate();
   }, [publishMutation]);
 
-  const canAutoSave =
-    !isPublishedDraft &&
-    !publishMutation.isPending &&
-    !saveDraftMutation.isPending &&
-    Boolean(title.trim()) &&
-    Boolean(contentHtml.trim());
+  const autosaveBlocked =
+    isPublishedDraft || publishMutation.isPending || saveDraftMutation.isPending;
+
+  const scheduleSave = useCallback(
+    (tier: SaveTier, delayMs: number, ref: MutableRefObject<ReturnType<typeof setTimeout> | null>) => {
+      if (autosaveBlocked) return;
+      if (ref.current) clearTimeout(ref.current);
+      ref.current = setTimeout(() => {
+        lastSaveTierRef.current = tier;
+        saveDraftMutateRef.current({ silent: true, tier });
+      }, delayMs);
+    },
+    [autosaveBlocked],
+  );
 
   useEffect(() => {
-    if (!canAutoSave) return;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      saveDraftMutateRef.current({ silent: true });
-    }, 2500);
+    if (autosaveBlocked || postId || !title.trim()) return;
+    scheduleSave('create', 2500, createTimerRef);
     return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (createTimerRef.current) clearTimeout(createTimerRef.current);
     };
-  }, [title, contentHtml, category, tags, visibility, locationName, media, postId, canAutoSave]);
+  }, [title, postId, autosaveBlocked, scheduleSave]);
+
+  useEffect(() => {
+    if (autosaveBlocked || !postId) return;
+    scheduleSave('meta', 1000, metaTimerRef);
+    return () => {
+      if (metaTimerRef.current) clearTimeout(metaTimerRef.current);
+    };
+  }, [postId, category, tags, visibility, location, autosaveBlocked, scheduleSave]);
+
+  useEffect(() => {
+    if (autosaveBlocked || !postId) return;
+    scheduleSave('core', 2500, coreTimerRef);
+    return () => {
+      if (coreTimerRef.current) clearTimeout(coreTimerRef.current);
+    };
+  }, [postId, title, contentHtml, autosaveBlocked, scheduleSave]);
+
+  useEffect(() => {
+    if (autosaveBlocked || !postId) return;
+    if (skipMediaAutosaveRef.current) {
+      skipMediaAutosaveRef.current = false;
+      return;
+    }
+    scheduleSave('media', 2500, mediaTimerRef);
+    return () => {
+      if (mediaTimerRef.current) clearTimeout(mediaTimerRef.current);
+    };
+  }, [postId, media, autosaveBlocked, scheduleSave]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -375,6 +481,14 @@ export function PostCreateScreen() {
               <ThemedText style={[styles.autoSaveHint, { color: muted }]}>{t('postsAutoSaving')}</ThemedText>
             ) : autoSaveStatus === 'saved' ? (
               <ThemedText style={[styles.autoSaveHint, { color: muted }]}>{t('postsAutoSaved')}</ThemedText>
+            ) : autoSaveError ? (
+              <Pressable
+                onPress={() => saveDraftMutateRef.current({ silent: true, tier: lastSaveTierRef.current })}
+                hitSlop={8}>
+                <ThemedText style={[styles.autoSaveHint, { color: '#b91c1c' }]}>
+                  {autoSaveError} · {t('postsAutoSaveRetry')}
+                </ThemedText>
+              </Pressable>
             ) : null}
           </View>
           {isEditDraft ? (
@@ -408,30 +522,7 @@ export function PostCreateScreen() {
             style={[styles.contentInput, { borderColor: border, color: text, backgroundColor: card }]}
           />
 
-        <ThemedText style={[styles.label, { color: muted }]}>{t('postsCategoryLabel')}</ThemedText>
-        <View style={styles.chipRow}>
-          {TRAVEL_CATEGORIES.map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => setCategory(item)}
-              style={[
-                styles.chip,
-                {
-                  borderColor: category === item ? cta : border,
-                  backgroundColor: category === item ? `${cta}18` : card,
-                },
-              ]}>
-              <ThemedText style={styles.chipTxt}>{item}</ThemedText>
-            </Pressable>
-          ))}
-        </View>
-        <TextInput
-          value={category}
-          onChangeText={setCategory}
-          placeholder={t('postsCategoryPlaceholder')}
-          placeholderTextColor={muted}
-          style={[styles.metaInput, { borderColor: border, color: text, backgroundColor: card }]}
-        />
+        <PostCategoryPicker value={category} onChange={setCategory} />
 
         <ThemedText style={[styles.label, { color: muted }]}>{t('postsTagsLabel')}</ThemedText>
         <HashtagChipInput
@@ -460,14 +551,7 @@ export function PostCreateScreen() {
           ))}
         </View>
 
-        <ThemedText style={[styles.label, { color: muted }]}>{t('postsLocationLabel')}</ThemedText>
-        <TextInput
-          value={locationName}
-          onChangeText={setLocationName}
-          placeholder={t('postsLocationPlaceholder')}
-          placeholderTextColor={muted}
-          style={[styles.metaInput, { borderColor: border, color: text, backgroundColor: card }]}
-        />
+        <PostLocationPicker value={location} onChange={setLocation} />
 
         <View style={styles.row}>
           <Pressable onPress={() => void pickMedia()} style={[styles.mediaBtn, { borderColor: border }]}>

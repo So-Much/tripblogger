@@ -32,6 +32,7 @@ export async function uploadSingleEditorMedia(item: PostEditorMedia): Promise<Po
   return {
     ...item,
     pendingUpload: false,
+    mediaId: undefined,
     mimeType: undefined,
     fileName: undefined,
     url: uploaded.url,

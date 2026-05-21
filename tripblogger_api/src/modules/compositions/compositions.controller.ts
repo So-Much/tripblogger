@@ -12,7 +12,7 @@ export class CompositionsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   list(@Query('active') active?: string) {
     const activeOnly = active !== 'false';
@@ -21,7 +21,7 @@ export class CompositionsController {
 
   @Get(':slug')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
-  @Roles('MEMBER')
+  @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   findBySlug(@Param('slug') slug: string) {
     return this.compositionsService.findBySlug(slug);

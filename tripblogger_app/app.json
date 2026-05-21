@@ -49,6 +49,20 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow TripBlogger to suggest nearby places when you check in to a post."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow TripBlogger to save photos you capture to your library.",
+          "savePhotosPermission": "Allow TripBlogger to save photos you capture to your library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
         "react-native-vision-camera",
         {
           "cameraPermissionText": "Allow TripBlogger to use the camera for composition-guided photos.",

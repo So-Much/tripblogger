@@ -23,39 +23,76 @@ type CommentCreatedPayload = {
   commentCount: number;
 };
 
-export function applyPostPatch(queryClient: QueryClient, patch: PostPatch) {
-  queryClient.setQueryData<PostDto>(['posts', patch.postId], (prev) => {
-    if (!prev) return prev;
-    return {
-      ...prev,
-      reactionCounts: patch.reactionCounts ?? prev.reactionCounts,
-      myReactionCodes: patch.myReactionCodes ?? prev.myReactionCodes,
-      commentCount: patch.commentCount ?? prev.commentCount,
-      shareCount: patch.shareCount ?? prev.shareCount,
-    };
-  });
+function mergePostPatch(target: PostDto, patch: PostPatch): PostDto {
+  return {
+    ...target,
+    reactionCounts: patch.reactionCounts ?? target.reactionCounts,
+    myReactionCodes: patch.myReactionCodes ?? target.myReactionCodes,
+    commentCount: patch.commentCount ?? target.commentCount,
+    shareCount: patch.shareCount ?? target.shareCount,
+  };
+}
 
-  const cacheEntries = queryClient.getQueriesData<InfiniteData<PaginatedPosts>>({ queryKey: ['posts', 'mine'] });
+function patchInfinitePostLists(queryClient: QueryClient, keyPrefix: readonly unknown[], patch: PostPatch) {
+  const cacheEntries = queryClient.getQueriesData<InfiniteData<PaginatedPosts>>({ queryKey: keyPrefix });
   for (const [key, value] of cacheEntries) {
     if (!value) continue;
     queryClient.setQueryData<InfiniteData<PaginatedPosts>>(key, {
       ...value,
       pages: value.pages.map((p) => ({
         ...p,
-        items: p.items.map((it) =>
-          it.id === patch.postId
-            ? {
-                ...it,
-                reactionCounts: patch.reactionCounts ?? it.reactionCounts,
-                myReactionCodes: patch.myReactionCodes ?? it.myReactionCodes,
-                commentCount: patch.commentCount ?? it.commentCount,
-                shareCount: patch.shareCount ?? it.shareCount,
-              }
-            : it,
-        ),
+        items: p.items.map((it) => (it.id === patch.postId ? mergePostPatch(it, patch) : it)),
       })),
     });
   }
+}
+
+export function findPostInCaches(queryClient: QueryClient, postId: string): PostDto | undefined {
+  const detail = queryClient.getQueryData<PostDto>(['posts', postId]);
+  if (detail) return detail;
+
+  for (const prefix of [['posts', 'mine'], ['posts', 'feed']] as const) {
+    const entries = queryClient.getQueriesData<InfiniteData<PaginatedPosts>>({ queryKey: prefix });
+    for (const [, value] of entries) {
+      if (!value) continue;
+      const hit = value.pages.flatMap((p) => p.items).find((it) => it.id === postId);
+      if (hit) return hit;
+    }
+  }
+  return undefined;
+}
+
+export function computeOptimisticReaction(post: PostDto, typeCode: string) {
+  const existedCode = post.myReactionCodes.find((code) => code !== 'SHARE');
+  const isSame = existedCode === typeCode;
+  const nextCounts = { ...post.reactionCounts };
+  const nextMyReactionCodes: string[] = post.myReactionCodes.filter((code) => code === 'SHARE');
+  if (existedCode) {
+    nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
+  }
+  if (!isSame) {
+    nextCounts[typeCode] = (nextCounts[typeCode] ?? 0) + 1;
+    nextMyReactionCodes.push(typeCode);
+  }
+  return { reactionCounts: nextCounts, myReactionCodes: nextMyReactionCodes };
+}
+
+export function optimisticTogglePostReaction(queryClient: QueryClient, postId: string, typeCode: string) {
+  const post = findPostInCaches(queryClient, postId);
+  if (!post) return null;
+  const { reactionCounts, myReactionCodes } = computeOptimisticReaction(post, typeCode);
+  applyPostPatch(queryClient, { postId, reactionCounts, myReactionCodes });
+  return post;
+}
+
+export function applyPostPatch(queryClient: QueryClient, patch: PostPatch) {
+  queryClient.setQueryData<PostDto>(['posts', patch.postId], (prev) => {
+    if (!prev) return prev;
+    return mergePostPatch(prev, patch);
+  });
+
+  patchInfinitePostLists(queryClient, ['posts', 'mine'], patch);
+  patchInfinitePostLists(queryClient, ['posts', 'feed'], patch);
 }
 
 export function applyCommentCreated(queryClient: QueryClient, payload: CommentCreatedPayload) {
@@ -77,4 +114,3 @@ export function applyCommentCreated(queryClient: QueryClient, payload: CommentCr
     };
   });
 }
-

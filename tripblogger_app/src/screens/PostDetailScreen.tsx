@@ -35,7 +35,7 @@ import { formatLocalDateTime } from '@/src/utils/datetime';
 import { getPostBodyPlainText } from '@/src/utils/post-hashtag-content';
 import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
-import { applyCommentCreated, applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
+import { applyCommentCreated, applyPostPatch, optimisticTogglePostReaction } from '@/src/services/realtime/posts-realtime.sync';
 import { useAuthStore } from '@/src/store/auth.store';
 
 const SINGLE_TAP_DELAY_MS = 240;
@@ -147,27 +147,8 @@ export function PostDetailScreen() {
   const togglePostReact = useMutation({
     mutationFn: (typeCode: string) => postsService.togglePostReaction(String(id), typeCode),
     onMutate: async (typeCode) => {
-      const current = queryClient.getQueryData<PostDto>(['posts', id]);
-      if (!current) return { current };
-      const existedCode = current.myReactionCodes.find((code) => code !== 'SHARE');
-      const isSame = existedCode === typeCode;
-      const nextCounts = {
-        ...current.reactionCounts,
-      };
-      const nextMyReactionCodes: string[] = current.myReactionCodes.filter((code) => code === 'SHARE');
-      if (existedCode) {
-        nextCounts[existedCode] = Math.max((nextCounts[existedCode] ?? 0) - 1, 0);
-      }
-      if (!isSame) {
-        nextCounts[typeCode] = (nextCounts[typeCode] ?? 0) + 1;
-        nextMyReactionCodes.push(typeCode);
-      }
-      applyPostPatch(queryClient, {
-        postId: String(id),
-        reactionCounts: nextCounts,
-        myReactionCodes: nextMyReactionCodes,
-      });
-      return { current };
+      const snapshot = optimisticTogglePostReaction(queryClient, String(id), typeCode);
+      return { snapshot };
     },
     onSuccess: (r) => {
       applyPostPatch(queryClient, {
@@ -179,9 +160,17 @@ export function PostDetailScreen() {
       });
       setActionErr(null);
     },
-    onError: (e) => {
-      void queryClient.invalidateQueries({ queryKey: ['posts', id] });
-      setActionErr(formatApiError(e, 'Không thể cập nhật tương tác.'));
+    onError: (e, _vars, context) => {
+      if (context?.snapshot) {
+        applyPostPatch(queryClient, {
+          postId: context.snapshot.id,
+          reactionCounts: context.snapshot.reactionCounts,
+          myReactionCodes: context.snapshot.myReactionCodes,
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['posts', id] });
+      }
+      setActionErr(formatApiError(e, t('postsReactionFailed')));
     },
   });
 
@@ -269,6 +258,7 @@ export function PostDetailScreen() {
   }
 
   const triggerHeartReact = () => {
+    if (!canInteract) return;
     runReactPulse();
     togglePostReact.mutate('HEART');
   };

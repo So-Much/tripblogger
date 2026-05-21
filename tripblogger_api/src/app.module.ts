@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { PostsModule } from './modules/posts/posts.module';
 import { CompositionsModule } from './modules/compositions/compositions.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
+import { PlacesModule } from './modules/places/places.module';
 import { RedisModule } from './config/redis/redis.module';
 import { QueueModule } from './config/queue/queue.module';
 import { OtelModule } from './config/otel/otel.module';
@@ -32,6 +33,7 @@ import { OtelModule } from './config/otel/otel.module';
     PostsModule,
     CompositionsModule,
     CommerceModule,
+    PlacesModule,
   ],
 })
 export class AppModule {}

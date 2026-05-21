@@ -8,7 +8,7 @@ import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
-import { applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
+import { applyPostPatch, optimisticTogglePostReaction } from '@/src/services/realtime/posts-realtime.sync';
 import { useAuthStore } from '@/src/store/auth.store';
 import type { PostDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
@@ -56,6 +56,10 @@ export function HomePostsFeed() {
   const reactMutation = useMutation({
     mutationFn: ({ postId, typeCode }: { postId: string; typeCode: string }) =>
       postsService.togglePostReaction(postId, typeCode),
+    onMutate: async ({ postId, typeCode }) => {
+      const snapshot = optimisticTogglePostReaction(queryClient, postId, typeCode);
+      return { snapshot };
+    },
     onSuccess: (result) => {
       applyPostPatch(queryClient, {
         postId: result.post.id,

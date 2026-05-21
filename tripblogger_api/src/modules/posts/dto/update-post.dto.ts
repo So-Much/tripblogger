@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateIf, ValidateNested } from 'class-validator';
 import { LocationDto } from './create-post.dto';
 import { PostStatus, PostVisibility } from '../entities/post.entity';
 
@@ -16,9 +16,10 @@ export class UpdatePostDto {
   contentHtml?: string;
 
   @IsOptional()
+  @ValidateIf((_, value) => value != null)
   @ValidateNested()
   @Type(() => LocationDto)
-  location?: LocationDto;
+  location?: LocationDto | null;
 
   @IsOptional()
   @IsIn(['PUBLIC', 'PRIVATE'])

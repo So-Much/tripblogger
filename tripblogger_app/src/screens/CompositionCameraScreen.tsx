@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -37,6 +38,7 @@ import { useI18n } from '@/src/i18n';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
 import type { CompositionListItem } from '@/src/types/composition';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { saveCaptureToPhotoLibrary } from '@/src/utils/save-capture-photo';
 
 export function CompositionCameraScreen() {
   const { t } = useI18n();
@@ -146,8 +148,26 @@ export function CompositionCameraScreen() {
     [selectByDelta],
   );
 
-  const pushLocalHandoff = useCallback(
-    (uri: string, width?: number, height?: number, mimeType: string = 'image/jpeg', fileName?: string) => {
+  const handleCaptureResult = useCallback(
+    async (uri: string, width?: number, height?: number, mimeType: string = 'image/jpeg', fileName?: string) => {
+      if (!isMember) {
+        setError(null);
+        setBusy(true);
+        try {
+          await saveCaptureToPhotoLibrary(uri);
+          if (process.env.EXPO_OS === 'ios') {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          Alert.alert(t('captureSavedToLibrary'), t('captureGuestLoginHint'));
+        } catch (e) {
+          const denied = e instanceof Error && e.message === 'PHOTO_LIBRARY_PERMISSION_DENIED';
+          setError(denied ? t('photoPermissionMessage') : formatApiError(e, t('captureSaveFailed')));
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
       const item = {
         localId: `${Date.now()}-${Math.random()}`,
         type: 'image' as const,
@@ -162,7 +182,7 @@ export function CompositionCameraScreen() {
       usePostComposerHandoffStore.getState().setPending([item]);
       router.push('/(tabs)/posts/create');
     },
-    [router, selected?.id],
+    [isMember, router, selected?.id, t],
   );
 
   const cycleFlash = useCallback(() => {
@@ -192,8 +212,8 @@ export function CompositionCameraScreen() {
     });
     if (picked.canceled || !picked.assets[0]) return;
     const a = picked.assets[0];
-    pushLocalHandoff(a.uri, a.width, a.height, a.mimeType ?? 'image/jpeg', a.fileName ?? undefined);
-  }, [pushLocalHandoff, t]);
+    void handleCaptureResult(a.uri, a.width, a.height, a.mimeType ?? 'image/jpeg', a.fileName ?? undefined);
+  }, [handleCaptureResult, t]);
 
   const onShutter = useCallback(async () => {
     if (!camRef.current || !device || busy) return;
@@ -205,32 +225,19 @@ export function CompositionCameraScreen() {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
       const uri = Platform.OS === 'android' ? `file://${photo.path}` : photo.path;
-      pushLocalHandoff(uri, photo.width, photo.height, 'image/jpeg', `capture-${Date.now()}.jpg`);
+      void handleCaptureResult(uri, photo.width, photo.height, 'image/jpeg', `capture-${Date.now()}.jpg`);
     } catch (e) {
       setError(formatApiError(e, t('captureError')));
     } finally {
       setBusy(false);
     }
-  }, [busy, device, flash, pushLocalHandoff, t]);
+  }, [busy, device, flash, handleCaptureResult, t]);
 
   if (meQuery.isLoading || compositionsQuery.isLoading) {
     return (
       <ThemedView style={styles.center}>
         <ActivityIndicator />
       </ThemedView>
-    );
-  }
-
-  if (!isMember) {
-    return (
-      <SafeAreaView style={styles.flex} edges={['bottom']}>
-        <ThemedView style={styles.guestWrap}>
-          <ThemedText type="subtitle">{t('postsMemberRequired')}</ThemedText>
-          <Pressable onPress={() => router.push('/(auth)/login')} style={[styles.ctaGhost, { borderColor: border }]}>
-            <ThemedText type="link">{t('login')}</ThemedText>
-          </Pressable>
-        </ThemedView>
-      </SafeAreaView>
     );
   }
 
