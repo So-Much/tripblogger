@@ -2,7 +2,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-
 import { useI18n } from '@/src/i18n';
 
 const ACTION_ICONS: Record<string, IconSymbolName> = {
@@ -14,15 +13,16 @@ const ACTION_ICONS: Record<string, IconSymbolName> = {
 
 export function QuickActionsStrip({ onActionPress }: { onActionPress?: (key: string) => void }) {
   const { t } = useI18n();
+  const card = useThemeColor({}, 'card');
+  const border = useThemeColor({}, 'border');
+  const accent = useThemeColor({}, 'accent');
+
   const actions = [
     { key: 'feed', label: t('homeQuickFeed') },
     { key: 'shop', label: t('homeQuickShop') },
     { key: 'live', label: t('homeQuickLive') },
     { key: 'inbox', label: t('homeQuickInbox') },
   ];
-  const card = useThemeColor({}, 'card');
-  const border = useThemeColor({}, 'border');
-  const accent = useThemeColor({}, 'accent');
 
   return (
     <View style={styles.row}>

@@ -18,6 +18,14 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+type MediaItem = {
+  type: 'image' | 'video';
+  url: string;
+  thumbnailUrl?: string;
+  previewUrl?: string;
+  originalUrl?: string;
+};
+
 export function ProductEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useI18n();
@@ -33,15 +41,15 @@ export function ProductEditScreen() {
     enabled: Boolean(id),
   });
 
+  const cats = useQuery({ queryKey: ['commerce', 'categories'], queryFn: () => commerceService.listCategories() });
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('1');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [productType, setProductType] = useState<'NEW' | 'SECONDHAND'>('NEW');
-  const [media, setMedia] = useState<
-    { type: 'image' | 'video'; url: string; thumbnailUrl?: string; previewUrl?: string; originalUrl?: string }[]
-  >([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
 
   useEffect(() => {
     if (!productQ.data) return;
@@ -52,10 +60,16 @@ export function ProductEditScreen() {
     setStock(String(p.stock));
     setCategoryId(p.categoryId);
     setProductType(p.productType);
-    setMedia(p.media?.length ? [...p.media] : []);
+    setMedia(
+      (p.media ?? []).map((m) => ({
+        type: m.type === 'video' ? 'video' : 'image',
+        url: m.url,
+        thumbnailUrl: m.thumbnailUrl,
+        previewUrl: m.previewUrl,
+        originalUrl: m.originalUrl,
+      })),
+    );
   }, [productQ.data]);
-
-  const cats = useQuery({ queryKey: ['commerce', 'categories'], queryFn: () => commerceService.listCategories() });
 
   const save = useMutation({
     mutationFn: () =>
@@ -76,7 +90,18 @@ export function ProductEditScreen() {
   });
 
   const publish = useMutation({
-    mutationFn: () => commerceService.publishProduct(String(id)),
+    mutationFn: async () => {
+      await commerceService.updateProduct(String(id), {
+        title: title.trim(),
+        categoryId: categoryId!,
+        description: `<p>${description.trim()}</p>`,
+        price: parseFloat(price) || 0,
+        productType,
+        stock: parseInt(stock, 10) || 0,
+        media: media.length ? media : undefined,
+      });
+      return commerceService.publishProduct(String(id));
+    },
     onSuccess: (p) => {
       void qc.invalidateQueries({ queryKey: ['commerce'] });
       router.replace(`/(tabs)/shop/${p.id}` as Href);
@@ -174,7 +199,7 @@ export function ProductEditScreen() {
         <Pressable onPress={pick} style={[styles.btn, { borderColor: border }]}>
           <ThemedText type="link">{t('productAddPhoto')}</ThemedText>
         </Pressable>
-        {media[0] ? <Image source={{ uri: media[0].previewUrl ?? media[0].url }} style={styles.prev} /> : null}
+        {media[0] ? <Image source={{ uri: media[0].previewUrl ?? media[0].url }} style={styles.prev} contentFit="cover" /> : null}
         <PressableScale
           style={[styles.cta, { backgroundColor: tint }]}
           disabled={save.isPending || !categoryId || !title.trim()}
@@ -184,7 +209,7 @@ export function ProductEditScreen() {
         {isDraft ? (
           <PressableScale
             style={[styles.cta, { backgroundColor: '#166534', marginTop: 10 }]}
-            disabled={publish.isPending || !media[0]}
+            disabled={publish.isPending || !categoryId || !title.trim() || !media[0]}
             onPress={() => publish.mutate()}>
             <ThemedText style={styles.ctaTxt}>{t('productPublish')}</ThemedText>
           </PressableScale>

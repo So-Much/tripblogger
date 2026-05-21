@@ -199,7 +199,7 @@ export function CheckoutScreen() {
                     </ThemedText>
                     {c.minOrderValue != null && c.minOrderValue > 0 ? (
                       <ThemedText style={styles.couponMeta}>
-                        {t('couponMinOrder', { amount: String(c.minOrderValue) })}
+                        {t('couponMinOrder', { amount: c.minOrderValue.toLocaleString('vi-VN') })}
                       </ThemedText>
                     ) : null}
                   </View>
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   inp: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 15 },
   apply: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8, borderWidth: 1 },
   couponRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
-  couponChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, minWidth: 120 },
+  couponChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, minWidth: 120, gap: 2, maxWidth: 200 },
   couponMeta: { fontSize: 11, opacity: 0.75, marginTop: 2 },
   cta: { marginTop: 16, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
   ctaTxt: { color: '#fff', fontWeight: '700' },

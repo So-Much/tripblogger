@@ -22,6 +22,7 @@ import { PaymentsService } from './payments.service';
 import { toIsoString } from '../../common/utils/iso-date';
 import { parseProductMediaJson } from './commerce-media.util';
 import { FREE_SHIPPING_THRESHOLD, ORDER_STATUSES, SHIPPING_FEE } from './constants';
+import { parseProductMediaJson } from './commerce-media.util';
 
 function orderCursorFrom(row: OrderEntity) {
   return Buffer.from(`${row.createdAt.toISOString()}|${row.id}`, 'utf8').toString('base64url');

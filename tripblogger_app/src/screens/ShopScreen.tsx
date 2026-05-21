@@ -1,13 +1,5 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useNavigation, useRouter, type Href } from 'expo-router';
@@ -15,15 +7,16 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { CategoryChip } from '@/src/components/commerce/CategoryChip';
+import { ProductList } from '@/src/components/commerce/ProductList';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
-import type { CategoryDto, ProductDto } from '@/src/types/commerce';
-import { formatApiError } from '@/src/utils/format-api-error';
-import { CategoryChip } from '@/src/components/commerce/CategoryChip';
-import { ProductCard } from '@/src/components/commerce/ProductCard';
+import type { CategoryDto } from '@/src/types/commerce';
 
 const headerHitSlop = { top: 12, bottom: 12, left: 12, right: 12 };
+
+type SortBy = 'newest' | 'price_asc' | 'price_desc' | 'popular';
 
 export function ShopScreen() {
   const { t } = useI18n();
@@ -37,7 +30,7 @@ export function ShopScreen() {
 
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [productType, setProductType] = useState<'NEW' | 'SECONDHAND' | undefined>();
-  const [sortBy, setSortBy] = useState<'newest' | 'price_asc' | 'price_desc' | 'popular'>('newest');
+  const [sortBy, setSortBy] = useState<SortBy>('newest');
 
   const categoriesQuery = useQuery({
     queryKey: ['commerce', 'categories'],
@@ -56,9 +49,17 @@ export function ShopScreen() {
       }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
+    maxPages: 5,
   });
 
   const isMember = meQuery.data?.role === 'MEMBER';
+
+  const verifyQ = useQuery({
+    queryKey: ['commerce', 'seller-verification'],
+    queryFn: () => commerceService.getVerificationStatus(),
+    enabled: isMember,
+  });
+  const isVerifiedSeller = verifyQ.data?.status === 'APPROVED';
 
   const cartCountQuery = useQuery({
     queryKey: ['commerce', 'cart'],
@@ -120,125 +121,104 @@ export function ShopScreen() {
     }
   }, [productsQuery]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: ProductDto }) => (
-      <View style={{ width: '50%', paddingHorizontal: 4 }}>
-        <ProductCard
-          product={item}
-          onPress={() => router.push(`/(tabs)/shop/${item.id}` as Href)}
+  const listHeader = (
+    <>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
+        <CategoryChip
+          label={t('shopAllProducts')}
+          selected={!categoryId}
+          onPress={() => setCategoryId(undefined)}
           borderColor={border}
-          cardColor={card}
           tint={tint}
         />
-      </View>
-    ),
-    [router, border, card, tint],
+        {(categoriesQuery.data ?? []).map((c: CategoryDto) => (
+          <CategoryChip
+            key={c.id}
+            label={c.name}
+            selected={categoryId === c.id}
+            onPress={() => setCategoryId(c.id)}
+            borderColor={border}
+            tint={tint}
+          />
+        ))}
+      </ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        {(['newest', 'popular', 'price_asc', 'price_desc'] as SortBy[]).map((s) => (
+          <CategoryChip
+            key={s}
+            label={t(`shopSort_${s}`)}
+            selected={sortBy === s}
+            onPress={() => setSortBy(s)}
+            borderColor={border}
+            tint={tint}
+          />
+        ))}
+        <CategoryChip
+          label={t('productNew')}
+          selected={productType === 'NEW'}
+          onPress={() => setProductType(productType === 'NEW' ? undefined : 'NEW')}
+          borderColor={border}
+          tint={tint}
+        />
+        <CategoryChip
+          label={t('productSecondhand')}
+          selected={productType === 'SECONDHAND'}
+          onPress={() => setProductType(productType === 'SECONDHAND' ? undefined : 'SECONDHAND')}
+          borderColor={border}
+          tint={tint}
+        />
+      </ScrollView>
+      {isMember && !isVerifiedSeller ? (
+        <Pressable
+          style={[styles.verifyBanner, { borderColor: border, backgroundColor: card }]}
+          onPress={() => router.push('/(tabs)/shop/seller-verify')}>
+          <ThemedText type="defaultSemiBold">{t('sellerVerifyBanner')}</ThemedText>
+          <ThemedText style={{ color: muted, fontSize: 13 }}>{t('sellerVerifyBannerHint')}</ThemedText>
+        </Pressable>
+      ) : null}
+      {isMember ? (
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.btn, styles.btnGhost, { borderColor: border }]}
+            onPress={() => router.push('/(tabs)/shop/my-products')}>
+            <ThemedText type="link">{t('productMyProducts')}</ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.btn, styles.btnPrimary, { backgroundColor: tint }]}
+            onPress={() =>
+              isVerifiedSeller ? router.push('/(tabs)/shop/create') : router.push('/(tabs)/shop/seller-verify')
+            }>
+            <ThemedText style={styles.btnPrimaryTxt}>{t('productCreate')}</ThemedText>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.btn, styles.btnGhost, { borderColor: border }]}
+            onPress={() => router.push('/(tabs)/shop/orders')}>
+            <ThemedText type="link">{t('ordersTitle')}</ThemedText>
+          </Pressable>
+        </View>
+      ) : (
+        <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
+      )}
+    </>
   );
 
   return (
     <SafeAreaView style={styles.flex} edges={['bottom']}>
       <ThemedView style={styles.flex}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
-          <CategoryChip
-            label={t('shopAllProducts')}
-            selected={!categoryId}
-            onPress={() => setCategoryId(undefined)}
-            borderColor={border}
-            tint={tint}
-          />
-          {(categoriesQuery.data ?? []).map((c: CategoryDto) => (
-            <CategoryChip
-              key={c.id}
-              label={c.name}
-              selected={categoryId === c.id}
-              onPress={() => setCategoryId(c.id)}
-              borderColor={border}
-              tint={tint}
-            />
-          ))}
-        </ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          {(['newest', 'price_asc', 'price_desc', 'popular'] as const).map((s) => (
-            <CategoryChip
-              key={s}
-              label={t(`shopSort_${s}`)}
-              selected={sortBy === s}
-              onPress={() => setSortBy(s)}
-              borderColor={border}
-              tint={tint}
-            />
-          ))}
-          <CategoryChip
-            label={t('productNew')}
-            selected={productType === 'NEW'}
-            onPress={() => setProductType(productType === 'NEW' ? undefined : 'NEW')}
-            borderColor={border}
-            tint={tint}
-          />
-          <CategoryChip
-            label={t('productSecondhand')}
-            selected={productType === 'SECONDHAND'}
-            onPress={() => setProductType(productType === 'SECONDHAND' ? undefined : 'SECONDHAND')}
-            borderColor={border}
-            tint={tint}
-          />
-        </ScrollView>
-        {isMember ? (
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('productMyProductsA11y')}
-              style={[styles.btn, styles.btnGhost, { borderColor: border }]}
-              onPress={() => router.push('/(tabs)/shop/my-products')}>
-              <ThemedText type="link">{t('productMyProducts')}</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.btn, styles.btnGhost, { borderColor: border }]}
-              onPress={() => router.push('/(tabs)/shop/seller-verify')}>
-              <ThemedText type="link">{t('sellerVerificationTitle')}</ThemedText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('productCreateA11y')}
-              style={[styles.btn, styles.btnPrimary, { backgroundColor: tint }]}
-              onPress={() => router.push('/(tabs)/shop/create')}>
-              <ThemedText style={styles.btnPrimaryTxt}>{t('productCreate')}</ThemedText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('ordersTitleA11y')}
-              style={[styles.btn, styles.btnGhost, { borderColor: border }]}
-              onPress={() => router.push('/(tabs)/shop/orders')}>
-              <ThemedText type="link">{t('ordersTitle')}</ThemedText>
-            </Pressable>
-          </View>
-        ) : (
-          <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
-        )}
-        {productsQuery.isError ? (
-          <ThemedText style={styles.center}>{formatApiError(productsQuery.error, t('productEmpty'))}</ThemedText>
-        ) : null}
-        <FlatList
-          data={items}
-          keyExtractor={(i) => i.id}
-          numColumns={2}
-          renderItem={renderItem}
+        <ProductList
+          items={items}
+          isLoading={productsQuery.isLoading}
+          isRefetching={productsQuery.isRefetching}
+          isFetchingNextPage={productsQuery.isFetchingNextPage}
+          hasNextPage={Boolean(productsQuery.hasNextPage)}
+          onRefresh={() => void productsQuery.refetch()}
           onEndReached={onEndReached}
-          onEndReachedThreshold={0.4}
-          refreshControl={
-            <RefreshControl refreshing={productsQuery.isRefetching} onRefresh={() => void productsQuery.refetch()} />
-          }
-          ListFooterComponent={
-            productsQuery.isFetchingNextPage ? (
-              <ActivityIndicator style={{ marginVertical: 16 }} />
-            ) : null
-          }
-          ListEmptyComponent={
-            productsQuery.isLoading ? <ActivityIndicator style={{ marginTop: 40 }} /> : (
-              <ThemedText style={[styles.center, { color: muted }]}>{t('productEmpty')}</ThemedText>
-            )
-          }
-          contentContainerStyle={styles.list}
+          onPressProduct={(id) => router.push(`/(tabs)/shop/${id}` as Href)}
+          ListHeaderComponent={listHeader}
+          emptyLabel={productsQuery.isError ? t('productEmpty') : t('productEmpty')}
         />
       </ThemedView>
     </SafeAreaView>
@@ -263,13 +243,12 @@ const styles = StyleSheet.create({
   },
   cartBadgeTxt: { color: '#fff', fontSize: 10, fontWeight: '700' },
   catRow: { maxHeight: 44, paddingHorizontal: 12, marginBottom: 8 },
-  filterRow: { maxHeight: 44, paddingHorizontal: 12, marginBottom: 8 },
+  filterRow: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
+  verifyBanner: { marginHorizontal: 12, marginBottom: 10, padding: 12, borderRadius: 12, borderWidth: 1, gap: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, marginBottom: 10 },
   btn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
   btnGhost: {},
   btnPrimary: { borderWidth: 0 },
   btnPrimaryTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
   hint: { paddingHorizontal: 12, marginBottom: 8, fontSize: 13 },
-  list: { paddingHorizontal: 8, paddingBottom: 24 },
-  center: { textAlign: 'center', marginTop: 24, paddingHorizontal: 16 },
 });

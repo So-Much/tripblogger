@@ -30,6 +30,24 @@ export function ProductCreateScreen() {
   const [media, setMedia] = useState<{ type: 'image'; url: string; thumbnailUrl?: string; previewUrl?: string; originalUrl?: string }[]>([]);
 
   const cats = useQuery({ queryKey: ['commerce', 'categories'], queryFn: () => commerceService.listCategories() });
+  const verifyQ = useQuery({
+    queryKey: ['commerce', 'seller-verification'],
+    queryFn: () => commerceService.getVerificationStatus(),
+  });
+  const isVerified = verifyQ.data?.status === 'APPROVED';
+
+  const goVerify = () => router.push('/(tabs)/shop/seller-verify');
+
+  const tryPublish = () => {
+    if (!isVerified) {
+      Alert.alert(t('sellerVerifyRequiredTitle'), t('sellerVerifyRequiredBody'), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('sellerVerifyCta'), onPress: goVerify },
+      ]);
+      return;
+    }
+    publish.mutate();
+  };
 
   const create = useMutation({
     mutationFn: () =>
@@ -140,7 +158,7 @@ export function ProductCreateScreen() {
         <Pressable
           style={[styles.cta, { backgroundColor: '#166534', marginTop: 10 }]}
           disabled={publish.isPending || !categoryId || !title.trim() || !media[0]}
-          onPress={() => publish.mutate()}>
+          onPress={tryPublish}>
           <ThemedText style={styles.ctaTxt}>{t('productPublish')}</ThemedText>
         </Pressable>
       </ScrollView>

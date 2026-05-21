@@ -177,8 +177,10 @@ export const commerceService = {
     return res.data;
   },
 
-  async getVerificationStatus() {
-    const res = await apiClient.get('/commerce/seller/verification-status');
+  async getVerificationStatus(): Promise<{ status: 'PENDING' | 'APPROVED' | 'REJECTED'; requestedAt?: string } | null> {
+    const res = await apiClient.get<{ status: 'PENDING' | 'APPROVED' | 'REJECTED'; requestedAt?: string } | null>(
+      '/commerce/seller/verification-status',
+    );
     return res.data;
   },
 
