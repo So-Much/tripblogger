@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   tab: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
   tabTxt: { fontSize: 12 },
   list: { padding: 12, gap: 10, paddingBottom: 32 },
-  card: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 4 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 4 },
   row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   ph: { backgroundColor: '#2223' },

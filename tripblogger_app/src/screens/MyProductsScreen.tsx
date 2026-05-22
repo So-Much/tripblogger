@@ -19,8 +19,6 @@ export function MyProductsScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const me = useMeQuery();
-  const card = useThemeColor({}, 'card');
-  const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
 
   const q = useInfiniteQuery({
@@ -65,13 +63,10 @@ export function MyProductsScreen() {
               },
             ])
           }
-          borderColor={border}
-          cardColor={card}
-          tint={tint}
         />
       </View>
     ),
-    [router, border, card, tint, t, q],
+    [router, t, q],
   );
 
   if (me.data?.role !== 'MEMBER') {

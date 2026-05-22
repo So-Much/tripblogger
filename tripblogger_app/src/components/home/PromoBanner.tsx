@@ -9,15 +9,15 @@ export function PromoBanner() {
   const router = useRouter();
   const { t } = useI18n();
   const cta = useThemeColor({}, 'cta');
-  const card = useThemeColor({}, 'card');
+  const primary = useThemeColor({}, 'primary');
   const muted = useThemeColor({}, 'textMuted');
 
   return (
     <Pressable
       onPress={() => router.push('/(tabs)/shop')}
-      style={[styles.wrap, { borderColor: cta, backgroundColor: card }]}
+      style={[styles.wrap, { borderColor: cta, backgroundColor: primary }]}
     >
-      <View style={[styles.iconWrap, { borderColor: cta }]}>
+      <View style={[styles.iconWrap, { borderColor: cta, backgroundColor: '#FFFFFF' }]}>
         <IconSymbol size={22} name="bolt.fill" color={cta} />
       </View>
       <View style={styles.textCol}>
@@ -31,7 +31,7 @@ export function PromoBanner() {
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 12,

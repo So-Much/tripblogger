@@ -95,8 +95,8 @@ export function AddressListScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, padding: 12 },
   center: { textAlign: 'center', marginTop: 24 },
-  add: { padding: 12, borderRadius: 10, borderWidth: 1, marginBottom: 12, alignItems: 'center' },
-  card: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10, gap: 4 },
+  add: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12, alignItems: 'center', minHeight: 44 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10, gap: 4 },
   small: { fontSize: 13, opacity: 0.8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
 });

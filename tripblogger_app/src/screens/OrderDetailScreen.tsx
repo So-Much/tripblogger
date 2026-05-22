@@ -42,6 +42,9 @@ export function OrderDetailScreen() {
   const tint = useThemeColor({}, 'tint');
   const text = useThemeColor({}, 'text');
   const card = useThemeColor({}, 'card');
+  const onCta = useThemeColor({}, 'onCta');
+  const success = useThemeColor({}, 'success');
+  const primary = useThemeColor({}, 'primary');
 
   const [shipModal, setShipModal] = useState(false);
   const [shipCarrier, setShipCarrier] = useState<ShipmentCarrier>('OTHER');
@@ -277,17 +280,17 @@ export function OrderDetailScreen() {
         ) : null}
         {isSeller && o.status === 'PENDING' ? (
           <Pressable style={[styles.btn, { backgroundColor: tint }]} onPress={() => confirm.mutate()}>
-            <ThemedText style={styles.btnW}>{t('orderConfirm')}</ThemedText>
+            <ThemedText style={[styles.btnW, { color: onCta }]}>{t('orderConfirm')}</ThemedText>
           </Pressable>
         ) : null}
         {canCreateShipment ? (
-          <Pressable style={[styles.btn, { backgroundColor: '#166534' }]} onPress={() => setShipModal(true)}>
-            <ThemedText style={styles.btnW}>{t('orderShipmentCreate')}</ThemedText>
+          <Pressable style={[styles.btn, { backgroundColor: success }]} onPress={() => setShipModal(true)}>
+            <ThemedText style={[styles.btnW, { color: onCta }]}>{t('orderShipmentCreate')}</ThemedText>
           </Pressable>
         ) : null}
         {isBuyer && o.status === 'SHIPPING' ? (
           <Pressable style={[styles.btn, { backgroundColor: tint }]} onPress={() => received.mutate()}>
-            <ThemedText style={styles.btnW}>{t('orderReceived')}</ThemedText>
+            <ThemedText style={[styles.btnW, { color: onCta }]}>{t('orderReceived')}</ThemedText>
           </Pressable>
         ) : null}
       </ScrollView>
@@ -302,7 +305,13 @@ export function OrderDetailScreen() {
                 <Pressable
                   key={c}
                   onPress={() => setShipCarrier(c)}
-                  style={[styles.chip, { borderColor: shipCarrier === c ? tint : border }]}>
+                  style={[
+                    styles.chip,
+                    {
+                      borderColor: shipCarrier === c ? tint : border,
+                      backgroundColor: shipCarrier === c ? primary : 'transparent',
+                    },
+                  ]}>
                   <ThemedText>{c}</ThemedText>
                 </Pressable>
               ))}
@@ -315,7 +324,7 @@ export function OrderDetailScreen() {
               style={[styles.btn, { backgroundColor: tint }]}
               disabled={createShip.isPending}
               onPress={() => createShip.mutate()}>
-              <ThemedText style={styles.btnW}>{t('save')}</ThemedText>
+              <ThemedText style={[styles.btnW, { color: onCta }]}>{t('save')}</ThemedText>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -362,7 +371,7 @@ export function OrderDetailScreen() {
               style={[styles.btn, { backgroundColor: tint }]}
               disabled={submitRating.isPending || !ratingModal}
               onPress={() => submitRating.mutate()}>
-              <ThemedText style={styles.btnW}>{t('ratingSubmit')}</ThemedText>
+              <ThemedText style={[styles.btnW, { color: onCta }]}>{t('ratingSubmit')}</ThemedText>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -375,14 +384,14 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', padding: 24 },
   pad: { padding: 16, gap: 12, paddingBottom: 40 },
-  card: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 6, marginTop: 4 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6, marginTop: 4 },
   small: { fontSize: 12, opacity: 0.8 },
   line: { borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 8, gap: 4 },
   lineRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   lineThumb: { width: 56, height: 56, borderRadius: 8 },
   lineBody: { flex: 1, gap: 4 },
-  btn: { marginTop: 12, padding: 14, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
-  btnW: { color: '#fff', fontWeight: '700' },
+  btn: { marginTop: 12, padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', minHeight: 48 },
+  btnW: { fontWeight: '700' },
   linkBtn: { marginTop: 8, padding: 8, borderRadius: 8, borderWidth: 1, alignSelf: 'flex-start' },
   modalBackdrop: { flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 24 },
   modalBox: { borderRadius: 12, borderWidth: 1, padding: 16, gap: 10 },

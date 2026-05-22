@@ -70,7 +70,8 @@
           "microphonePermissionText": "Allow TripBlogger to use the microphone when recording video.",
           "enableFrameProcessors": true
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

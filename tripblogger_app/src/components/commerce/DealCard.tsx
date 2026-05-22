@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { withAlpha } from '@/constants/friendly-commerce';
+import { useCommerceTheme } from '@/hooks/use-commerce-theme';
 import { CommerceDeal } from '@/src/types/commerce';
 
 interface DealCardProps {
@@ -11,45 +12,47 @@ interface DealCardProps {
 }
 
 function DealCardInner({ deal, onPress }: DealCardProps) {
-  const card = useThemeColor({}, 'card');
-  const border = useThemeColor({}, 'border');
-  const cta = useThemeColor({}, 'cta');
-  const muted = useThemeColor({}, 'textMuted');
-  const surface = useThemeColor({}, 'surface');
+  const { card, border, cta, textMuted, primary, radius, space } = useCommerceTheme();
 
   return (
     <Pressable
       onPress={onPress}
       hitSlop={{ top: 4, bottom: 4 }}
+      accessibilityRole="button"
+      accessibilityLabel={`${deal.title}. ${deal.priceLabel}`}
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: card, borderColor: border },
+        {
+          backgroundColor: card,
+          borderColor: border,
+          borderRadius: radius.lg,
+        },
         pressed && styles.cardPressed,
       ]}>
-      <View style={[styles.mediaWrap, { backgroundColor: surface }]}>
+      <View style={[styles.mediaWrap, { backgroundColor: withAlpha(primary, 0.35) }]}>
         {deal.imageUrl ? (
           <Image source={{ uri: deal.imageUrl }} style={styles.cover} contentFit="cover" cachePolicy="disk" />
         ) : (
           <View style={[styles.cover, styles.coverPlaceholder]} />
         )}
-        <View style={[styles.badgePill, { borderColor: border, backgroundColor: card }]}>
-          <ThemedText style={[styles.badgeText, { color: cta }]} numberOfLines={1}>
+        <View style={[styles.badgePill, { backgroundColor: withAlpha(cta, 0.92), borderRadius: radius.sm }]}>
+          <ThemedText style={styles.badgeText} numberOfLines={1}>
             {deal.badge}
           </ThemedText>
         </View>
       </View>
-      <View style={styles.body}>
+      <View style={[styles.body, { paddingHorizontal: space.md, paddingTop: 10, paddingBottom: space.md, gap: space.xs }]}>
         <ThemedText type="defaultSemiBold" numberOfLines={2} style={styles.title}>
           {deal.title}
         </ThemedText>
-        <ThemedText style={[styles.shop, { color: muted }]} numberOfLines={1}>
+        <ThemedText style={[styles.shop, { color: textMuted }]} numberOfLines={1}>
           {deal.shopName}
         </ThemedText>
         <View style={styles.footer}>
-          <ThemedText type="defaultSemiBold" style={styles.price}>
+          <ThemedText type="defaultSemiBold" style={[styles.price, { color: cta }]}>
             {deal.priceLabel}
           </ThemedText>
-          <ThemedText style={[styles.sold, { color: muted }]} numberOfLines={1}>
+          <ThemedText style={[styles.sold, { color: textMuted }]} numberOfLines={1}>
             {deal.soldLabel}
           </ThemedText>
         </View>
@@ -62,7 +65,6 @@ export const DealCard = memo(DealCardInner);
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     width: 200,
     overflow: 'hidden',
@@ -90,25 +92,20 @@ const styles = StyleSheet.create({
   },
   badgePill: {
     position: 'absolute',
-    left: 8,
     top: 8,
-    maxWidth: '88%',
+    left: 8,
+    maxWidth: '80%',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 2,
   },
   badgeText: {
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
-  body: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
-    gap: 4,
-  },
+  body: {},
   title: {
     lineHeight: 20,
   },
@@ -125,6 +122,7 @@ const styles = StyleSheet.create({
   price: {
     flexShrink: 0,
     fontVariant: ['tabular-nums'],
+    fontSize: 16,
   },
   sold: {
     fontSize: 12,

@@ -5,7 +5,6 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
@@ -18,10 +17,6 @@ export function WishlistScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const me = useMeQuery();
-  const card = useThemeColor({}, 'card');
-  const border = useThemeColor({}, 'border');
-  const tint = useThemeColor({}, 'tint');
-
   const toggleWish = useMutation({
     mutationFn: (productId: string) => commerceService.toggleWishlist(productId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['commerce', 'wishlist'] }),
@@ -63,9 +58,6 @@ export function WishlistScreen() {
               <ProductCard
                 product={item}
                 onPress={() => router.push(`/(tabs)/shop/${item.id}` as Href)}
-                borderColor={border}
-                cardColor={card}
-                tint={tint}
                 wishlistRemoveLabel={t('wishlistRemoveHint')}
                 onRemoveFromWishlist={() => toggleWish.mutate(item.id)}
               />

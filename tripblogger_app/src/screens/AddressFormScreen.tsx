@@ -131,5 +131,5 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   pad: { padding: 16, gap: 8, paddingBottom: 40 },
   inp: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 16 },
-  cta: { marginTop: 16, padding: 14, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
+  cta: { marginTop: 16, padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', minHeight: 48 },
 });

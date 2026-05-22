@@ -1,45 +1,46 @@
 import { useCallback } from 'react';
-import { FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import type { ProductDto } from '@/src/types/commerce';
 import { ProductCard } from './ProductCard';
 
 export function ProductGrid({
-  products,
+  items,
   onSelect,
-  borderColor,
-  cardColor,
-  tint,
+  onLongPress,
 }: {
-  products: ProductDto[];
+  items: ProductDto[];
   onSelect: (p: ProductDto) => void;
-  borderColor: string;
-  cardColor: string;
-  tint: string;
+  onLongPress?: (p: ProductDto) => void;
 }) {
   const { width } = useWindowDimensions();
-  const colW = (width - 32) / 2;
-  const render = useCallback(
+  const numColumns = 2;
+  const colW = (width - 32) / numColumns;
+
+  const renderItem = useCallback(
     ({ item }: { item: ProductDto }) => (
-      <View style={{ width: colW }}>
-        <ProductCard product={item} onPress={() => onSelect(item)} borderColor={borderColor} cardColor={cardColor} tint={tint} />
-      </View>
+      <ProductCard
+        product={item}
+        onPress={() => onSelect(item)}
+        onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+      />
     ),
-    [borderColor, cardColor, colW, onSelect, tint],
+    [onSelect, onLongPress],
   );
+
   return (
     <FlatList
-      data={products}
-      keyExtractor={(i) => i.id}
-      numColumns={2}
-      renderItem={render}
+      data={items}
+      keyExtractor={(p) => p.id}
+      numColumns={numColumns}
+      renderItem={renderItem}
       columnWrapperStyle={styles.row}
       contentContainerStyle={styles.list}
-      scrollEnabled={false}
+      getItemLayout={(_, index) => ({ length: colW, offset: colW * Math.floor(index / numColumns), index })}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  row: { justifyContent: 'space-between', paddingHorizontal: 4 },
-  list: { paddingBottom: 16 },
+  list: { paddingHorizontal: 4, paddingBottom: 24 },
+  row: { justifyContent: 'space-between' },
 });

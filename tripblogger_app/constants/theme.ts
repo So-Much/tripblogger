@@ -1,69 +1,75 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * TripBlogger — travel marketplace theme (modern blue, friendly, minimal friction).
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const ctaLight = '#0284C7';
+const ctaDark = '#38BDF8';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    textMuted: '#475569',
-    background: '#fff',
-    surface: '#F8FAFC',
+    text: '#0F172A',
+    textMuted: '#64748B',
+    background: '#F8FAFC',
+    surface: '#FFFFFF',
     card: '#FFFFFF',
-    border: '#DBEAFE',
-    tint: tintColorLight,
-    accent: '#2563EB',
-    cta: '#2563EB',
-    success: '#22C55E',
-    danger: '#EF4444',
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    border: '#E2E8F0',
+    primary: '#E0F2FE',
+    secondary: '#DBEAFE',
+    tint: ctaLight,
+    accent: '#0EA5E9',
+    cta: ctaLight,
+    onCta: '#FFFFFF',
+    success: '#059669',
+    warning: '#D97706',
+    danger: '#DC2626',
+    icon: '#64748B',
+    tabIconDefault: '#94A3B8',
+    tabIconSelected: ctaLight,
   },
   dark: {
-    text: '#ECEDEE',
-    textMuted: '#9BA1A6',
-    background: '#151718',
-    surface: '#0B1220',
-    card: '#1A2333',
-    border: '#2A3A55',
-    tint: tintColorDark,
-    accent: '#60A5FA',
-    cta: '#60A5FA',
+    text: '#F1F5F9',
+    textMuted: '#94A3B8',
+    background: '#0F172A',
+    surface: '#1E293B',
+    card: '#1E293B',
+    border: '#334155',
+    primary: '#0C4A6E',
+    secondary: '#1E3A5F',
+    tint: ctaDark,
+    accent: ctaDark,
+    cta: ctaDark,
+    onCta: '#0F172A',
     success: '#34D399',
+    warning: '#FBBF24',
     danger: '#F87171',
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    icon: '#94A3B8',
+    tabIconDefault: '#64748B',
+    tabIconSelected: ctaDark,
   },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
+    serif: 'NotoSerifDisplay_400Regular',
+    display: 'NotoSerifDisplay_600SemiBold',
     rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+    mono: 'SpaceMono_400Regular',
   },
   default: {
     sans: 'normal',
     serif: 'serif',
+    display: 'serif',
     rounded: 'normal',
     mono: 'monospace',
   },
   web: {
     sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+    serif: "'Noto Serif Display', Georgia, 'Times New Roman', serif",
+    display: "'Noto Serif Display', Georgia, serif",
+    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, sans-serif",
+    mono: "'Space Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   },
 });

@@ -20,6 +20,9 @@ export function ProductCreateScreen() {
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
   const text = useThemeColor({}, 'text');
+  const success = useThemeColor({}, 'success');
+  const onCta = useThemeColor({}, 'onCta');
+  const primary = useThemeColor({}, 'primary');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -126,7 +129,13 @@ export function ProductCreateScreen() {
             <Pressable
               key={c.id}
               onPress={() => setCategoryId(c.id)}
-              style={[styles.chip, { borderColor: categoryId === c.id ? tint : border }]}>
+              style={[
+                styles.chip,
+                {
+                  borderColor: categoryId === c.id ? tint : border,
+                  backgroundColor: categoryId === c.id ? primary : 'transparent',
+                },
+              ]}>
               <ThemedText>{c.name}</ThemedText>
             </Pressable>
           ))}
@@ -136,12 +145,26 @@ export function ProductCreateScreen() {
         <ThemedText type="subtitle">Stock</ThemedText>
         <TextInput value={stock} onChangeText={setStock} keyboardType="number-pad" style={[styles.inp, { borderColor: border, color: text }]} />
         <View style={styles.row}>
-          <Pressable onPress={() => setProductType('NEW')} style={[styles.chip, { borderColor: productType === 'NEW' ? tint : border }]}>
+          <Pressable
+            onPress={() => setProductType('NEW')}
+            style={[
+              styles.chip,
+              {
+                borderColor: productType === 'NEW' ? tint : border,
+                backgroundColor: productType === 'NEW' ? primary : 'transparent',
+              },
+            ]}>
             <ThemedText>{t('productNew')}</ThemedText>
           </Pressable>
           <Pressable
             onPress={() => setProductType('SECONDHAND')}
-            style={[styles.chip, { borderColor: productType === 'SECONDHAND' ? tint : border }]}>
+            style={[
+              styles.chip,
+              {
+                borderColor: productType === 'SECONDHAND' ? tint : border,
+                backgroundColor: productType === 'SECONDHAND' ? primary : 'transparent',
+              },
+            ]}>
             <ThemedText>{t('productSecondhand')}</ThemedText>
           </Pressable>
         </View>
@@ -153,13 +176,13 @@ export function ProductCreateScreen() {
           style={[styles.cta, { backgroundColor: tint }]}
           disabled={create.isPending || !categoryId || !title.trim()}
           onPress={() => create.mutate()}>
-          <ThemedText style={styles.ctaTxt}>{t('productSaveDraft')}</ThemedText>
+          <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productSaveDraft')}</ThemedText>
         </Pressable>
         <Pressable
-          style={[styles.cta, { backgroundColor: '#166534', marginTop: 10 }]}
+          style={[styles.cta, { backgroundColor: success, marginTop: 10 }]}
           disabled={publish.isPending || !categoryId || !title.trim() || !media[0]}
           onPress={tryPublish}>
-          <ThemedText style={styles.ctaTxt}>{t('productPublish')}</ThemedText>
+          <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productPublish')}</ThemedText>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -172,9 +195,9 @@ const styles = StyleSheet.create({
   inp: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
   ta: { minHeight: 100, textAlignVertical: 'top' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
-  btn: { padding: 12, borderRadius: 8, borderWidth: 1, alignSelf: 'flex-start' },
-  prev: { width: 120, height: 120, borderRadius: 8 },
-  cta: { paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 8 },
-  ctaTxt: { color: '#fff', fontWeight: '700' },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, minHeight: 36 },
+  btn: { padding: 12, borderRadius: 12, borderWidth: 1, alignSelf: 'flex-start' },
+  prev: { width: 120, height: 120, borderRadius: 12 },
+  cta: { paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8, minHeight: 48 },
+  ctaTxt: { fontWeight: '700' },
 });

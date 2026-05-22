@@ -1,22 +1,29 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useNavigation, useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { CategoryChip } from '@/src/components/commerce/CategoryChip';
+import { CategoryTabs } from '@/src/components/commerce/CategoryTabs';
 import { ProductList } from '@/src/components/commerce/ProductList';
+import {
+  ShopFilterSheet,
+  countActiveFilters,
+  type ShopFilterValues,
+} from '@/src/components/commerce/ShopFilterSheet';
+import { ShopFilterBar } from '@/src/components/commerce/ShopFilterBar';
 import { useMeQuery } from '@/src/hooks/useAuth';
+import { useProductQuickActions } from '@/src/hooks/use-product-quick-actions';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
-import type { CategoryDto } from '@/src/types/commerce';
+import type { CategoryDto, ProductDto } from '@/src/types/commerce';
 
 const headerHitSlop = { top: 12, bottom: 12, left: 12, right: 12 };
 
-type SortBy = 'newest' | 'price_asc' | 'price_desc' | 'popular';
+const DEFAULT_FILTERS: ShopFilterValues = { sortBy: 'newest', productType: undefined };
 
 export function ShopScreen() {
   const { t } = useI18n();
@@ -26,33 +33,56 @@ export function ShopScreen() {
   const card = useThemeColor({}, 'card');
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
+  const danger = useThemeColor({}, 'danger');
+  const onCta = useThemeColor({}, 'onCta');
   const muted = useThemeColor({}, 'textMuted');
 
   const [categoryId, setCategoryId] = useState<string | undefined>();
-  const [productType, setProductType] = useState<'NEW' | 'SECONDHAND' | undefined>();
-  const [sortBy, setSortBy] = useState<SortBy>('newest');
+  const [filters, setFilters] = useState<ShopFilterValues>(DEFAULT_FILTERS);
+  const [filterDraft, setFilterDraft] = useState<ShopFilterValues>(DEFAULT_FILTERS);
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const isMember = meQuery.data?.role === 'MEMBER';
+
+  const requireMember = useCallback(() => {
+    Alert.alert(t('tabShop'), t('shopMemberRequired'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('login'), onPress: () => router.push('/login') },
+    ]);
+  }, [router, t]);
+
+  const quickActions = useProductQuickActions({ onRequireMember: requireMember });
 
   const categoriesQuery = useQuery({
     queryKey: ['commerce', 'categories'],
     queryFn: () => commerceService.listCategories(),
   });
 
+  const wishlistIdsQuery = useQuery({
+    queryKey: ['commerce', 'wishlist', 'ids'],
+    queryFn: async () => {
+      const res = await commerceService.listWishlist({ limit: 100 });
+      return new Set(res.items.map((p) => p.id));
+    },
+    enabled: isMember,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+
   const productsQuery = useInfiniteQuery({
-    queryKey: ['commerce', 'products', 'public', categoryId, productType, sortBy],
+    queryKey: ['commerce', 'products', 'public', categoryId, filters.productType, filters.sortBy],
     queryFn: ({ pageParam }) =>
       commerceService.listPublicProducts({
         limit: 20,
         cursor: pageParam as string | undefined,
         categoryId,
-        productType,
-        sortBy,
+        productType: filters.productType,
+        sortBy: filters.sortBy,
       }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     maxPages: 5,
   });
-
-  const isMember = meQuery.data?.role === 'MEMBER';
 
   const verifyQ = useQuery({
     queryKey: ['commerce', 'seller-verification'],
@@ -69,6 +99,8 @@ export function ShopScreen() {
   });
 
   const items = useMemo(() => productsQuery.data?.pages.flatMap((p) => p.items) ?? [], [productsQuery.data?.pages]);
+  const total = productsQuery.data?.pages[0]?.total ?? items.length;
+  const activeFilterCount = countActiveFilters(filters);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -103,7 +135,7 @@ export function ShopScreen() {
             style={styles.cartWrap}>
             <IconSymbol name="cart.fill" size={22} color={tint} />
             {isMember && (cartCountQuery.data?.itemCount ?? 0) > 0 ? (
-              <View style={[styles.cartBadge, { backgroundColor: tint }]}>
+              <View style={[styles.cartBadge, { backgroundColor: danger }]}>
                 <ThemedText style={styles.cartBadgeTxt}>
                   {(cartCountQuery.data?.itemCount ?? 0) > 99 ? '99+' : String(cartCountQuery.data?.itemCount)}
                 </ThemedText>
@@ -113,7 +145,7 @@ export function ShopScreen() {
         </View>
       ),
     });
-  }, [navigation, router, tint, t, isMember, cartCountQuery.data?.itemCount]);
+  }, [navigation, router, tint, danger, t, isMember, cartCountQuery.data?.itemCount]);
 
   const onEndReached = useCallback(() => {
     if (productsQuery.hasNextPage && !productsQuery.isFetchingNextPage) {
@@ -121,53 +153,29 @@ export function ShopScreen() {
     }
   }, [productsQuery]);
 
+  const onProductAction = useCallback(
+    (action: 'cart' | 'buy' | 'wish', product: ProductDto) => {
+      quickActions.run(action, product.id, isMember);
+    },
+    [isMember, quickActions],
+  );
+
   const listHeader = (
     <>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catRow}>
-        <CategoryChip
-          label={t('shopAllProducts')}
-          selected={!categoryId}
-          onPress={() => setCategoryId(undefined)}
-          borderColor={border}
-          tint={tint}
-        />
-        {(categoriesQuery.data ?? []).map((c: CategoryDto) => (
-          <CategoryChip
-            key={c.id}
-            label={c.name}
-            selected={categoryId === c.id}
-            onPress={() => setCategoryId(c.id)}
-            borderColor={border}
-            tint={tint}
-          />
-        ))}
-      </ScrollView>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {(['newest', 'popular', 'price_asc', 'price_desc'] as SortBy[]).map((s) => (
-          <CategoryChip
-            key={s}
-            label={t(`shopSort_${s}`)}
-            selected={sortBy === s}
-            onPress={() => setSortBy(s)}
-            borderColor={border}
-            tint={tint}
-          />
-        ))}
-        <CategoryChip
-          label={t('productNew')}
-          selected={productType === 'NEW'}
-          onPress={() => setProductType(productType === 'NEW' ? undefined : 'NEW')}
-          borderColor={border}
-          tint={tint}
-        />
-        <CategoryChip
-          label={t('productSecondhand')}
-          selected={productType === 'SECONDHAND'}
-          onPress={() => setProductType(productType === 'SECONDHAND' ? undefined : 'SECONDHAND')}
-          borderColor={border}
-          tint={tint}
-        />
-      </ScrollView>
+      <CategoryTabs
+        categories={categoriesQuery.data ?? []}
+        selectedId={categoryId}
+        onSelect={setCategoryId}
+        isLoading={categoriesQuery.isLoading}
+      />
+      <ShopFilterBar
+        resultCount={total}
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => {
+          setFilterDraft(filters);
+          setFilterOpen(true);
+        }}
+      />
       {isMember && !isVerifiedSeller ? (
         <Pressable
           style={[styles.verifyBanner, { borderColor: border, backgroundColor: card }]}
@@ -190,13 +198,7 @@ export function ShopScreen() {
             onPress={() =>
               isVerifiedSeller ? router.push('/(tabs)/shop/create') : router.push('/(tabs)/shop/seller-verify')
             }>
-            <ThemedText style={styles.btnPrimaryTxt}>{t('productCreate')}</ThemedText>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={[styles.btn, styles.btnGhost, { borderColor: border }]}
-            onPress={() => router.push('/(tabs)/shop/orders')}>
-            <ThemedText type="link">{t('ordersTitle')}</ThemedText>
+            <ThemedText style={[styles.btnPrimaryTxt, { color: onCta }]}>{t('productCreate')}</ThemedText>
           </Pressable>
         </View>
       ) : (
@@ -217,10 +219,29 @@ export function ShopScreen() {
           onRefresh={() => void productsQuery.refetch()}
           onEndReached={onEndReached}
           onPressProduct={(id) => router.push(`/(tabs)/shop/${id}` as Href)}
+          onBuyNow={(p) => onProductAction('buy', p)}
+          onAddToCart={(p) => onProductAction('cart', p)}
+          onToggleWishlist={(p) => onProductAction('wish', p)}
+          wishlistedIds={wishlistIdsQuery.data}
+          actionsDisabled={!isMember}
+          pendingProductId={quickActions.pending?.productId ?? null}
+          pendingAction={quickActions.pending?.action ?? null}
           ListHeaderComponent={listHeader}
           emptyLabel={productsQuery.isError ? t('productEmpty') : t('productEmpty')}
         />
       </ThemedView>
+
+      <ShopFilterSheet
+        visible={filterOpen}
+        draft={filterDraft}
+        onChange={setFilterDraft}
+        onClose={() => setFilterOpen(false)}
+        onReset={() => setFilterDraft(DEFAULT_FILTERS)}
+        onApply={() => {
+          setFilters(filterDraft);
+          setFilterOpen(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -241,14 +262,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cartBadgeTxt: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  catRow: { maxHeight: 44, paddingHorizontal: 12, marginBottom: 8 },
-  filterRow: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
-  verifyBanner: { marginHorizontal: 12, marginBottom: 10, padding: 12, borderRadius: 12, borderWidth: 1, gap: 4 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, marginBottom: 10 },
-  btn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
+  cartBadgeTxt: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  verifyBanner: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 12, borderWidth: 1, gap: 4 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginBottom: 8 },
+  btn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, minHeight: 44, justifyContent: 'center' },
   btnGhost: {},
   btnPrimary: { borderWidth: 0 },
-  btnPrimaryTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  hint: { paddingHorizontal: 12, marginBottom: 8, fontSize: 13 },
+  btnPrimaryTxt: { fontWeight: '700', fontSize: 14 },
+  hint: { paddingHorizontal: 16, marginBottom: 8, fontSize: 13 },
 });

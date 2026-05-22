@@ -34,6 +34,8 @@ export function ProductEditScreen() {
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
   const text = useThemeColor({}, 'text');
+  const success = useThemeColor({}, 'success');
+  const onCta = useThemeColor({}, 'onCta');
 
   const productQ = useQuery({
     queryKey: ['commerce', 'product', id],
@@ -204,14 +206,18 @@ export function ProductEditScreen() {
           style={[styles.cta, { backgroundColor: tint }]}
           disabled={save.isPending || !categoryId || !title.trim()}
           onPress={() => save.mutate()}>
-          {save.isPending ? <ActivityIndicator color="#fff" /> : <ThemedText style={styles.ctaTxt}>{t('save')}</ThemedText>}
+          {save.isPending ? (
+            <ActivityIndicator color={onCta} />
+          ) : (
+            <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('save')}</ThemedText>
+          )}
         </PressableScale>
         {isDraft ? (
           <PressableScale
-            style={[styles.cta, { backgroundColor: '#166534', marginTop: 10 }]}
+            style={[styles.cta, { backgroundColor: success, marginTop: 10 }]}
             disabled={publish.isPending || !categoryId || !title.trim() || !media[0]}
             onPress={() => publish.mutate()}>
-            <ThemedText style={styles.ctaTxt}>{t('productPublish')}</ThemedText>
+            <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productPublish')}</ThemedText>
           </PressableScale>
         ) : null}
         <PressableScale
@@ -241,8 +247,8 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
   btn: { padding: 12, borderRadius: 8, borderWidth: 1, alignSelf: 'flex-start' },
   prev: { width: 120, height: 120, borderRadius: 8 },
-  cta: { paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 8 },
-  ctaTxt: { color: '#fff', fontWeight: '700' },
+  cta: { paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8, minHeight: 48 },
+  ctaTxt: { fontWeight: '700' },
   danger: { borderWidth: 1, borderColor: '#EF4444', backgroundColor: 'transparent' },
   dangerTxt: { color: '#EF4444', fontWeight: '700' },
 });

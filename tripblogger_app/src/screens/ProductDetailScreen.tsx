@@ -30,6 +30,8 @@ export function ProductDetailScreen() {
   const tint = useThemeColor({}, 'tint');
   const text = useThemeColor({}, 'text');
   const card = useThemeColor({}, 'card');
+  const onCta = useThemeColor({}, 'onCta');
+  const success = useThemeColor({}, 'success');
   const [qty, setQty] = useState('1');
   const [cartPulse, setCartPulse] = useState(0);
   const cartBounce = useRef(new Animated.Value(1)).current;
@@ -109,7 +111,7 @@ export function ProductDetailScreen() {
             <PriceLabel amount={p.price} />
             <ProductTypeBadge type={p.productType} />
           </View>
-          <SellerBadge name={p.seller.displayName} verified={p.seller.isVerifiedSeller} color={tint} />
+          <SellerBadge name={p.seller.displayName} verified={p.seller.isVerifiedSeller} color={success} />
           <StockInfo stock={p.stock} unit={p.stockUnit} />
           <ThemedText style={styles.rating}>
             {t('ratingTitle')}: {Number(summaryQ.data?.avgRating ?? 0).toFixed(1)} ({summaryQ.data?.totalRatings ?? 0})
@@ -134,7 +136,7 @@ export function ProductDetailScreen() {
             <Pressable
               style={[styles.cta, { backgroundColor: tint, marginTop: 12 }]}
               onPress={() => router.push(`/(tabs)/shop/edit/${p.id}` as Href)}>
-              <ThemedText style={styles.ctaTxt}>{t('productEdit')}</ThemedText>
+              <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productEdit')}</ThemedText>
             </Pressable>
           ) : null}
           {canBuy && p.status === 'PUBLISHED' && !isOwn ? (
@@ -154,7 +156,7 @@ export function ProductDetailScreen() {
                   onPress={() => addCart.mutate()}
                   disabled={addCart.isPending}>
                   <Animated.View style={{ transform: [{ scale: cartBounce }], alignItems: 'center' }}>
-                    <ThemedText style={styles.ctaTxt}>{t('addToCart')}</ThemedText>
+                    <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('addToCart')}</ThemedText>
                   </Animated.View>
                 </PressableScale>
               </ActionPulse>
@@ -186,8 +188,8 @@ const styles = StyleSheet.create({
   desc: { marginTop: 12, lineHeight: 22 },
   buyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 20 },
   qty: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, width: 56, fontSize: 16 },
-  cta: { flex: 1, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  ctaTxt: { color: '#fff', fontWeight: '700' },
+  cta: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', minHeight: 48 },
+  ctaTxt: { fontWeight: '700' },
   cta2: {
     paddingVertical: 12,
     paddingHorizontal: 14,

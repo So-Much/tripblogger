@@ -43,6 +43,11 @@ const MAPPING = {
   'flashlight.on.fill': 'highlight',
   minus: 'remove',
   plus: 'add',
+  'square.grid.2x2': 'apps',
+  'slider.horizontal.3': 'tune',
+  'bag.fill': 'work',
+  airplane: 'flight',
+  'tag.fill': 'local-offer',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

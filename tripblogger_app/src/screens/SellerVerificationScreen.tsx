@@ -24,6 +24,7 @@ export function SellerVerificationScreen() {
   const me = useMeQuery();
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
+  const onCta = useThemeColor({}, 'onCta');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
 
@@ -63,7 +64,7 @@ export function SellerVerificationScreen() {
             <ThemedText type="subtitle">{t('sellerVerifyApprovedTitle')}</ThemedText>
             <ThemedText style={{ color: muted, textAlign: 'center' }}>{t('sellerVerifyApprovedBody')}</ThemedText>
             <Pressable style={[styles.cta, { backgroundColor: tint }]} onPress={() => router.push('/(tabs)/shop/create')}>
-              <ThemedText style={styles.ctaTxt}>{t('productCreate')}</ThemedText>
+              <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productCreate')}</ThemedText>
             </Pressable>
           </>
         ) : status === 'PENDING' ? (
@@ -81,7 +82,7 @@ export function SellerVerificationScreen() {
               style={[styles.cta, { backgroundColor: tint }]}
               disabled={request.isPending}
               onPress={() => request.mutate()}>
-              <ThemedText style={styles.ctaTxt}>{t('sellerVerifyRetry')}</ThemedText>
+              <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('sellerVerifyRetry')}</ThemedText>
             </Pressable>
           </>
         ) : (
@@ -93,7 +94,7 @@ export function SellerVerificationScreen() {
               style={[styles.cta, { backgroundColor: tint }]}
               disabled={request.isPending}
               onPress={() => request.mutate()}>
-              <ThemedText style={styles.ctaTxt}>{t('sellerVerifyCta')}</ThemedText>
+              <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('sellerVerifyCta')}</ThemedText>
             </Pressable>
           </>
         )}
@@ -112,6 +113,6 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: 'center',
   },
-  cta: { marginTop: 8, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 10, width: '100%', alignItems: 'center' },
-  ctaTxt: { color: '#fff', fontWeight: '700' },
+  cta: { marginTop: 8, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, width: '100%', alignItems: 'center', minHeight: 48 },
+  ctaTxt: { fontWeight: '700' },
 });

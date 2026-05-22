@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery } from '@/src/hooks/useAuth';
@@ -20,11 +20,15 @@ const SHIP_FEE = 30_000;
 
 export function CheckoutScreen() {
   const { t } = useI18n();
+  const { buyNow } = useLocalSearchParams<{ buyNow?: string }>();
+  const isBuyNow = buyNow === '1';
   const router = useRouter();
   const qc = useQueryClient();
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
   const text = useThemeColor({}, 'text');
+  const onCta = useThemeColor({}, 'onCta');
+  const primary = useThemeColor({}, 'primary');
   const meQ = useMeQuery();
   const isGuest = meQ.data?.role === 'GUEST';
   const isMember = meQ.data?.role === 'MEMBER';
@@ -128,6 +132,12 @@ export function CheckoutScreen() {
   return (
     <SafeAreaView style={styles.flex} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.pad}>
+        {isBuyNow ? (
+          <View style={[styles.buyNowBanner, { backgroundColor: primary, borderColor: border }]}>
+            <ThemedText type="defaultSemiBold">{t('checkoutBuyNowTitle')}</ThemedText>
+            <ThemedText style={styles.small}>{t('checkoutBuyNowHint')}</ThemedText>
+          </View>
+        ) : null}
         {isGuest ? (
           <>
             <ThemedText type="subtitle">{t('addressesTitle')}</ThemedText>
@@ -189,7 +199,7 @@ export function CheckoutScreen() {
                     styles.couponChip,
                     {
                       borderColor: highlightCoupon === c.code.toUpperCase() ? tint : border,
-                      backgroundColor: highlightCoupon === c.code.toUpperCase() ? `${tint}18` : undefined,
+                      backgroundColor: highlightCoupon === c.code.toUpperCase() ? primary : undefined,
                     },
                   ]}>
                   <View>
@@ -237,9 +247,9 @@ export function CheckoutScreen() {
             }
             onPress={() => checkout.mutate(effectiveAddressId ?? undefined)}>
             {checkout.isPending ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={onCta} />
             ) : (
-              <ThemedText style={styles.ctaTxt}>{t('orderPlace')}</ThemedText>
+              <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('orderPlace')}</ThemedText>
             )}
           </PressableScale>
         </ActionPulse>
@@ -251,7 +261,8 @@ export function CheckoutScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   pad: { padding: 16, gap: 10, paddingBottom: 40 },
-  addr: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 8 },
+  buyNowBanner: { padding: 12, borderRadius: 12, borderWidth: 1, gap: 4, marginBottom: 4 },
+  addr: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },
   small: { fontSize: 12, opacity: 0.75, marginTop: 4 },
   row: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   inp: { borderWidth: 1, borderRadius: 8, padding: 10, fontSize: 15 },
@@ -259,6 +270,6 @@ const styles = StyleSheet.create({
   couponRow: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
   couponChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1, minWidth: 120, gap: 2, maxWidth: 200 },
   couponMeta: { fontSize: 11, opacity: 0.75, marginTop: 2 },
-  cta: { marginTop: 16, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  ctaTxt: { color: '#fff', fontWeight: '700' },
+  cta: { marginTop: 16, paddingVertical: 14, borderRadius: 12, alignItems: 'center', minHeight: 48 },
+  ctaTxt: { fontWeight: '700' },
 });

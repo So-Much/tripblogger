@@ -6,7 +6,15 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect } from 'react';
+import {
+  NotoSerifDisplay_400Regular,
+  NotoSerifDisplay_600SemiBold,
+  useFonts,
+} from '@expo-google-fonts/noto-serif-display';
+import { SpaceMono_400Regular } from '@expo-google-fonts/space-mono';
+import * as SplashScreen from 'expo-splash-screen';
 
+import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { queryClient } from '@/src/services/query-client';
 import {
@@ -24,15 +32,52 @@ import axios from 'axios';
 import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
 import { applyCommentCreated, applyPostPatch } from '@/src/services/realtime/posts-realtime.sync';
 
+SplashScreen.preventAutoHideAsync();
+
 export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+const navigationLight = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: Colors.light.cta,
+    background: Colors.light.background,
+    card: Colors.light.card,
+    text: Colors.light.text,
+    border: Colors.light.border,
+  },
+};
+
+const navigationDark = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: Colors.dark.cta,
+    background: Colors.dark.background,
+    card: Colors.dark.card,
+    text: Colors.dark.text,
+    border: Colors.dark.border,
+  },
+};
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [fontsLoaded] = useFonts({
+    NotoSerifDisplay_400Regular,
+    NotoSerifDisplay_600SemiBold,
+    SpaceMono_400Regular,
+  });
   const setTokens = useAuthStore((s) => s.setTokens);
   const hydrateSettings = useSettingsStore((s) => s.hydrate);
   const accessToken = useAuthStore((s) => s.tokens?.accessToken);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      void SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
 
   useEffect(() => {
     hydrateSettings();
@@ -160,11 +205,15 @@ export default function RootLayout() {
     };
   }, [accessToken]);
 
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <ThemeProvider value={colorScheme === 'dark' ? navigationDark : navigationLight}>
             <Stack>
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

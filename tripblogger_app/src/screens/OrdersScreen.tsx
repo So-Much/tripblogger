@@ -142,10 +142,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { textAlign: 'center', marginTop: 24, padding: 16 },
   tabs: { flexDirection: 'row', gap: 8, padding: 12 },
-  tab: { flex: 1, padding: 12, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
+  tab: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, alignItems: 'center', minHeight: 44 },
   chipsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 8 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   chipTxt: { fontSize: 13 },
-  card: { marginHorizontal: 12, marginBottom: 10, padding: 14, borderRadius: 10, borderWidth: 1, gap: 4 },
+  card: { marginHorizontal: 12, marginBottom: 10, padding: 14, borderRadius: 12, borderWidth: 1, gap: 4 },
   small: { fontSize: 12, opacity: 0.75 },
 });

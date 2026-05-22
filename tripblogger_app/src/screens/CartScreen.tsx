@@ -19,6 +19,7 @@ export function CartScreen() {
   const qc = useQueryClient();
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
+  const onCta = useThemeColor({}, 'onCta');
 
   const q = useQuery({ queryKey: ['commerce', 'cart'], queryFn: () => commerceService.getCart() });
 
@@ -93,7 +94,7 @@ export function CartScreen() {
           <PressableScale
             style={[styles.checkout, { backgroundColor: tint }]}
             onPress={() => router.push('/(tabs)/shop/checkout')}>
-            <ThemedText style={styles.checkoutTxt}>{t('orderCheckout')}</ThemedText>
+            <ThemedText style={[styles.checkoutTxt, { color: onCta }]}>{t('orderCheckout')}</ThemedText>
           </PressableScale>
         </ScrollView>
       )}
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   pad: { padding: 16, paddingBottom: 40 },
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.7 },
-  row: { flexDirection: 'row', gap: 12, borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 12 },
+  row: { flexDirection: 'row', gap: 12, borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 12 },
   thumb: { width: 72, height: 72, borderRadius: 8 },
   info: { flex: 1, gap: 6 },
   priceRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
@@ -115,6 +116,6 @@ const styles = StyleSheet.create({
   step: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   removeBtn: { paddingVertical: 4, paddingHorizontal: 4 },
   stepBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#8884' },
-  checkout: { marginTop: 20, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  checkoutTxt: { color: '#fff', fontWeight: '700' },
+  checkout: { marginTop: 20, paddingVertical: 14, borderRadius: 12, alignItems: 'center', minHeight: 48 },
+  checkoutTxt: { fontWeight: '700' },
 });

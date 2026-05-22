@@ -1,23 +1,46 @@
-import { useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { ProductCard } from '@/src/components/commerce/ProductCard';
+import { useMeQuery } from '@/src/hooks/useAuth';
+import { useProductQuickActions } from '@/src/hooks/use-product-quick-actions';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import type { ProductDto } from '@/src/types/commerce';
-import { ProductCard } from '@/src/components/commerce/ProductCard';
 
 export function ShopSearchScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const [q, setQ] = useState('');
   const border = useThemeColor({}, 'border');
-  const card = useThemeColor({}, 'card');
   const text = useThemeColor({}, 'text');
-  const tint = useThemeColor({}, 'tint');
+  const surface = useThemeColor({}, 'surface');
+  const me = useMeQuery();
+  const isMember = me.data?.role === 'MEMBER';
+
+  const requireMember = useCallback(() => {
+    Alert.alert(t('tabShop'), t('shopMemberRequired'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('login'), onPress: () => router.push('/login') },
+    ]);
+  }, [router, t]);
+
+  const quickActions = useProductQuickActions({ onRequireMember: requireMember });
+
+  const wishlistIdsQuery = useQuery({
+    queryKey: ['commerce', 'wishlist', 'ids'],
+    queryFn: async () => {
+      const res = await commerceService.listWishlist({ limit: 100 });
+      return new Set(res.items.map((p) => p.id));
+    },
+    enabled: isMember,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
 
   const query = useInfiniteQuery({
     queryKey: ['commerce', 'search', q],
@@ -34,29 +57,43 @@ export function ShopSearchScreen() {
 
   const items = query.data?.pages.flatMap((p) => p.items) ?? [];
 
+  const onAction = useCallback(
+    (action: 'cart' | 'buy' | 'wish', product: ProductDto) => {
+      quickActions.run(action, product.id, isMember);
+    },
+    [isMember, quickActions],
+  );
+
   return (
     <SafeAreaView style={styles.flex} edges={['bottom']}>
       <TextInput
         placeholder={t('shopSearch')}
         value={q}
         onChangeText={setQ}
-        style={[styles.inp, { borderColor: border, color: text }]}
+        style={[styles.inp, { borderColor: border, color: text, backgroundColor: surface }]}
+        autoFocus
       />
       <FlatList
         data={items}
         keyExtractor={(i) => i.id}
         numColumns={2}
+        contentContainerStyle={styles.list}
         onEndReached={() => {
           if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
         }}
         renderItem={({ item }: { item: ProductDto }) => (
-          <View style={{ width: '50%', paddingHorizontal: 4 }}>
+          <View style={styles.col}>
             <ProductCard
               product={item}
               onPress={() => router.push(`/(tabs)/shop/${item.id}` as Href)}
-              borderColor={border}
-              cardColor={card}
-              tint={tint}
+              onBuyNow={() => onAction('buy', item)}
+              onAddToCart={() => onAction('cart', item)}
+              onToggleWishlist={() => onAction('wish', item)}
+              isWishlisted={wishlistIdsQuery.data?.has(item.id)}
+              actionsDisabled={!isMember}
+              pendingAction={
+                quickActions.pending?.productId === item.id ? quickActions.pending.action : null
+              }
             />
           </View>
         )}
@@ -76,6 +113,8 @@ export function ShopSearchScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, padding: 12 },
-  inp: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 16 },
+  inp: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 16 },
+  list: { paddingBottom: 24 },
+  col: { width: '50%' },
   hint: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
 });

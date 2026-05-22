@@ -1,40 +1,34 @@
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { withAlpha } from '@/constants/friendly-commerce';
+import { useCommerceTheme } from '@/hooks/use-commerce-theme';
 import { useI18n } from '@/src/i18n';
 import { CommerceDeal } from '@/src/types/commerce';
 import { DealCard } from './DealCard';
 
 interface CommerceWidgetRowProps {
   deals: CommerceDeal[];
-  /** Opens full shop / marketplace (e.g. expo-router push). */
   onSeeAllPress?: () => void;
   onDealPress?: (productId: string) => void;
 }
 
 export function CommerceWidgetRow({ deals, onSeeAllPress, onDealPress }: CommerceWidgetRowProps) {
   const { t } = useI18n();
-  const muted = useThemeColor({}, 'textMuted');
-  const cta = useThemeColor({}, 'cta');
-  const border = useThemeColor({}, 'border');
-  const card = useThemeColor({}, 'card');
-  const text = useThemeColor({}, 'text');
+  const { textMuted, cta, border, card, text, primary, radius } = useCommerceTheme();
 
   return (
-    <View style={[styles.shell, { borderColor: border, backgroundColor: card }]}>
+    <View style={[styles.shell, { borderColor: border, backgroundColor: card, borderRadius: radius.lg }]}>
       <View style={styles.sectionHeader}>
         <View style={styles.headerLeft}>
-          <View style={[styles.kicker, { backgroundColor: `${cta}18` }]}>
+          <View style={[styles.kicker, { backgroundColor: withAlpha(primary, 0.9) }]}>
             <IconSymbol name="cart.fill" size={14} color={cta} />
             <ThemedText style={[styles.kickerText, { color: cta }]}>{t('homeCommerceKicker')}</ThemedText>
           </View>
           <ThemedText type="subtitle" style={[styles.title, { color: text }]}>
             {t('homeCommerceTitle')}
           </ThemedText>
-          <ThemedText style={[styles.subtitle, { color: muted }]}>
-            {t('homeCommerceSubtitle')}
-          </ThemedText>
+          <ThemedText style={[styles.subtitle, { color: textMuted }]}>{t('homeCommerceSubtitle')}</ThemedText>
         </View>
         {onSeeAllPress ? (
           <Pressable
@@ -59,7 +53,6 @@ export function CommerceWidgetRow({ deals, onSeeAllPress, onDealPress }: Commerc
 
 const styles = StyleSheet.create({
   shell: {
-    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     paddingTop: 14,
     paddingBottom: 12,

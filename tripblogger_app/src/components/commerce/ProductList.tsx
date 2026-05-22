@@ -1,8 +1,16 @@
 import { memo, useCallback } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View, type ListRenderItem } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  View,
+  type ListRenderItem,
+} from 'react-native';
 import { ThemedText } from '@/components/themed-text';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { useCommerceTheme } from '@/hooks/use-commerce-theme';
 import { ProductCard } from '@/src/components/commerce/ProductCard';
+import type { ProductQuickAction } from '@/src/hooks/use-product-quick-actions';
 import type { ProductDto } from '@/src/types/commerce';
 
 type ProductListProps = {
@@ -15,6 +23,13 @@ type ProductListProps = {
   onEndReached: () => void;
   onPressProduct: (id: string) => void;
   onLongPressProduct?: (product: ProductDto) => void;
+  onBuyNow?: (product: ProductDto) => void;
+  onAddToCart?: (product: ProductDto) => void;
+  onToggleWishlist?: (product: ProductDto) => void;
+  wishlistedIds?: Set<string>;
+  actionsDisabled?: boolean;
+  pendingProductId?: string | null;
+  pendingAction?: ProductQuickAction | null;
   ListHeaderComponent?: React.ReactElement | null;
   emptyLabel: string;
   numColumns?: 1 | 2;
@@ -29,14 +44,18 @@ function ProductListInner({
   onEndReached,
   onPressProduct,
   onLongPressProduct,
+  onBuyNow,
+  onAddToCart,
+  onToggleWishlist,
+  wishlistedIds,
+  actionsDisabled,
+  pendingProductId,
+  pendingAction,
   ListHeaderComponent,
   emptyLabel,
   numColumns = 2,
 }: ProductListProps) {
-  const border = useThemeColor({}, 'border');
-  const card = useThemeColor({}, 'card');
-  const tint = useThemeColor({}, 'tint');
-  const muted = useThemeColor({}, 'textMuted');
+  const { textMuted } = useCommerceTheme();
 
   const renderItem: ListRenderItem<ProductDto> = useCallback(
     ({ item }) => (
@@ -45,13 +64,27 @@ function ProductListInner({
           product={item}
           onPress={() => onPressProduct(item.id)}
           onLongPress={onLongPressProduct ? () => onLongPressProduct(item) : undefined}
-          borderColor={border}
-          cardColor={card}
-          tint={tint}
+          onBuyNow={onBuyNow ? () => onBuyNow(item) : undefined}
+          onAddToCart={onAddToCart ? () => onAddToCart(item) : undefined}
+          onToggleWishlist={onToggleWishlist ? () => onToggleWishlist(item) : undefined}
+          isWishlisted={wishlistedIds?.has(item.id)}
+          actionsDisabled={actionsDisabled}
+          pendingAction={pendingProductId === item.id ? pendingAction ?? null : null}
         />
       </View>
     ),
-    [border, card, tint, numColumns, onPressProduct, onLongPressProduct],
+    [
+      numColumns,
+      onPressProduct,
+      onLongPressProduct,
+      onBuyNow,
+      onAddToCart,
+      onToggleWishlist,
+      wishlistedIds,
+      actionsDisabled,
+      pendingProductId,
+      pendingAction,
+    ],
   );
 
   return (
@@ -63,8 +96,8 @@ function ProductListInner({
       renderItem={renderItem}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.35}
-      initialNumToRender={10}
-      maxToRenderPerBatch={8}
+      initialNumToRender={8}
+      maxToRenderPerBatch={6}
       windowSize={7}
       removeClippedSubviews
       ListHeaderComponent={ListHeaderComponent ?? undefined}
@@ -76,7 +109,7 @@ function ProductListInner({
         isLoading ? (
           <ActivityIndicator style={styles.empty} />
         ) : (
-          <ThemedText style={[styles.empty, { color: muted }]}>{emptyLabel}</ThemedText>
+          <ThemedText style={[styles.empty, { color: textMuted }]}>{emptyLabel}</ThemedText>
         )
       }
       contentContainerStyle={styles.list}
@@ -87,8 +120,8 @@ function ProductListInner({
 export const ProductList = memo(ProductListInner);
 
 const styles = StyleSheet.create({
-  list: { paddingHorizontal: 8, paddingBottom: 24 },
-  col: { width: '50%', paddingHorizontal: 4 },
+  list: { paddingTop: 4, paddingBottom: 24 },
+  col: { width: '50%' },
   colFull: { width: '100%', paddingHorizontal: 4 },
   footer: { marginVertical: 16 },
   footerSpacer: { height: 8 },
