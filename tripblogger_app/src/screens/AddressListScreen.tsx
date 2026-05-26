@@ -1,7 +1,7 @@
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -14,6 +14,7 @@ import { formatApiError } from '@/src/utils/format-api-error';
 export function AddressListScreen() {
   const { t } = useI18n();
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const qc = useQueryClient();
   const me = useMeQuery();
   const border = useThemeColor({}, 'border');
@@ -42,9 +43,17 @@ export function AddressListScreen() {
     );
   }
 
+  const addressFormHref = (id?: string): Href => {
+    const params = new URLSearchParams();
+    if (id) params.set('id', id);
+    if (from === 'settings') params.set('from', 'settings');
+    const q = params.toString();
+    return `/(tabs)/shop/address-form${q ? `?${q}` : ''}` as Href;
+  };
+
   return (
     <SafeAreaView style={styles.flex} edges={['bottom']}>
-      <Pressable style={[styles.add, { borderColor: border }]} onPress={() => router.push('/(tabs)/shop/address-form')}>
+      <Pressable style={[styles.add, { borderColor: border }]} onPress={() => router.push(addressFormHref())}>
         <ThemedText type="link">{t('addressNew')}</ThemedText>
       </Pressable>
       <FlatList
@@ -69,7 +78,7 @@ export function AddressListScreen() {
                   <ThemedText type="link">{t('addressSetDefault')}</ThemedText>
                 </Pressable>
               ) : null}
-              <Pressable onPress={() => router.push(`/(tabs)/shop/address-form?id=${item.id}`)}>
+              <Pressable onPress={() => router.push(addressFormHref(item.id))}>
                 <ThemedText type="link">{t('productEdit')}</ThemedText>
               </Pressable>
               <Pressable

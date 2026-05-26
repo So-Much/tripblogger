@@ -1,5 +1,10 @@
+import { WithSettingsOriginBack } from '@/src/components/navigation/WithSettingsOriginBack';
 import { OrdersScreen } from '@/src/screens/OrdersScreen';
 
 export default function OrdersRoute() {
-  return <OrdersScreen />;
+  return (
+    <WithSettingsOriginBack>
+      <OrdersScreen />
+    </WithSettingsOriginBack>
+  );
 }

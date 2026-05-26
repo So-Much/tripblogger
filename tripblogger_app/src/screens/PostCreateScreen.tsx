@@ -94,6 +94,7 @@ export function PostCreateScreen() {
   const navigation = useNavigation();
   const { postId } = useLocalSearchParams<{ postId?: string }>();
   const queryClient = useQueryClient();
+  const meQuery = useMeQuery();
   const isEditDraft = Boolean(postId);
   const isMember = meQuery.data?.role === 'MEMBER';
   const [title, setTitle] = useState('');
@@ -120,8 +121,6 @@ export function PostCreateScreen() {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const viewerWidth = Math.round(screenWidth);
   const viewerHeight = Math.round(screenHeight);
-
-  const meQuery = useMeQuery();
 
   useEffect(() => {
     if (meQuery.isLoading) return;

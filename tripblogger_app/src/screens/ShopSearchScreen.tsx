@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -41,6 +41,21 @@ export function ShopSearchScreen() {
     staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
+
+  const cartCountQuery = useQuery({
+    queryKey: ['commerce', 'cart'],
+    queryFn: () => commerceService.getCart(),
+    enabled: isMember,
+    staleTime: 30_000,
+  });
+
+  const cartQtyByProductId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const line of cartCountQuery.data?.items ?? []) {
+      m.set(line.productId, (m.get(line.productId) ?? 0) + line.quantity);
+    }
+    return m;
+  }, [cartCountQuery.data?.items]);
 
   const query = useInfiniteQuery({
     queryKey: ['commerce', 'search', q],
@@ -90,6 +105,7 @@ export function ShopSearchScreen() {
               onAddToCart={() => onAction('cart', item)}
               onToggleWishlist={() => onAction('wish', item)}
               isWishlisted={wishlistIdsQuery.data?.has(item.id)}
+              inCartQty={cartQtyByProductId.get(item.id)}
               actionsDisabled={!isMember}
               pendingAction={
                 quickActions.pending?.productId === item.id ? quickActions.pending.action : null

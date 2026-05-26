@@ -16,6 +16,7 @@ import { AppLanguage, ThemePreference, useSettingsStore } from '@/src/store/sett
 import { useI18n } from '@/src/i18n';
 import { authService } from '@/src/services/api/auth.service';
 import { clearPersistedAuthTokens } from '@/src/services/session/session.service';
+import { SettingsHubSection } from '@/src/components/settings/SettingsHubSection';
 
 function OptionPill({
   label,
@@ -271,16 +272,16 @@ export function SettingsScreen() {
           )}
         </View>
 
+        {isMember ? <SettingsHubSection /> : null}
+
         <SectionCard>
-          <ThemedText type="subtitle">{t('languageSection')}</ThemedText>
+          <ThemedText type="subtitle">{t('settingsAppearanceCardTitle')}</ThemedText>
+          <ThemedText style={[styles.prefsLabel, { color: muted }]}>{t('languageSection')}</ThemedText>
           <View style={styles.optionsRow}>
             <OptionPill label={t('languageVi')} active={language === 'vi'} onPress={() => setLanguage('vi' as AppLanguage)} />
             <OptionPill label={t('languageEn')} active={language === 'en'} onPress={() => setLanguage('en' as AppLanguage)} />
           </View>
-        </SectionCard>
-
-        <SectionCard>
-          <ThemedText type="subtitle">{t('themeSection')}</ThemedText>
+          <ThemedText style={[styles.prefsLabel, { color: muted, marginTop: 14 }]}>{t('themeSection')}</ThemedText>
           <View style={styles.optionsWrap}>
             <OptionPill label={t('themeLight')} active={themePreference === 'light'} onPress={() => setThemePreference('light' as ThemePreference)} />
             <OptionPill label={t('themeDark')} active={themePreference === 'dark'} onPress={() => setThemePreference('dark' as ThemePreference)} />
@@ -395,6 +396,7 @@ export function SettingsScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1 },
   content: { gap: 12 },
+  prefsLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8 },
   title: { fontSize: 30, lineHeight: 36 },
   profileHeaderCard: {
     borderWidth: 1,

@@ -18,6 +18,7 @@ import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import type { PostDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { getViewerPostReactionCode } from '@/src/utils/post-reactions';
 import { PostPreviewCard } from '@/src/components/posts/PostPreviewCard';
 import { ReactionPicker } from '@/src/components/posts/ReactionPicker';
 import { applyPostPatch, optimisticTogglePostReaction } from '@/src/services/realtime/posts-realtime.sync';
@@ -230,7 +231,10 @@ export function MyPostsScreen() {
         open={pickerOpen}
         anchor={pickerAnchor}
         options={postReactionTypes}
-        selectedCode={items.find((p) => p.id === reactPostId)?.myReactionCodes.find((code) => code !== 'SHARE') ?? null}
+        selectedCode={(() => {
+          const target = items.find((p) => p.id === reactPostId);
+          return target ? getViewerPostReactionCode(target) : null;
+        })()}
         onClose={() => setPickerOpen(false)}
         onSelect={(typeCode) => {
           if (!reactPostId) return;

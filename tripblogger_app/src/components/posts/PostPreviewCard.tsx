@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PostMediaBlock } from './PostMediaBlock';
@@ -8,6 +8,7 @@ import { formatLocalDateTime } from '@/src/utils/datetime';
 import { getPostBodyPlainText } from '@/src/utils/post-hashtag-content';
 import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import type { PostDto, ReactionTypeDto } from '@/src/types/post';
+import { getPostReactionTotal, isViewerPostHearted } from '@/src/utils/post-reactions';
 
 const SINGLE_TAP_DELAY_MS = 240;
 
@@ -42,17 +43,10 @@ export function PostPreviewCard({
   const mediaInteractingRef = useRef(false);
   const lastMediaInteractionAt = useRef(0);
   const canInteract = post.status === 'PUBLISHED';
-  const totalReacts = Object.entries(post.reactionCounts ?? {}).reduce(
-    (acc, [code, count]) => acc + (code === 'SHARE' ? 0 : count),
-    0,
-  );
-  const reactedCode = useMemo(() => post.myReactionCodes.find((code) => code !== 'SHARE') ?? null, [post.myReactionCodes]);
-  const reactedType = useMemo(
-    () => (reactedCode ? reactionTypes.find((item) => item.code === reactedCode) ?? null : null),
-    [reactedCode, reactionTypes],
-  );
+  const totalReacts = getPostReactionTotal(post);
+  const viewerHearted = useMemo(() => isViewerPostHearted(post), [post.myReactionCodes]);
   const heartScale = useRef(new Animated.Value(1)).current;
-  const previousReactedCodeRef = useRef<string | null | undefined>(undefined);
+  const previousReactedCodeRef = useRef<boolean | undefined>(undefined);
 
   const runHeartPulse = useCallback(() => {
     Animated.sequence([
@@ -62,7 +56,7 @@ export function PostPreviewCard({
   }, [heartScale]);
 
   const triggerReact = () => {
-    runHeartPulse();
+    if (!viewerHearted) runHeartPulse();
     onDoubleTapHeart();
   };
 
@@ -101,11 +95,12 @@ export function PostPreviewCard({
   }, []);
 
   useEffect(() => {
-    if (previousReactedCodeRef.current !== undefined && previousReactedCodeRef.current !== reactedCode && reactedCode) {
+    const wasHearted = previousReactedCodeRef.current === true;
+    if (previousReactedCodeRef.current !== undefined && !wasHearted && viewerHearted) {
       runHeartPulse();
     }
-    previousReactedCodeRef.current = reactedCode;
-  }, [reactedCode, runHeartPulse]);
+    previousReactedCodeRef.current = viewerHearted;
+  }, [viewerHearted, runHeartPulse]);
 
   return (
     <View style={[styles.card, { backgroundColor: cardColor, borderColor }]}>
@@ -155,13 +150,11 @@ export function PostPreviewCard({
             delayLongPress={180}
             style={styles.actionBtn}>
             <Animated.View style={[styles.reactIconWrap, { transform: [{ scale: heartScale }] }]}>
-              {reactedType?.media?.startsWith('http') ? (
-                <Image source={{ uri: reactedType.media }} style={styles.reactImage} />
-              ) : reactedType?.media ? (
-                <ThemedText style={styles.reactFallback}>{reactedType.media}</ThemedText>
-              ) : (
-                <IconSymbol name={reactedCode ? 'heart.fill' : 'heart'} size={16} color={reactedCode ? '#2563EB' : mutedColor} />
-              )}
+              <IconSymbol
+                name={viewerHearted ? 'heart.fill' : 'heart'}
+                size={16}
+                color={viewerHearted ? '#2563EB' : mutedColor}
+              />
             </Animated.View>
             <ThemedText style={styles.actionText}>{Math.max(totalReacts, 0)}</ThemedText>
           </Pressable>
@@ -204,8 +197,6 @@ const styles = StyleSheet.create({
   actionBtnDisabled: { opacity: 0.55 },
   actionText: { fontSize: 12, fontWeight: '600' },
   reactIconWrap: { width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
-  reactImage: { width: 18, height: 18, borderRadius: 9 },
-  reactFallback: { fontSize: 15, lineHeight: 18 },
   draftHintRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,

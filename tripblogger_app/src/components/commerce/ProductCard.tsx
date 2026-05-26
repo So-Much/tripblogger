@@ -37,6 +37,8 @@ function IconActionBtn({
   card,
   radius,
   style,
+  inCartQty,
+  a11yHint,
 }: {
   label: string;
   icon: 'cart.fill' | 'heart' | 'heart.fill';
@@ -49,11 +51,15 @@ function IconActionBtn({
   card: string;
   radius: { md: number };
   style?: StyleProp<ViewStyle>;
+  inCartQty?: number;
+  a11yHint?: string;
 }) {
+  const showBadge = typeof inCartQty === 'number' && inCartQty > 0 && !pending;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityHint={a11yHint}
       accessibilityState={{ disabled, busy: pending }}
       disabled={disabled}
       onPress={onPress}
@@ -75,6 +81,11 @@ function IconActionBtn({
             <ActivityIndicator size="small" color={cta} />
           </View>
         ) : null}
+        {showBadge ? (
+          <View style={[styles.cartQtyBadge, { backgroundColor: cta }]}>
+            <ThemedText style={styles.cartQtyBadgeTxt}>{inCartQty > 99 ? '99+' : String(inCartQty)}</ThemedText>
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -92,6 +103,7 @@ function ProductCardInner({
   pendingAction,
   onRemoveFromWishlist,
   wishlistRemoveLabel,
+  inCartQty,
 }: {
   product: ProductDto;
   onPress: () => void;
@@ -104,6 +116,8 @@ function ProductCardInner({
   pendingAction?: ProductQuickAction | null;
   onRemoveFromWishlist?: () => void;
   wishlistRemoveLabel?: string;
+  /** Line quantity for this product in the member's cart (shop list). */
+  inCartQty?: number;
 }) {
   const { t } = useI18n();
   const { border, card, cta, success, surface, radius, space, onCta } = useCommerceTheme();
@@ -117,6 +131,9 @@ function ProductCardInner({
   const buyPending = pendingAction === 'buy';
   const cartPending = pendingAction === 'cart';
   const cardBusy = pendingAction != null;
+  const cartBadgeQty = typeof inCartQty === 'number' && inCartQty > 0 ? inCartQty : undefined;
+  const cartA11yHint =
+    cartBadgeQty != null ? t('productInCartA11y', { count: cartBadgeQty }) : undefined;
 
   const a11yParts = [product.title, product.seller.displayName];
   if (lowStock) a11yParts.push(t('productLowStockLine', { count: product.stock, unit: product.stockUnit }));
@@ -221,6 +238,8 @@ function ProductCardInner({
             cta={cta}
             card={card}
             radius={radius}
+            inCartQty={cartBadgeQty}
+            a11yHint={cartA11yHint}
           />
           <Pressable
             accessibilityRole="button"
@@ -312,6 +331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconBtnInner: {
+    position: 'relative',
     width: ICON_BTN,
     height: ICON_BTN,
     alignItems: 'center',
@@ -322,6 +342,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  cartQtyBadge: {
+    position: 'absolute',
+    right: -4,
+    top: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.9)',
+  },
+  cartQtyBadgeTxt: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   wishlistFab: {
     position: 'absolute',

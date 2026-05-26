@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Image,
   Modal,
   ScrollView,
   KeyboardAvoidingView,
@@ -34,6 +33,11 @@ import { ShakeView, type ShakeViewHandle } from '@/src/components/feedback/Shake
 import { formatLocalDateTime } from '@/src/utils/datetime';
 import { getPostBodyPlainText } from '@/src/utils/post-hashtag-content';
 import { resolvePublicDisplayName } from '@/src/utils/display-name';
+import {
+  getPostReactionTotal,
+  getViewerPostReactionCode,
+  isViewerPostHearted,
+} from '@/src/utils/post-reactions';
 import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
 import { applyCommentCreated, applyPostPatch, optimisticTogglePostReaction } from '@/src/services/realtime/posts-realtime.sync';
 import { useAuthStore } from '@/src/store/auth.store';
@@ -113,14 +117,11 @@ export function PostDetailScreen() {
   const singleTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaInteractingRef = useRef(false);
   const lastMediaInteractionAt = useRef(0);
-  const reactedCode = post?.myReactionCodes.find((code) => code !== 'SHARE') ?? null;
-  const reactedType = reactedCode ? postTypes.find((item) => item.code === reactedCode) ?? null : null;
+  const reactedCode = post ? getViewerPostReactionCode(post) : null;
+  const viewerHearted = post ? isViewerPostHearted(post) : false;
   const heartScale = useRef(new Animated.Value(1)).current;
-  const previousReactedCodeRef = useRef<string | null | undefined>(undefined);
-  const totalReacts = Math.max(
-    Object.entries(post?.reactionCounts ?? {}).reduce((acc, [code, count]) => acc + (code === 'SHARE' ? 0 : count), 0),
-    0,
-  );
+  const previousReactedCodeRef = useRef<boolean | undefined>(undefined);
+  const totalReacts = post ? getPostReactionTotal(post) : 0;
   const canInteract = isMember && post?.status === 'PUBLISHED';
   const canDelete = isMember && post?.status !== 'DELETED' && post?.userId === meQuery.data?.id;
 
@@ -138,11 +139,12 @@ export function PostDetailScreen() {
   }, [heartScale]);
 
   useEffect(() => {
-    if (previousReactedCodeRef.current !== undefined && previousReactedCodeRef.current !== reactedCode && reactedCode) {
+    const wasHearted = previousReactedCodeRef.current === true;
+    if (previousReactedCodeRef.current !== undefined && !wasHearted && viewerHearted) {
       runReactPulse();
     }
-    previousReactedCodeRef.current = reactedCode;
-  }, [reactedCode, runReactPulse]);
+    previousReactedCodeRef.current = viewerHearted;
+  }, [viewerHearted, runReactPulse]);
 
   const togglePostReact = useMutation({
     mutationFn: (typeCode: string) => postsService.togglePostReaction(String(id), typeCode),
@@ -259,7 +261,7 @@ export function PostDetailScreen() {
 
   const triggerHeartReact = () => {
     if (!canInteract) return;
-    runReactPulse();
+    if (!viewerHearted) runReactPulse();
     togglePostReact.mutate('HEART');
   };
 
@@ -386,13 +388,11 @@ export function PostDetailScreen() {
                 delayLongPress={180}
                 style={styles.actionBtn}>
                 <Animated.View style={[styles.reactIconWrap, { transform: [{ scale: heartScale }] }]}>
-                  {reactedType?.media?.startsWith('http') ? (
-                    <Image source={{ uri: reactedType.media }} style={styles.reactImage} />
-                  ) : reactedType?.media ? (
-                    <ThemedText style={styles.reactFallback}>{reactedType.media}</ThemedText>
-                  ) : (
-                    <IconSymbol name={reactedCode ? 'heart.fill' : 'heart'} size={17} color={reactedCode ? cta : muted} />
-                  )}
+                  <IconSymbol
+                    name={viewerHearted ? 'heart.fill' : 'heart'}
+                    size={17}
+                    color={viewerHearted ? cta : muted}
+                  />
                 </Animated.View>
                 <ThemedText style={styles.actionText}>{totalReacts}</ThemedText>
               </Pressable>

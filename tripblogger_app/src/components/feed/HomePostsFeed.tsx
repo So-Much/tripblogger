@@ -12,6 +12,7 @@ import { applyPostPatch, optimisticTogglePostReaction } from '@/src/services/rea
 import { useAuthStore } from '@/src/store/auth.store';
 import type { PostDto } from '@/src/types/post';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { getViewerPostReactionCode } from '@/src/utils/post-reactions';
 import { useCallback, useMemo, useState } from 'react';
 
 export function HomePostsFeed() {
@@ -69,8 +70,16 @@ export function HomePostsFeed() {
         shareCount: result.post.shareCount,
       });
     },
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ['posts', 'feed'] });
+    onError: (_e, _vars, context) => {
+      if (context?.snapshot) {
+        applyPostPatch(queryClient, {
+          postId: context.snapshot.id,
+          reactionCounts: context.snapshot.reactionCounts,
+          myReactionCodes: context.snapshot.myReactionCodes,
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['posts', 'feed'] });
+      }
     },
   });
 
@@ -158,7 +167,10 @@ export function HomePostsFeed() {
         open={pickerOpen}
         anchor={pickerAnchor}
         options={postReactionTypes}
-        selectedCode={items.find((p) => p.id === reactPostId)?.myReactionCodes.find((code) => code !== 'SHARE') ?? null}
+        selectedCode={(() => {
+          const target = items.find((p) => p.id === reactPostId);
+          return target ? getViewerPostReactionCode(target) : null;
+        })()}
         onClose={() => setPickerOpen(false)}
         onSelect={(typeCode) => {
           if (!reactPostId) return;

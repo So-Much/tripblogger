@@ -15,11 +15,12 @@ import {
   type ShopFilterValues,
 } from '@/src/components/commerce/ShopFilterSheet';
 import { ShopFilterBar } from '@/src/components/commerce/ShopFilterBar';
+import { ShopInlineFilterChips } from '@/src/components/commerce/ShopInlineFilterChips';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useProductQuickActions } from '@/src/hooks/use-product-quick-actions';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
-import type { CategoryDto, ProductDto } from '@/src/types/commerce';
+import type { ProductDto } from '@/src/types/commerce';
 
 const headerHitSlop = { top: 12, bottom: 12, left: 12, right: 12 };
 
@@ -102,6 +103,14 @@ export function ShopScreen() {
   const total = productsQuery.data?.pages[0]?.total ?? items.length;
   const activeFilterCount = countActiveFilters(filters);
 
+  const cartQtyByProductId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const line of cartCountQuery.data?.items ?? []) {
+      m.set(line.productId, (m.get(line.productId) ?? 0) + line.quantity);
+    }
+    return m;
+  }, [cartCountQuery.data?.items]);
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: true,
@@ -168,6 +177,7 @@ export function ShopScreen() {
         onSelect={setCategoryId}
         isLoading={categoriesQuery.isLoading}
       />
+      <ShopInlineFilterChips value={filters} onChange={setFilters} />
       <ShopFilterBar
         resultCount={total}
         activeFilterCount={activeFilterCount}
@@ -223,6 +233,7 @@ export function ShopScreen() {
           onAddToCart={(p) => onProductAction('cart', p)}
           onToggleWishlist={(p) => onProductAction('wish', p)}
           wishlistedIds={wishlistIdsQuery.data}
+          cartQtyByProductId={isMember ? cartQtyByProductId : undefined}
           actionsDisabled={!isMember}
           pendingProductId={quickActions.pending?.productId ?? null}
           pendingAction={quickActions.pending?.action ?? null}

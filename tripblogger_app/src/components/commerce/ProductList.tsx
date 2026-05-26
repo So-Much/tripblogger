@@ -27,6 +27,7 @@ type ProductListProps = {
   onAddToCart?: (product: ProductDto) => void;
   onToggleWishlist?: (product: ProductDto) => void;
   wishlistedIds?: Set<string>;
+  cartQtyByProductId?: Map<string, number>;
   actionsDisabled?: boolean;
   pendingProductId?: string | null;
   pendingAction?: ProductQuickAction | null;
@@ -48,6 +49,7 @@ function ProductListInner({
   onAddToCart,
   onToggleWishlist,
   wishlistedIds,
+  cartQtyByProductId,
   actionsDisabled,
   pendingProductId,
   pendingAction,
@@ -68,6 +70,7 @@ function ProductListInner({
           onAddToCart={onAddToCart ? () => onAddToCart(item) : undefined}
           onToggleWishlist={onToggleWishlist ? () => onToggleWishlist(item) : undefined}
           isWishlisted={wishlistedIds?.has(item.id)}
+          inCartQty={cartQtyByProductId?.get(item.id)}
           actionsDisabled={actionsDisabled}
           pendingAction={pendingProductId === item.id ? pendingAction ?? null : null}
         />
@@ -81,6 +84,7 @@ function ProductListInner({
       onAddToCart,
       onToggleWishlist,
       wishlistedIds,
+      cartQtyByProductId,
       actionsDisabled,
       pendingProductId,
       pendingAction,
