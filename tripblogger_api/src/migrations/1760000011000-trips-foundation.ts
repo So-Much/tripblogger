@@ -146,7 +146,7 @@ export class TripsFoundation1760000011000 implements MigrationInterface {
         collection_name nvarchar(100) NOT NULL DEFAULT N'Mặc định',
         note nvarchar(max) NULL,
         created_at datetime2 NOT NULL DEFAULT GETUTCDATE(),
-        CONSTRAINT FK_saved_locations_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        CONSTRAINT FK_saved_locations_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE NO ACTION,
         CONSTRAINT FK_saved_locations_locations FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
         CONSTRAINT UQ_saved_locations_user_location UNIQUE (user_id, location_id)
       );
@@ -159,18 +159,18 @@ export class TripsFoundation1760000011000 implements MigrationInterface {
         linked_at datetime2 NOT NULL DEFAULT GETUTCDATE(),
         CONSTRAINT PK_trip_posts PRIMARY KEY (trip_id, post_id),
         CONSTRAINT FK_trip_posts_trips FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
-        CONSTRAINT FK_trip_posts_posts FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+        CONSTRAINT FK_trip_posts_posts FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE NO ACTION
       );
     `);
 
     await queryRunner.query(`
       ALTER TABLE location_reviews ADD CONSTRAINT FK_location_reviews_trips
-        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE SET NULL;
+        FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE NO ACTION;
     `);
 
     await queryRunner.query(`
       ALTER TABLE location_reviews ADD CONSTRAINT FK_location_reviews_trip_stops
-        FOREIGN KEY (trip_stop_id) REFERENCES trip_stops(id) ON DELETE SET NULL;
+        FOREIGN KEY (trip_stop_id) REFERENCES trip_stops(id) ON DELETE NO ACTION;
     `);
   }
 

@@ -19,8 +19,8 @@ export class TripRecommendations1760000012000 implements MigrationInterface {
         generated_at datetime2 NOT NULL DEFAULT GETUTCDATE(),
         created_at datetime2 NOT NULL DEFAULT GETUTCDATE(),
         CONSTRAINT FK_trip_rec_trips FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
-        CONSTRAINT FK_trip_rec_locations FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
-        CONSTRAINT FK_trip_rec_accom FOREIGN KEY (based_on_accommodation_id) REFERENCES trip_accommodations(id) ON DELETE SET NULL,
+        CONSTRAINT FK_trip_rec_locations FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE NO ACTION,
+        CONSTRAINT FK_trip_rec_accom FOREIGN KEY (based_on_accommodation_id) REFERENCES trip_accommodations(id) ON DELETE NO ACTION,
         CONSTRAINT UQ_trip_rec_trip_location UNIQUE (trip_id, location_id)
       );
     `);

@@ -25,14 +25,14 @@ export class TripRecommendationEntity {
   @Column({ name: 'location_id' })
   locationId!: string;
 
-  @ManyToOne(() => LocationEntity, { onDelete: 'CASCADE' })
+  @ManyToOne(() => LocationEntity, { onDelete: 'NO ACTION' })
   @JoinColumn({ name: 'location_id' })
   location!: LocationEntity;
 
   @Column({ name: 'based_on_accommodation_id', type: 'uniqueidentifier', nullable: true })
   basedOnAccommodationId!: string | null;
 
-  @ManyToOne(() => TripAccommodationEntity, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => TripAccommodationEntity, { onDelete: 'NO ACTION', nullable: true })
   @JoinColumn({ name: 'based_on_accommodation_id' })
   basedOnAccommodation!: TripAccommodationEntity | null;
 

@@ -10,7 +10,7 @@ export class SavedLocationEntity {
   @Column({ name: 'user_id' })
   userId!: string;
 
-  @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
+  @ManyToOne(() => UserEntity, { onDelete: 'NO ACTION' })
   @JoinColumn({ name: 'user_id' })
   user!: UserEntity;
 
