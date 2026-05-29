@@ -33,6 +33,17 @@ import { OrderProductEntity } from '../../modules/commerce/entities/order-produc
 import { PaymentEntity } from '../../modules/commerce/entities/payment.entity';
 import { ShipmentEntity } from '../../modules/commerce/entities/shipment.entity';
 import { ProductRatingEntity } from '../../modules/commerce/entities/product-rating.entity';
+import { LocationEntity } from '../../modules/locations/entities/location.entity';
+import { LocationTypeEntity } from '../../modules/locations/entities/location-type.entity';
+import { LocationReviewEntity } from '../../modules/locations/entities/location-review.entity';
+import { TripEntity } from '../../modules/trips/entities/trip.entity';
+import { TripMemberEntity } from '../../modules/trips/entities/trip-member.entity';
+import { TripDayEntity } from '../../modules/trips/entities/trip-day.entity';
+import { TripStopEntity } from '../../modules/trips/entities/trip-stop.entity';
+import { TripAccommodationEntity } from '../../modules/trips/entities/trip-accommodation.entity';
+import { SavedLocationEntity } from '../../modules/trips/entities/saved-location.entity';
+import { TripPostEntity } from '../../modules/trips/entities/trip-post.entity';
+import { TripRecommendationEntity } from '../../modules/trips/entities/trip-recommendation.entity';
 
 export default new DataSource({
   type: 'mssql',
@@ -81,6 +92,17 @@ export default new DataSource({
     PaymentEntity,
     ShipmentEntity,
     ProductRatingEntity,
+    LocationEntity,
+    LocationTypeEntity,
+    LocationReviewEntity,
+    TripEntity,
+    TripMemberEntity,
+    TripDayEntity,
+    TripStopEntity,
+    TripAccommodationEntity,
+    SavedLocationEntity,
+    TripPostEntity,
+    TripRecommendationEntity,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

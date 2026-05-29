@@ -1,0 +1,84 @@
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { MediaEntity } from '../../media/entities/media.entity';
+import { UserEntity } from '../../users/entities/user.entity';
+import { TripDayEntity } from './trip-day.entity';
+import { TripMemberEntity } from './trip-member.entity';
+
+export type TripStatus =
+  | 'DRAFT'
+  | 'PLANNING'
+  | 'ACTIVE'
+  | 'COMPLETED'
+  | 'ARCHIVED'
+  | 'CANCELLED';
+
+@Entity('trips')
+export class TripEntity {
+  @PrimaryGeneratedColumn('uuid')
+  id!: string;
+
+  @Column({ name: 'user_id' })
+  userId!: string;
+
+  @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user!: UserEntity;
+
+  @Column({ length: 255 })
+  title!: string;
+
+  @Column({ type: 'nvarchar', length: 'max', nullable: true })
+  description!: string | null;
+
+  @Column({ name: 'destination_name', type: 'nvarchar', length: 255, nullable: true })
+  destinationName!: string | null;
+
+  @Column({ name: 'start_date', type: 'date' })
+  startDate!: string;
+
+  @Column({ name: 'end_date', type: 'date' })
+  endDate!: string;
+
+  @Column({ length: 50, default: 'DRAFT' })
+  status!: TripStatus;
+
+  @Column({ name: 'is_public', default: false })
+  isPublic!: boolean;
+
+  @Column({ name: 'cover_media_id', type: 'uniqueidentifier', nullable: true })
+  coverMediaId!: string | null;
+
+  @ManyToOne(() => MediaEntity, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'cover_media_id' })
+  coverMedia!: MediaEntity | null;
+
+  @Column({ name: 'total_budget', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  totalBudget!: string | null;
+
+  @Column({ name: 'actual_budget', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  actualBudget!: string | null;
+
+  @Column({ type: 'nvarchar', length: 'max', nullable: true })
+  notes!: string | null;
+
+  @OneToMany(() => TripDayEntity, (d) => d.trip)
+  days!: TripDayEntity[];
+
+  @OneToMany(() => TripMemberEntity, (m) => m.trip)
+  members!: TripMemberEntity[];
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt!: Date;
+}
