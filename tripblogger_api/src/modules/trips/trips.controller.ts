@@ -175,6 +175,14 @@ export class TripsController {
     return this.tripsService.updateStatus(tripId, req.user.sub, dto);
   }
 
+  @Post(':tripId/bootstrap-itinerary')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  bootstrapItinerary(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
+    return this.tripsService.bootstrapItinerary(tripId, req.user.sub);
+  }
+
   @Post(':tripId/duplicate')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')

@@ -24,6 +24,8 @@ export type TripStopDto = {
   location: TripLocationRef | null;
   customName: string | null;
   customAddress: string | null;
+  customLatitude?: number | null;
+  customLongitude?: number | null;
   orderIndex: number;
   status: TripStopStatus;
   arrivalTime: string | null;

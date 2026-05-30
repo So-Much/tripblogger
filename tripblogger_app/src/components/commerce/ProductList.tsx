@@ -34,6 +34,7 @@ type ProductListProps = {
   ListHeaderComponent?: React.ReactElement | null;
   emptyLabel: string;
   numColumns?: 1 | 2;
+  currentUserId?: string | null;
 };
 
 function ProductListInner({
@@ -56,26 +57,31 @@ function ProductListInner({
   ListHeaderComponent,
   emptyLabel,
   numColumns = 2,
+  currentUserId,
 }: ProductListProps) {
   const { textMuted } = useCommerceTheme();
 
   const renderItem: ListRenderItem<ProductDto> = useCallback(
-    ({ item }) => (
+    ({ item }) => {
+      const isOwn = Boolean(currentUserId && item.sellerId === currentUserId);
+      return (
       <View style={numColumns === 2 ? styles.col : styles.colFull}>
         <ProductCard
           product={item}
+          cardVariant={isOwn ? 'own' : 'marketplace'}
           onPress={() => onPressProduct(item.id)}
           onLongPress={onLongPressProduct ? () => onLongPressProduct(item) : undefined}
-          onBuyNow={onBuyNow ? () => onBuyNow(item) : undefined}
-          onAddToCart={onAddToCart ? () => onAddToCart(item) : undefined}
-          onToggleWishlist={onToggleWishlist ? () => onToggleWishlist(item) : undefined}
+          onBuyNow={!isOwn && onBuyNow ? () => onBuyNow(item) : undefined}
+          onAddToCart={!isOwn && onAddToCart ? () => onAddToCart(item) : undefined}
+          onToggleWishlist={!isOwn && onToggleWishlist ? () => onToggleWishlist(item) : undefined}
           isWishlisted={wishlistedIds?.has(item.id)}
           inCartQty={cartQtyByProductId?.get(item.id)}
           actionsDisabled={actionsDisabled}
           pendingAction={pendingProductId === item.id ? pendingAction ?? null : null}
         />
       </View>
-    ),
+      );
+    },
     [
       numColumns,
       onPressProduct,
@@ -88,6 +94,7 @@ function ProductListInner({
       actionsDisabled,
       pendingProductId,
       pendingAction,
+      currentUserId,
     ],
   );
 

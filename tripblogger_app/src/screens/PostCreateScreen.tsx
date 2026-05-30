@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -225,6 +225,7 @@ export function PostCreateScreen() {
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
+  const onCta = useThemeColor({}, 'onCta');
 
   const mapSubmitMedia = useCallback((items: EditorMedia[]) => {
     return items.map(
@@ -407,20 +408,43 @@ export function PostCreateScreen() {
     };
   }, [postId, media, autosaveBlocked, scheduleSave]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        <Pressable
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)');
+          }}
+          hitSlop={12}
+          style={{ marginLeft: 4 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('backHome')}>
+          <IconSymbol name="chevron.left" size={24} color={cta} />
+        </Pressable>
+      ),
       headerRight: isEditDraft
         ? () => (
             <PressableScale
               onPress={handlePublishPress}
               disabled={saveDraftMutation.isPending || publishMutation.isPending}
-              style={styles.headerPublishBtn}>
-              <ThemedText style={styles.headerPublishTxt}>{t('postsPublishNow')}</ThemedText>
+              style={[styles.headerPublishBtn, { backgroundColor: cta }]}>
+              <ThemedText style={[styles.headerPublishTxt, { color: onCta }]}>{t('postsPublishNow')}</ThemedText>
             </PressableScale>
           )
         : undefined,
     });
-  }, [navigation, isEditDraft, saveDraftMutation.isPending, publishMutation.isPending, handlePublishPress, t]);
+  }, [
+    navigation,
+    router,
+    cta,
+    onCta,
+    isEditDraft,
+    saveDraftMutation.isPending,
+    publishMutation.isPending,
+    handlePublishPress,
+    t,
+  ]);
 
   const pickMedia = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -727,9 +751,8 @@ const styles = StyleSheet.create({
   headerPublishBtn: {
     marginRight: 8,
     borderRadius: 10,
-    backgroundColor: '#2563EB',
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  headerPublishTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  headerPublishTxt: { fontWeight: '700', fontSize: 12 },
 });

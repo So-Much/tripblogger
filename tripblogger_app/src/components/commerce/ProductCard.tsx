@@ -104,6 +104,7 @@ function ProductCardInner({
   onRemoveFromWishlist,
   wishlistRemoveLabel,
   inCartQty,
+  cardVariant = 'marketplace',
 }: {
   product: ProductDto;
   onPress: () => void;
@@ -118,14 +119,16 @@ function ProductCardInner({
   wishlistRemoveLabel?: string;
   /** Line quantity for this product in the member's cart (shop list). */
   inCartQty?: number;
+  cardVariant?: 'marketplace' | 'own';
 }) {
   const { t } = useI18n();
-  const { border, card, cta, success, surface, radius, space, onCta } = useCommerceTheme();
+  const { border, card, cta, success, surface, radius, space, onCta, primary } = useCommerceTheme();
+  const isOwn = cardVariant === 'own';
   const cover = product.media?.[0]?.thumbnailUrl || product.media?.[0]?.url;
   const lowStock = product.stock > 0 && product.stock <= 5;
   const outOfStock = product.stock <= 0;
-  const showWishlistFab = Boolean(onToggleWishlist || onRemoveFromWishlist);
-  const showActions = Boolean(onBuyNow || onAddToCart) && !onRemoveFromWishlist;
+  const showWishlistFab = Boolean(onToggleWishlist || onRemoveFromWishlist) && !isOwn;
+  const showActions = Boolean(onBuyNow || onAddToCart) && !onRemoveFromWishlist && !isOwn;
   const onWishlistPress = onRemoveFromWishlist ?? onToggleWishlist;
   const wishlistFilled = onRemoveFromWishlist ? true : Boolean(isWishlisted);
   const buyPending = pendingAction === 'buy';
@@ -143,9 +146,10 @@ function ProductCardInner({
       style={[
         styles.card,
         {
-          borderColor: border,
-          backgroundColor: card,
+          borderColor: isOwn ? cta : border,
+          backgroundColor: isOwn ? withAlpha(primary, 0.45) : card,
           borderRadius: radius.lg,
+          borderWidth: isOwn ? 2 : StyleSheet.hairlineWidth,
           marginHorizontal: space.sm,
           marginBottom: space.md,
           ...Platform.select({
@@ -179,6 +183,11 @@ function ProductCardInner({
               showLowStock={lowStock}
               lowStockLabel={t('productLowStockLine', { count: product.stock, unit: product.stockUnit })}
             />
+            {isOwn ? (
+              <View style={[styles.ownBadge, { backgroundColor: cta }]}>
+                <ThemedText style={[styles.ownBadgeTxt, { color: onCta }]}>{t('shopOwnProductBadge')}</ThemedText>
+              </View>
+            ) : null}
             {outOfStock ? (
               <View style={[styles.oosOverlay, { backgroundColor: withAlpha('#0F172A', 0.5) }]}>
                 <ThemedText style={styles.oosText}>{t('productOutOfStock')}</ThemedText>
@@ -189,7 +198,11 @@ function ProductCardInner({
             <ThemedText numberOfLines={2} type="defaultSemiBold" style={styles.productTitle}>
               {product.title}
             </ThemedText>
-            <SellerBadge name={product.seller.displayName} verified={product.seller.isVerifiedSeller} color={success} />
+            <SellerBadge
+              name={product.seller.displayName}
+              verified={product.seller.isVerifiedSeller}
+              color={isOwn ? cta : success}
+            />
             <PriceLabel amount={product.price} accent />
           </View>
         </Pressable>
@@ -268,6 +281,11 @@ function ProductCardInner({
               ) : null}
             </View>
           </Pressable>
+        </View>
+      ) : isOwn ? (
+        <View style={[styles.ownHintRow, { paddingHorizontal: space.md, paddingBottom: space.md }]}>
+          <IconSymbol name="storefront.fill" size={14} color={cta} />
+          <ThemedText style={{ color: cta, fontSize: 12, fontWeight: '600' }}>{t('productMyProducts')}</ThemedText>
         </View>
       ) : null}
 
@@ -378,4 +396,15 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  ownBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  ownBadgeTxt: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2 },
+  ownHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: ACTION_ROW_H },
 });

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { PasswordField } from '@/src/components/forms/PasswordField';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,6 +52,7 @@ export function RegisterScreen() {
   const cta = useThemeColor({}, 'cta');
   const accent = useThemeColor({}, 'accent');
   const textColor = useThemeColor({}, 'text');
+  const onCta = useThemeColor({}, 'onCta');
 
   const { control, handleSubmit } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -97,12 +99,10 @@ export function RegisterScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('username')}
                     </ThemedText>
-                    <TextInput
+                    <ThemedTextInput
                       accessibilityLabel="Username"
                       autoCapitalize="none"
                       placeholder="your_username"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
                       value={value}
                       onChangeText={onChange}
                     />
@@ -119,14 +119,11 @@ export function RegisterScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('password')}
                     </ThemedText>
-                    <TextInput
-                      accessibilityLabel="Password"
-                      secureTextEntry
-                      placeholder="••••••••"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
+                    <PasswordField
                       value={value}
                       onChangeText={onChange}
+                      accessibilityLabel="Password"
+                      autoComplete="password-new"
                     />
                     {error ? <ThemedText style={styles.error}>{error.message}</ThemedText> : null}
                   </View>
@@ -141,14 +138,11 @@ export function RegisterScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('confirmPassword')}
                     </ThemedText>
-                    <TextInput
-                      accessibilityLabel="Confirm password"
-                      secureTextEntry
-                      placeholder="••••••••"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
+                    <PasswordField
                       value={value}
                       onChangeText={onChange}
+                      accessibilityLabel="Confirm password"
+                      autoComplete="password-new"
                     />
                     {error ? <ThemedText style={styles.error}>{error.message}</ThemedText> : null}
                   </View>
@@ -159,7 +153,7 @@ export function RegisterScreen() {
 
               <ActionPulse pulseKey={successPulse}>
                 <PressableScale style={[styles.signUpButton, { backgroundColor: cta }]} onPress={onSubmit}>
-                  <ThemedText type="defaultSemiBold" style={styles.signUpText}>
+                  <ThemedText type="defaultSemiBold" style={[styles.signUpText, { color: onCta }]}>
                     {registerMutation.isPending ? t('creatingAccount') : t('createAccount')}
                   </ThemedText>
                 </PressableScale>
@@ -232,21 +226,13 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   field: { gap: 4 },
-  input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
-  },
   signUpButton: {
     alignItems: 'center',
     borderRadius: 999,
     marginTop: 6,
     paddingVertical: 14,
   },
-  signUpText: { color: '#fff' },
+  signUpText: { fontWeight: '600' },
   switchText: {
     paddingVertical: 4,
     textAlign: 'center',

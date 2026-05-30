@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline, type MapPressEvent, type Region } from 'react-native-maps';
+import MapView, { Polyline, type MapPressEvent, type Region } from 'react-native-maps';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { TripMapLabeledMarker } from '@/src/components/trips/TripMapLabeledMarker';
 import type { MapCheckpoint, MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
 
 type LatLng = { latitude: number; longitude: number };
@@ -16,6 +17,7 @@ type TripMapViewProps = {
   selectedPinId?: string | null;
   onMapPress?: (coords: { lat: number; lng: number }) => void;
   onPinPress?: (pin: MapExplorePin) => void;
+  onCheckpointPress?: (checkpoint: MapCheckpoint) => void;
   onRouteStopPress?: (stop: MapRouteStop) => void;
 };
 
@@ -31,11 +33,11 @@ export function TripMapView({
   selectedPinId,
   onMapPress,
   onPinPress,
+  onCheckpointPress,
   onRouteStopPress,
 }: TripMapViewProps) {
   const mapRef = useRef<MapView>(null);
   const tint = useThemeColor({}, 'tint');
-  const cta = useThemeColor({}, 'cta');
   const muted = useThemeColor({}, 'textMuted');
 
   useEffect(() => {
@@ -67,11 +69,12 @@ export function TripMapView({
         showsMyLocationButton={false}
         onPress={handleMapPress}>
         {checkpoint ? (
-          <Marker
-            coordinate={{ latitude: checkpoint.lat, longitude: checkpoint.lng }}
-            title={checkpoint.name}
-            description="Checkpoint"
-            pinColor={cta}
+          <TripMapLabeledMarker
+            latitude={checkpoint.lat}
+            longitude={checkpoint.lng}
+            name={checkpoint.name}
+            variant="checkpoint"
+            onPress={() => onCheckpointPress?.(checkpoint)}
           />
         ) : null}
 
@@ -85,29 +88,26 @@ export function TripMapView({
 
         {routeStops
           .filter((s) => s.status !== 'SKIPPED')
-          .map((stop, index) => {
-            const isVisiting = stop.status === 'VISITING';
-            const isVisited = stop.status === 'VISITED';
-            return (
-              <Marker
-                key={`route-${stop.id}`}
-                coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
-                title={stop.name}
-                description={isVisiting ? 'Đang ở' : isVisited ? 'Đã đến' : `Điểm ${index + 1}`}
-                pinColor={isVisiting ? cta : isVisited ? muted : tint}
-                opacity={isVisited ? 0.55 : 1}
-                onPress={() => onRouteStopPress?.(stop)}
-              />
-            );
-          })}
+          .map((stop) => (
+            <TripMapLabeledMarker
+              key={`route-${stop.id}`}
+              latitude={stop.latitude}
+              longitude={stop.longitude}
+              name={stop.name}
+              variant="route"
+              selected={stop.status === 'VISITING'}
+              onPress={() => onRouteStopPress?.(stop)}
+            />
+          ))}
 
         {pins.map((pin) => (
-          <Marker
+          <TripMapLabeledMarker
             key={pin.id}
-            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
-            title={pin.name}
-            description={pin.address ?? undefined}
-            pinColor={selectedPinId === pin.id ? cta : undefined}
+            latitude={pin.latitude}
+            longitude={pin.longitude}
+            name={pin.name}
+            variant="nearby"
+            selected={selectedPinId === pin.id}
             onPress={() => onPinPress?.(pin)}
           />
         ))}

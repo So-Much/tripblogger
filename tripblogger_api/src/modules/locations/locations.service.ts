@@ -58,7 +58,12 @@ export class LocationsService {
       return mapped;
     }
 
-    const places = await this.placesService.search(q, lat, lng, limit - mapped.length);
+    let places: PlaceResultDto[] = [];
+    try {
+      places = await this.placesService.search(q, lat, lng, limit - mapped.length);
+    } catch {
+      return mapped;
+    }
     const externalIds = new Set(
       places.map((p) => `${p.source}:${p.id}`),
     );
@@ -151,34 +156,38 @@ export class LocationsService {
       return results;
     }
 
-    const places = await this.placesService.nearby(lat, lng, cap - results.length);
-    const seenNames = new Set(results.map((r) => r.name.toLowerCase()));
+    try {
+      const places = await this.placesService.nearby(lat, lng, cap - results.length);
+      const seenNames = new Set(results.map((r) => r.name.toLowerCase()));
 
-    for (const p of places) {
-      const distanceKm = haversineKm(lat, lng, p.lat, p.lng);
-      if (distanceKm > radiusKm) continue;
-      const key = p.name.toLowerCase();
-      if (seenNames.has(key)) continue;
-      seenNames.add(key);
-      results.push({
-        id: `external:${p.source}:${p.id}`,
-        name: p.name,
-        address: p.address ?? null,
-        latitude: p.lat,
-        longitude: p.lng,
-        status: 'EXTERNAL',
-        locationType: null,
-        avgRating: 0,
-        totalReview: 0,
-        distanceKm: Math.round(distanceKm * 100) / 100,
-      });
-      if (results.length >= cap) break;
-    }
+      for (const p of places) {
+        const distanceKm = haversineKm(lat, lng, p.lat, p.lng);
+        if (distanceKm > radiusKm) continue;
+        const key = p.name.toLowerCase();
+        if (seenNames.has(key)) continue;
+        seenNames.add(key);
+        results.push({
+          id: `external:${p.source}:${p.id}`,
+          name: p.name,
+          address: p.address ?? null,
+          latitude: p.lat,
+          longitude: p.lng,
+          status: 'EXTERNAL',
+          locationType: null,
+          avgRating: 0,
+          totalReview: 0,
+          distanceKm: Math.round(distanceKm * 100) / 100,
+        });
+        if (results.length >= cap) break;
+      }
 
-    if (sort === 'rating') {
-      results.sort(
-        (a, b) => b.avgRating - a.avgRating || b.totalReview - a.totalReview || a.distanceKm - b.distanceKm,
-      );
+      if (sort === 'rating') {
+        results.sort(
+          (a, b) => b.avgRating - a.avgRating || b.totalReview - a.totalReview || a.distanceKm - b.distanceKm,
+        );
+      }
+    } catch {
+      // DB locations are enough when external places are unavailable.
     }
 
     return results.slice(0, cap);

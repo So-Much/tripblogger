@@ -42,6 +42,11 @@ export const tripsService = {
     return res.data;
   },
 
+  async bootstrapItinerary(tripId: string): Promise<TripDto> {
+    const res = await apiClient.post<TripDto>(`/trips/${tripId}/bootstrap-itinerary`);
+    return res.data;
+  },
+
   async addAccommodation(
     tripId: string,
     body: {
@@ -66,6 +71,9 @@ export const tripsService = {
     body: {
       locationId?: string;
       customName?: string;
+      customAddress?: string;
+      lat?: number;
+      lng?: number;
       orderIndex?: number;
       budgetEstimate?: number;
     },

@@ -48,6 +48,8 @@ const MAPPING = {
   'bag.fill': 'work',
   airplane: 'flight',
   'tag.fill': 'local-offer',
+  'eye.fill': 'visibility',
+  'eye.slash.fill': 'visibility-off',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

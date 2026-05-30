@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { KeyboardFormScroll } from '@/src/components/forms/KeyboardFormScroll';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
@@ -113,16 +114,11 @@ export function ProductCreateScreen() {
 
   return (
     <SafeAreaView style={styles.flex} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.pad}>
+      <KeyboardFormScroll contentContainerStyle={styles.pad}>
         <ThemedText type="subtitle">{t('productTitleLabel')}</ThemedText>
-        <TextInput value={title} onChangeText={setTitle} style={[styles.inp, { borderColor: border, color: text }]} />
+        <ThemedTextInput value={title} onChangeText={setTitle} />
         <ThemedText type="subtitle">{t('productDescriptionLabel')}</ThemedText>
-        <TextInput
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          style={[styles.inp, styles.ta, { borderColor: border, color: text }]}
-        />
+        <ThemedTextInput value={description} onChangeText={setDescription} multiline style={styles.ta} />
         <ThemedText type="subtitle">{t('productCategory')}</ThemedText>
         <View style={styles.row}>
           {(cats.data ?? []).map((c: CategoryDto) => (
@@ -141,9 +137,9 @@ export function ProductCreateScreen() {
           ))}
         </View>
         <ThemedText type="subtitle">{t('productPrice')}</ThemedText>
-        <TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={[styles.inp, { borderColor: border, color: text }]} />
+        <ThemedTextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
         <ThemedText type="subtitle">Stock</ThemedText>
-        <TextInput value={stock} onChangeText={setStock} keyboardType="number-pad" style={[styles.inp, { borderColor: border, color: text }]} />
+        <ThemedTextInput value={stock} onChangeText={setStock} keyboardType="number-pad" />
         <View style={styles.row}>
           <Pressable
             onPress={() => setProductType('NEW')}
@@ -184,16 +180,15 @@ export function ProductCreateScreen() {
           onPress={tryPublish}>
           <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productPublish')}</ThemedText>
         </Pressable>
-      </ScrollView>
+      </KeyboardFormScroll>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  pad: { padding: 16, gap: 10, paddingBottom: 40 },
-  inp: { borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 16 },
-  ta: { minHeight: 100, textAlignVertical: 'top' },
+  pad: { padding: 16, gap: 12, paddingBottom: 40 },
+  ta: { minHeight: 120, textAlignVertical: 'top' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, minHeight: 36 },
   btn: { padding: 12, borderRadius: 12, borderWidth: 1, alignSelf: 'flex-start' },

@@ -12,7 +12,9 @@ type TripExploreSheetProps = {
   checkpointLabel?: string | null;
   activeTrip?: TripDto | null;
   nextStop?: MapRouteStop | null;
+  selectedPinId?: string | null;
   onPinPress: (pin: MapExplorePin) => void;
+  onNavigateNextStop?: () => void;
   onTripPress?: () => void;
 };
 
@@ -22,7 +24,9 @@ export function TripExploreSheet({
   checkpointLabel,
   activeTrip,
   nextStop,
+  selectedPinId,
   onPinPress,
+  onNavigateNextStop,
   onTripPress,
 }: TripExploreSheetProps) {
   const border = useThemeColor({}, 'border');
@@ -30,10 +34,14 @@ export function TripExploreSheet({
   const muted = useThemeColor({}, 'textMuted');
   const tint = useThemeColor({}, 'tint');
   const cta = useThemeColor({}, 'cta');
+  const onCta = useThemeColor({}, 'onCta');
 
-  const title = checkpointLabel
-    ? `Gợi ý quanh ${checkpointLabel}`
-    : 'Địa điểm được đánh giá cao';
+  const isActiveTrip = activeTrip?.status === 'ACTIVE';
+  const title = isActiveTrip && nextStop
+    ? `Điểm tiếp theo: ${nextStop.name}`
+    : checkpointLabel
+      ? `Checkpoint quanh ${checkpointLabel}`
+      : 'Địa điểm gần bạn';
 
   return (
     <View style={[styles.sheet, { borderColor: border, backgroundColor: `${card}F2` }]}>
@@ -48,7 +56,7 @@ export function TripExploreSheet({
             </ThemedText>
             {nextStop ? (
               <ThemedText style={{ color: muted, fontSize: 12 }} numberOfLines={1}>
-                Tiếp theo: {nextStop.name}
+                {isActiveTrip ? 'Đang đi tới' : 'Tiếp theo'}: {nextStop.name}
               </ThemedText>
             ) : (
               <ThemedText style={{ color: muted, fontSize: 12 }}>
@@ -57,6 +65,17 @@ export function TripExploreSheet({
             )}
           </View>
           <IconSymbol name="chevron.right" size={16} color={muted} />
+        </PressableScale>
+      ) : null}
+
+      {isActiveTrip && nextStop && onNavigateNextStop ? (
+        <PressableScale
+          style={[styles.navigateBtn, { backgroundColor: cta }]}
+          onPress={onNavigateNextStop}>
+          <IconSymbol name="location.fill" size={18} color={onCta} />
+          <ThemedText type="defaultSemiBold" style={{ color: onCta, flex: 1 }} numberOfLines={1}>
+            Chỉ đường tới {nextStop.name}
+          </ThemedText>
         </PressableScale>
       ) : null}
 
@@ -80,7 +99,13 @@ export function TripExploreSheet({
           }
           renderItem={({ item }) => (
             <PressableScale
-              style={[styles.row, { borderColor: border }]}
+              style={[
+                styles.row,
+                {
+                  borderColor: selectedPinId === item.id ? cta : border,
+                  backgroundColor: selectedPinId === item.id ? `${cta}10` : 'transparent',
+                },
+              ]}
               onPress={() => onPinPress(item)}>
               <View style={[styles.ratingBadge, { backgroundColor: `${cta}18` }]}>
                 <ThemedText style={{ color: cta, fontWeight: '700', fontSize: 12 }}>
@@ -140,6 +165,14 @@ const styles = StyleSheet.create({
   tripBannerText: {
     flex: 1,
     gap: 2,
+  },
+  navigateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
   },
   title: {
     fontSize: 14,

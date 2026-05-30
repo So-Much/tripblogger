@@ -254,14 +254,21 @@ export class OrdersService {
             status: 'PROCESSING',
           }),
         );
-        const fresh = await pRepo.findOne({ where: { id: p.id } });
-        if (!fresh) throw new BadRequestException('Product missing');
-        fresh.stock -= line.quantity;
-        if (fresh.stock <= 0) {
-          fresh.stock = 0;
-          fresh.status = 'OUTOFSTOCK';
+        const decResult = await pRepo
+          .createQueryBuilder()
+          .update(ProductEntity)
+          .set({ stock: () => `stock - ${line.quantity}` })
+          .where('id = :id AND stock >= :qty', { id: p.id, qty: line.quantity })
+          .execute();
+        if (!decResult.affected) {
+          throw new BadRequestException(`Insufficient stock for ${p.title}`);
         }
-        await pRepo.save(fresh);
+        const updated = await pRepo.findOne({ where: { id: p.id } });
+        if (updated && updated.stock <= 0) {
+          updated.stock = 0;
+          updated.status = 'OUTOFSTOCK';
+          await pRepo.save(updated);
+        }
       }
 
       if (couponId) {

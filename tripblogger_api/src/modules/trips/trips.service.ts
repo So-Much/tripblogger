@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   ChangeTripDatesDto,
   CreateTripDto,
@@ -16,6 +16,8 @@ import { TripDayEntity } from './entities/trip-day.entity';
 import { TripEntity, TripStatus } from './entities/trip.entity';
 import { TripMemberEntity } from './entities/trip-member.entity';
 import { TripAccommodationEntity } from './entities/trip-accommodation.entity';
+import { TripRecommendationEntity } from './entities/trip-recommendation.entity';
+import { TripStopEntity } from './entities/trip-stop.entity';
 import { TripPermissionsService } from './trip-permissions.service';
 import { mapTrip } from './trips.mapper';
 
@@ -46,6 +48,10 @@ export class TripsService {
     private readonly membersRepo: Repository<TripMemberEntity>,
     @InjectRepository(TripAccommodationEntity)
     private readonly accomRepo: Repository<TripAccommodationEntity>,
+    @InjectRepository(TripStopEntity)
+    private readonly stopsRepo: Repository<TripStopEntity>,
+    @InjectRepository(TripRecommendationEntity)
+    private readonly recRepo: Repository<TripRecommendationEntity>,
     private readonly permissions: TripPermissionsService,
   ) {}
 
@@ -210,7 +216,25 @@ export class TripsService {
 
   async updateStatus(tripId: string, userId: string, dto: UpdateTripStatusDto) {
     await this.permissions.assertCan(tripId, userId, 'edit_trip');
+    const trip = await this.tripsRepo.findOne({ where: { id: tripId } });
+    if (!trip) throw new NotFoundException('Trip not found');
+
+    if (dto.status === 'ACTIVE') {
+      await this.prepareTripForActive(tripId, trip);
+    }
+
     await this.tripsRepo.update({ id: tripId }, { status: dto.status });
+    return this.getTripDetail(tripId, userId);
+  }
+
+  async bootstrapItinerary(tripId: string, userId: string) {
+    await this.permissions.assertCan(tripId, userId, 'edit_trip');
+    const trip = await this.tripsRepo.findOne({ where: { id: tripId } });
+    if (!trip) throw new NotFoundException('Trip not found');
+    if (trip.status !== 'ACTIVE' && trip.status !== 'PLANNING') {
+      throw new BadRequestException('Trip must be planning or active');
+    }
+    await this.prepareTripForActive(tripId, trip);
     return this.getTripDetail(tripId, userId);
   }
 
@@ -254,6 +278,90 @@ export class TripsService {
         totalBudget: String(Number(row.stopEst) + accomEst),
       },
     );
+  }
+
+  private async prepareTripForActive(tripId: string, trip: TripEntity) {
+    let days = await this.daysRepo.find({ where: { tripId }, order: { dayNumber: 'ASC' } });
+    if (!days.length) {
+      await this.generateDays(tripId, trip.startDate, trip.endDate);
+      days = await this.daysRepo.find({ where: { tripId }, order: { dayNumber: 'ASC' } });
+    }
+    if (!days.length) return;
+
+    const stopCount = await this.stopsRepo.count({
+      where: { tripDayId: In(days.map((d) => d.id)) },
+    });
+    if (stopCount === 0) {
+      await this.bootstrapStopsFromRecommendationsOrAccommodation(tripId, days);
+    }
+
+    const visiting = await this.stopsRepo
+      .createQueryBuilder('s')
+      .innerJoin('s.tripDay', 'd')
+      .where('d.trip_id = :tripId', { tripId })
+      .andWhere('s.status = :status', { status: 'VISITING' })
+      .getCount();
+    if (visiting === 0) {
+      await this.checkinFirstPlannedStop(tripId);
+    }
+  }
+
+  private async bootstrapStopsFromRecommendationsOrAccommodation(
+    tripId: string,
+    days: TripDayEntity[],
+  ) {
+    const recs = await this.recRepo.find({
+      where: { tripId, isDismissed: false },
+      order: { score: 'DESC' },
+      take: 6,
+    });
+
+    if (recs.length) {
+      for (let i = 0; i < recs.length; i++) {
+        const day = days[Math.min(Math.floor(i / 2), days.length - 1)];
+        await this.stopsRepo.save(
+          this.stopsRepo.create({
+            tripDayId: day.id,
+            locationId: recs[i].locationId,
+            orderIndex: (i + 1) * 1000,
+            status: 'PLANNED',
+            transportMode: 'WALK',
+          }),
+        );
+      }
+      return;
+    }
+
+    const accom = await this.accomRepo.findOne({
+      where: { tripId, isPrimary: true },
+      relations: ['location'],
+    });
+    if (accom?.locationId) {
+      await this.stopsRepo.save(
+        this.stopsRepo.create({
+          tripDayId: days[0].id,
+          locationId: accom.locationId,
+          orderIndex: 1000,
+          status: 'PLANNED',
+          transportMode: 'WALK',
+        }),
+      );
+    }
+  }
+
+  private async checkinFirstPlannedStop(tripId: string) {
+    const firstStop = await this.stopsRepo
+      .createQueryBuilder('s')
+      .innerJoin('s.tripDay', 'd')
+      .where('d.trip_id = :tripId', { tripId })
+      .andWhere('s.status = :status', { status: 'PLANNED' })
+      .orderBy('d.day_number', 'ASC')
+      .addOrderBy('s.order_index', 'ASC')
+      .getOne();
+    if (!firstStop) return;
+    firstStop.status = 'VISITING';
+    firstStop.visitedAt = new Date();
+    await this.stopsRepo.save(firstStop);
   }
 
   private async generateDays(tripId: string, start: string, end: string) {

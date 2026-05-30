@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,6 +12,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TripMapSearchBar } from '@/src/components/trips/TripMapSearchBar';
 import { TripMapView } from '@/src/components/trips/TripMapView';
+import { KeyboardFormScroll } from '@/src/components/forms/KeyboardFormScroll';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { tripsService } from '@/src/services/api/trips.service';
 import type { MapCheckpoint } from '@/src/types/trip-map';
@@ -35,9 +36,9 @@ export function TripCreateScreen() {
 
   const tint = useThemeColor({}, 'tint');
   const border = useThemeColor({}, 'border');
-  const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const card = useThemeColor({}, 'card');
+  const onCta = useThemeColor({}, 'onCta');
 
   const initialStay = useMemo<MapCheckpoint | null>(() => {
     const lat = params.lat ? Number(params.lat) : NaN;
@@ -154,7 +155,7 @@ export function TripCreateScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ThemedView style={styles.container}>
+      <KeyboardFormScroll contentContainerStyle={styles.container}>
         <ThemedText type="subtitle">Bước 2: Chi tiết chuyến đi</ThemedText>
         {stay ? (
           <View style={[styles.stayChip, { borderColor: border, backgroundColor: card }]}>
@@ -165,44 +166,22 @@ export function TripCreateScreen() {
             </Pressable>
           </View>
         ) : null}
-        <TextInput
-          style={[styles.input, { borderColor: border, color: text }]}
-          placeholder="Tiêu đề"
-          placeholderTextColor={muted}
-          value={title}
-          onChangeText={setTitle}
-        />
-        <TextInput
-          style={[styles.input, { borderColor: border, color: text }]}
-          placeholder="Điểm đến"
-          placeholderTextColor={muted}
-          value={destinationName}
-          onChangeText={setDestinationName}
-        />
-        <TextInput
-          style={[styles.input, { borderColor: border, color: text }]}
-          placeholder="Ngày đi (YYYY-MM-DD)"
-          value={startDate}
-          onChangeText={setStartDate}
-        />
-        <TextInput
-          style={[styles.input, { borderColor: border, color: text }]}
-          placeholder="Ngày về (YYYY-MM-DD)"
-          value={endDate}
-          onChangeText={setEndDate}
-        />
+        <ThemedTextInput placeholder="Tiêu đề" value={title} onChangeText={setTitle} />
+        <ThemedTextInput placeholder="Điểm đến" value={destinationName} onChangeText={setDestinationName} />
+        <ThemedTextInput placeholder="Ngày đi (YYYY-MM-DD)" value={startDate} onChangeText={setStartDate} />
+        <ThemedTextInput placeholder="Ngày về (YYYY-MM-DD)" value={endDate} onChangeText={setEndDate} />
         {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
         <Pressable
           style={[styles.btn, { backgroundColor: tint }]}
           disabled={!title.trim() || mutation.isPending}
           onPress={() => mutation.mutate()}>
           {mutation.isPending ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={onCta} />
           ) : (
-            <ThemedText style={styles.btnText}>Tạo chuyến đi</ThemedText>
+            <ThemedText style={[styles.btnText, { color: onCta }]}>Tạo chuyến đi</ThemedText>
           )}
         </Pressable>
-      </ThemedView>
+      </KeyboardFormScroll>
     </SafeAreaView>
   );
 }
@@ -210,7 +189,7 @@ export function TripCreateScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safe: { flex: 1 },
-  container: { flex: 1, padding: 16, gap: 12 },
+  container: { padding: 16, gap: 12 },
   stepPanel: {
     position: 'absolute',
     left: 0,
@@ -234,8 +213,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 4,
   },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16 },
   btn: { borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 4 },
-  btnText: { color: '#fff', fontWeight: '600' },
+  btnText: { fontWeight: '600' },
   error: { color: '#c00' },
 });

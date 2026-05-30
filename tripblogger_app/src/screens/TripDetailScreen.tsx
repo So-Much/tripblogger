@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { tripsService } from '@/src/services/api/trips.service';
 import type { TripDayDto, TripStopDto } from '@/src/types/trip';
+import { formatApiError } from '@/src/utils/format-api-error';
 
 export function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,6 +17,8 @@ export function TripDetailScreen() {
   const queryClient = useQueryClient();
   const tint = useThemeColor({}, 'tint');
   const border = useThemeColor({}, 'border');
+  const cta = useThemeColor({}, 'cta');
+  const onCta = useThemeColor({}, 'onCta');
   const [showRecs, setShowRecs] = useState(false);
 
   const tripQuery = useQuery({
@@ -36,9 +39,25 @@ export function TripDetailScreen() {
     },
   });
 
+  const invalidateTripQueries = () => {
+    void queryClient.invalidateQueries({ queryKey: ['trips', tripId] });
+    void queryClient.invalidateQueries({ queryKey: ['trips', 'active-or-planning'] });
+    void queryClient.invalidateQueries({ queryKey: ['trips', 'route'] });
+  };
+
+  const goToMapWithNavigation = () => {
+    router.replace({ pathname: '/(tabs)/trips', params: { navigateNext: '1' } });
+  };
+
   const statusMutation = useMutation({
     mutationFn: (status: 'ACTIVE' | 'COMPLETED') => tripsService.updateStatus(tripId, status),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['trips', tripId] }),
+    onSuccess: (updated, status) => {
+      invalidateTripQueries();
+      if (status === 'ACTIVE') {
+        goToMapWithNavigation();
+      }
+    },
+    onError: (e) => Alert.alert('Lỗi', formatApiError(e, 'Không cập nhật được trạng thái')),
   });
 
   const stopAction = useMutation({
@@ -46,11 +65,15 @@ export function TripDetailScreen() {
       action === 'checkin'
         ? tripsService.checkinStop(tripId, stopId)
         : tripsService.completeStop(tripId, stopId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['trips', tripId] }),
+    onSuccess: () => invalidateTripQueries(),
   });
 
   const trip = tripQuery.data;
   const isActive = trip?.status === 'ACTIVE';
+  const totalStops = useMemo(
+    () => (trip?.days ?? []).reduce((sum, d) => sum + (d.stops?.length ?? 0), 0),
+    [trip?.days],
+  );
 
   const stopName = (s: TripStopDto) => s.location?.name ?? s.customName ?? 'Điểm dừng';
 
@@ -71,8 +94,18 @@ export function TripDetailScreen() {
 
           <ThemedView style={styles.row}>
             {trip.status === 'PLANNING' || trip.status === 'DRAFT' ? (
-              <Pressable style={[styles.chip, { borderColor: tint }]} onPress={() => statusMutation.mutate('ACTIVE')}>
-                <ThemedText>Bắt đầu chuyến đi</ThemedText>
+              <Pressable
+                style={[styles.chip, styles.primaryChip, { backgroundColor: cta }]}
+                onPress={() => statusMutation.mutate('ACTIVE')}
+                disabled={statusMutation.isPending}>
+                <ThemedText style={{ color: onCta, fontWeight: '600' }}>
+                  {statusMutation.isPending ? 'Đang bắt đầu…' : 'Bắt đầu chuyến đi'}
+                </ThemedText>
+              </Pressable>
+            ) : null}
+            {isActive && totalStops > 0 ? (
+              <Pressable style={[styles.chip, { borderColor: tint }]} onPress={goToMapWithNavigation}>
+                <ThemedText style={{ color: tint }}>Chỉ đường điểm tiếp theo</ThemedText>
               </Pressable>
             ) : null}
             {trip.status === 'ACTIVE' ? (
@@ -155,6 +188,7 @@ const styles = StyleSheet.create({
   meta: { fontSize: 14, opacity: 0.75 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 8 },
   chip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  primaryChip: { borderWidth: 0 },
   section: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 6 },
   sectionTitle: { marginTop: 12 },
   dayCard: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 4 },

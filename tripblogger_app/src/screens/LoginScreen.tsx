@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { PasswordField } from '@/src/components/forms/PasswordField';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -47,6 +48,7 @@ export function LoginScreen() {
   const cta = useThemeColor({}, 'cta');
   const accent = useThemeColor({}, 'accent');
   const textColor = useThemeColor({}, 'text');
+  const onCta = useThemeColor({}, 'onCta');
 
   const { control, handleSubmit } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -111,12 +113,10 @@ export function LoginScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('username')}
                     </ThemedText>
-                    <TextInput
+                    <ThemedTextInput
                       accessibilityLabel="Username"
                       autoCapitalize="none"
                       placeholder="your_username"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
                       value={value}
                       onChangeText={onChange}
                     />
@@ -133,15 +133,7 @@ export function LoginScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('password')}
                     </ThemedText>
-                    <TextInput
-                      accessibilityLabel="Password"
-                      secureTextEntry
-                      placeholder="••••••••"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
-                      value={value}
-                      onChangeText={onChange}
-                    />
+                    <PasswordField value={value} onChangeText={onChange} accessibilityLabel="Password" />
                     {error ? <ThemedText style={styles.error}>{error.message}</ThemedText> : null}
                   </View>
                 )}
@@ -155,7 +147,7 @@ export function LoginScreen() {
 
               <ActionPulse pulseKey={successPulse}>
                 <PressableScale style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
-                  <ThemedText type="defaultSemiBold" style={styles.signInText}>
+                  <ThemedText type="defaultSemiBold" style={[styles.signInText, { color: onCta }]}>
                     {loginMutation.isPending ? t('signingIn') : t('signIn')}
                   </ThemedText>
                 </PressableScale>
@@ -237,14 +229,6 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   field: { gap: 4 },
-  input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
-  },
   devHint: {
     fontSize: 11,
     lineHeight: 15,
@@ -266,7 +250,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingVertical: 14,
   },
-  signInText: { color: '#fff' },
+  signInText: { fontWeight: '600' },
   skip: {
     paddingVertical: 4,
     textAlign: 'center',

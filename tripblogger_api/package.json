@@ -14,7 +14,10 @@
     "seed:categories": "ts-node src/scripts/seed-categories.ts",
     "seed:user": "ts-node src/scripts/seed-user.ts",
     "seed:commerce-products": "ts-node src/scripts/seed-commerce-products.ts",
+    "seed:locations": "ts-node src/scripts/seed-locations.ts",
+    "seed:buyer-user": "ts-node src/scripts/seed-buyer-user.ts",
     "seed:compositions": "ts-node src/scripts/seed-compositions.ts",
+    "seed:all": "npm run seed:roles-statuses && npm run seed:categories && npm run seed:user && npm run seed:buyer-user && npm run seed:commerce-products && npm run seed:locations && npm run seed:compositions",
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {

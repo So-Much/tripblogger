@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -17,6 +17,7 @@ import { useI18n } from '@/src/i18n';
 import { authService } from '@/src/services/api/auth.service';
 import { clearPersistedAuthTokens } from '@/src/services/session/session.service';
 import { SettingsHubSection } from '@/src/components/settings/SettingsHubSection';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 
 function OptionPill({
   label,
@@ -62,6 +63,7 @@ export function SettingsScreen() {
   const border = useThemeColor({}, 'border');
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
+  const onCta = useThemeColor({}, 'onCta');
   const text = useThemeColor({}, 'text');
   const card = useThemeColor({}, 'card');
 
@@ -264,7 +266,7 @@ export function SettingsScreen() {
               </ThemedText>
               <ThemedText style={{ color: muted }}>{t('settingsGuestSyncHint')}</ThemedText>
               <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
-                <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+                <ThemedText type="defaultSemiBold" style={[styles.ctaText, { color: onCta }]}>
                   {t('login')}
                 </ThemedText>
               </Pressable>
@@ -275,17 +277,26 @@ export function SettingsScreen() {
         {isMember ? <SettingsHubSection /> : null}
 
         <SectionCard>
-          <ThemedText type="subtitle">{t('settingsAppearanceCardTitle')}</ThemedText>
-          <ThemedText style={[styles.prefsLabel, { color: muted }]}>{t('languageSection')}</ThemedText>
-          <View style={styles.optionsRow}>
-            <OptionPill label={t('languageVi')} active={language === 'vi'} onPress={() => setLanguage('vi' as AppLanguage)} />
-            <OptionPill label={t('languageEn')} active={language === 'en'} onPress={() => setLanguage('en' as AppLanguage)} />
-          </View>
-          <ThemedText style={[styles.prefsLabel, { color: muted, marginTop: 14 }]}>{t('themeSection')}</ThemedText>
-          <View style={styles.optionsWrap}>
-            <OptionPill label={t('themeLight')} active={themePreference === 'light'} onPress={() => setThemePreference('light' as ThemePreference)} />
-            <OptionPill label={t('themeDark')} active={themePreference === 'dark'} onPress={() => setThemePreference('dark' as ThemePreference)} />
-            <OptionPill label={t('themeSystem')} active={themePreference === 'system'} onPress={() => setThemePreference('system' as ThemePreference)} />
+          <ThemedText type="defaultSemiBold" style={styles.appearanceTitle}>
+            {t('settingsAppearanceCardTitle')}
+          </ThemedText>
+          <View style={styles.compactPrefsRow}>
+            <View style={styles.compactGroup}>
+              <ThemedText style={[styles.compactLabel, { color: muted }]}>{t('languageSection')}</ThemedText>
+              <View style={styles.compactPills}>
+                <OptionPill label="VI" active={language === 'vi'} onPress={() => setLanguage('vi' as AppLanguage)} />
+                <OptionPill label="EN" active={language === 'en'} onPress={() => setLanguage('en' as AppLanguage)} />
+              </View>
+            </View>
+            <View style={[styles.compactDivider, { backgroundColor: border }]} />
+            <View style={styles.compactGroup}>
+              <ThemedText style={[styles.compactLabel, { color: muted }]}>{t('themeSection')}</ThemedText>
+              <View style={styles.compactPills}>
+                <OptionPill label={t('themeLight')} active={themePreference === 'light'} onPress={() => setThemePreference('light' as ThemePreference)} />
+                <OptionPill label={t('themeDark')} active={themePreference === 'dark'} onPress={() => setThemePreference('dark' as ThemePreference)} />
+                <OptionPill label={t('themeSystem')} active={themePreference === 'system'} onPress={() => setThemePreference('system' as ThemePreference)} />
+              </View>
+            </View>
           </View>
         </SectionCard>
 
@@ -357,22 +368,18 @@ export function SettingsScreen() {
               </View>
               <View style={styles.modalFieldGroup}>
                 <ThemedText style={{ color: muted }}>{t('displayName')}</ThemedText>
-                <TextInput
+                <ThemedTextInput
                   value={displayNameDraft}
                   onChangeText={setDisplayNameDraft}
-                  style={[styles.input, { borderColor: border, color: text }]}
                   placeholder={me?.profile?.username ?? ''}
-                  placeholderTextColor={muted}
                 />
               </View>
               <View style={styles.modalFieldGroup}>
                 <ThemedText style={{ color: muted }}>{t('email')}</ThemedText>
-                <TextInput
+                <ThemedTextInput
                   value={emailDraft}
                   onChangeText={setEmailDraft}
-                  style={[styles.input, { borderColor: border, color: text }]}
                   placeholder={t('noEmail')}
-                  placeholderTextColor={muted}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -380,7 +387,7 @@ export function SettingsScreen() {
               </View>
               <View style={styles.modalFooter}>
                 <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={saveProfile}>
-                  <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+                  <ThemedText type="defaultSemiBold" style={[styles.ctaText, { color: onCta }]}>
                     {t('saveProfile')}
                   </ThemedText>
                 </Pressable>
@@ -432,11 +439,17 @@ const styles = StyleSheet.create({
   },
   optionsRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   optionsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  appearanceTitle: { fontSize: 16, marginBottom: 10 },
+  compactPrefsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  compactGroup: { flex: 1, gap: 6, minWidth: 0 },
+  compactLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  compactPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  compactDivider: { width: 1, alignSelf: 'stretch', opacity: 0.6 },
   pill: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   ctaButton: {
     borderRadius: 999,
@@ -444,7 +457,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 4,
   },
-  ctaText: { color: '#fff' },
+  ctaText: { fontWeight: '600' },
   primaryButton: {
     borderRadius: 999,
     alignItems: 'center',

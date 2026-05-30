@@ -11,8 +11,8 @@ function flattenStops(trip: TripDto): MapRouteStop[] {
   for (const day of days) {
     const stops = [...(day.stops ?? [])].sort((a, b) => a.orderIndex - b.orderIndex);
     for (const stop of stops) {
-      const lat = stop.location?.latitude;
-      const lng = stop.location?.longitude;
+      const lat = stop.location?.latitude ?? stop.customLatitude ?? null;
+      const lng = stop.location?.longitude ?? stop.customLongitude ?? null;
       if (lat == null || lng == null) continue;
       out.push({
         id: stop.id,
