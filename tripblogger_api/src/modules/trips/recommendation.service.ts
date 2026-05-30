@@ -6,7 +6,7 @@ import { TripAccommodationEntity } from './entities/trip-accommodation.entity';
 import { TripRecommendationEntity } from './entities/trip-recommendation.entity';
 import { TripEntity } from './entities/trip.entity';
 import { TripPermissionsService } from './trip-permissions.service';
-import { haversineKm } from './utils/haversine';
+import { haversineKm } from '../../common/utils/haversine';
 import { computeRecommendationScore } from './utils/trip-scoring';
 import { TripsRealtimeBroadcastService } from './trips-realtime-broadcast.service';
 

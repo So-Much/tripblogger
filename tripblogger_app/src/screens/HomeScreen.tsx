@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { HomePostsFeed } from '@/src/components/feed/HomePostsFeed';
+import { HomeQuickComposer } from '@/src/components/home/HomeQuickComposer';
 import { HomeCommerceDeals } from '@/src/components/home/HomeCommerceDeals';
 import { PromoBanner } from '@/src/components/home/PromoBanner';
 import { HomeSearchBar } from '@/src/components/home/HomeSearchBar';
@@ -83,15 +84,24 @@ export function HomeScreen() {
               </ThemedText>
             </Pressable>
           ) : (
-            <Pressable
-              style={[styles.avatarButton, { borderColor: border, backgroundColor: card }]}
-              onPress={() => router.push('/explore')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Open profile"
-            >
-              <IconSymbol size={24} name="person.crop.circle.fill" color={cta} />
-            </Pressable>
+            <View style={styles.memberActions}>
+              <Pressable
+                style={[styles.iconButton, { borderColor: border, backgroundColor: card }]}
+                onPress={() => router.push('/(tabs)/posts/create')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('homeCreatePostA11y')}>
+                <IconSymbol size={24} name="plus.circle.fill" color={cta} />
+              </Pressable>
+              <Pressable
+                style={[styles.avatarButton, { borderColor: border, backgroundColor: card }]}
+                onPress={() => router.push('/explore')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Open profile">
+                <IconSymbol size={24} name="person.crop.circle.fill" color={cta} />
+              </Pressable>
+            </View>
           )}
         </View>
 
@@ -115,6 +125,8 @@ export function HomeScreen() {
             </View>
           ) : null}
         </View>
+
+        {isMember ? <HomeQuickComposer /> : null}
 
         <HomeSearchBar onPress={() => router.push('/(tabs)/shop/search')} />
         <PromoBanner />
@@ -207,6 +219,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   loginText: { color: '#fff' },
+  memberActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    height: 44,
+    width: 44,
+  },
   avatarButton: {
     alignItems: 'center',
     borderRadius: 999,

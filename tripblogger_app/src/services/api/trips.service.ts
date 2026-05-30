@@ -53,6 +53,7 @@ export const tripsService = {
       checkIn: string;
       checkOut: string;
       pricePerNight?: number;
+      isPrimary?: boolean;
     },
   ): Promise<TripAccommodationDto> {
     const res = await apiClient.post<TripAccommodationDto>(`/trips/${tripId}/accommodations`, body);

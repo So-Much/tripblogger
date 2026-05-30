@@ -1,3 +1,3 @@
-import { TripListScreen } from '@/src/screens/TripListScreen';
+import { TripMapScreen } from '@/src/screens/TripMapScreen';
 
-export default TripListScreen;
+export default TripMapScreen;

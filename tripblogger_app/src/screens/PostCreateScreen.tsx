@@ -331,7 +331,7 @@ export function PostCreateScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
-      router.replace('/(tabs)/posts');
+      router.replace('/(tabs)');
     },
     onError: (e: unknown) => {
       formShakeRef.current?.shake();

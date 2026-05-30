@@ -6,6 +6,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { CreateLocationDto, UpsertFromPlaceDto } from './dto/create-location.dto';
 import { QueryLocationsSearchDto } from './dto/query-locations.dto';
+import { QueryLocationsNearbyDto } from './dto/query-locations-nearby.dto';
 import { LocationsService } from './locations.service';
 
 @Controller('locations')
@@ -23,6 +24,20 @@ export class LocationsController {
       query.lat,
       query.lng,
       query.limit ?? 20,
+    );
+  }
+
+  @Get('nearby')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  nearby(@Query() query: QueryLocationsNearbyDto) {
+    return this.locationsService.nearby(
+      query.lat,
+      query.lng,
+      query.radiusKm ?? 10,
+      query.sort ?? 'rating',
+      query.limit ?? 30,
     );
   }
 

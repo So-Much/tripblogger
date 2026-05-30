@@ -18,7 +18,8 @@ type HubTile = {
     | 'settingsHubCart'
     | 'settingsHubWishlist'
     | 'settingsHubSellerVerify'
-    | 'settingsHubMyPosts';
+    | 'settingsHubMyPosts'
+    | 'settingsHubMyTrips';
   icon: IconSymbolName;
 };
 
@@ -46,7 +47,10 @@ const HUB_GROUPS: HubGroup[] = [
   },
   {
     sectionTitleKey: 'settingsHubGroupContent',
-    items: [{ href: '/(tabs)/posts' as Href, titleKey: 'settingsHubMyPosts', icon: 'doc.text.fill' }],
+    items: [
+      { href: '/(tabs)/posts' as Href, titleKey: 'settingsHubMyPosts', icon: 'doc.text.fill' },
+      { href: `/(tabs)/trips/my${FROM_SETTINGS}` as Href, titleKey: 'settingsHubMyTrips', icon: 'location.fill' },
+    ],
   },
 ];
 

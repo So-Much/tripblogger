@@ -7,13 +7,29 @@ export type PersistedLocationDto = {
   latitude: number;
   longitude: number;
   status: string;
+  avgRating?: number;
+  totalReview?: number;
+  locationType?: { id: string; code: string; name: string; icon: string | null } | null;
 };
 
+export type NearbyLocationDto = PersistedLocationDto & { distanceKm: number };
+
 export const locationsService = {
-  async search(q: string, limit = 15): Promise<PersistedLocationDto[]> {
+  async search(q: string, limit = 15, lat?: number, lng?: number): Promise<PersistedLocationDto[]> {
     const res = await apiClient.get<PersistedLocationDto[]>('/locations/search', {
-      params: { q, limit },
+      params: { q, limit, lat, lng },
     });
+    return res.data;
+  },
+
+  async nearby(params: {
+    lat: number;
+    lng: number;
+    radiusKm?: number;
+    sort?: 'rating' | 'popularity';
+    limit?: number;
+  }): Promise<NearbyLocationDto[]> {
+    const res = await apiClient.get<NearbyLocationDto[]>('/locations/nearby', { params });
     return res.data;
   },
 

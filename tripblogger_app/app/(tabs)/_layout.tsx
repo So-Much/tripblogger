@@ -27,17 +27,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="posts"
+        name="shop"
         options={{
-          title: t('tabPosts'),
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="trips"
-        options={{
-          title: t('tabTrips'),
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="location.fill" color={color} />,
+          title: t('tabShop'),
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cart.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -51,10 +44,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="shop"
+        name="trips"
         options={{
-          title: t('tabShop'),
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cart.fill" color={color} />,
+          title: t('tabTrips'),
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="location.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -62,6 +55,14 @@ export default function TabLayout() {
         options={{
           title: t('tabSettings'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="posts"
+        options={{
+          href: null,
+          title: t('tabPosts'),
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
         }}
       />
     </Tabs>

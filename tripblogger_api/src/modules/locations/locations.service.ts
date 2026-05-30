@@ -6,6 +6,7 @@ import { PlacesService } from '../places/places.service';
 import { CreateLocationDto, UpsertFromPlaceDto } from './dto/create-location.dto';
 import { LocationEntity } from './entities/location.entity';
 import { LocationTypeEntity } from './entities/location-type.entity';
+import { haversineKm } from '../../common/utils/haversine';
 
 export type LocationResponse = {
   id: string;
@@ -18,6 +19,8 @@ export type LocationResponse = {
   avgRating: number;
   totalReview: number;
 };
+
+export type NearbyLocationResponse = LocationResponse & { distanceKm: number };
 
 @Injectable()
 export class LocationsService {
@@ -99,6 +102,86 @@ export class LocationsService {
     }
 
     return [...mapped, ...placeExtras].slice(0, limit);
+  }
+
+  async nearby(
+    lat: number,
+    lng: number,
+    radiusKm = 10,
+    sort: 'rating' | 'popularity' = 'rating',
+    limit = 30,
+  ): Promise<NearbyLocationResponse[]> {
+    const cap = Math.min(limit, 50);
+    const rows = await this.locationsRepo
+      .createQueryBuilder('l')
+      .leftJoinAndSelect('l.locationType', 'lt')
+      .where('l.status = :status', { status: 'ACTIVE' })
+      .getMany();
+
+    const within = rows
+      .map((loc) => {
+        const lat2 = Number(loc.latitude);
+        const lng2 = Number(loc.longitude);
+        const distanceKm = haversineKm(lat, lng, lat2, lng2);
+        return { loc, distanceKm };
+      })
+      .filter(({ distanceKm }) => distanceKm <= radiusKm);
+
+    if (sort === 'popularity') {
+      within.sort(
+        (a, b) =>
+          Number(b.loc.popularityScore) - Number(a.loc.popularityScore) ||
+          a.distanceKm - b.distanceKm,
+      );
+    } else {
+      within.sort(
+        (a, b) =>
+          Number(b.loc.avgRating) - Number(a.loc.avgRating) ||
+          b.loc.totalReview - a.loc.totalReview ||
+          a.distanceKm - b.distanceKm,
+      );
+    }
+
+    const results: NearbyLocationResponse[] = within.slice(0, cap).map(({ loc, distanceKm }) => ({
+      ...this.toResponse(loc),
+      distanceKm: Math.round(distanceKm * 100) / 100,
+    }));
+
+    if (results.length >= cap) {
+      return results;
+    }
+
+    const places = await this.placesService.nearby(lat, lng, cap - results.length);
+    const seenNames = new Set(results.map((r) => r.name.toLowerCase()));
+
+    for (const p of places) {
+      const distanceKm = haversineKm(lat, lng, p.lat, p.lng);
+      if (distanceKm > radiusKm) continue;
+      const key = p.name.toLowerCase();
+      if (seenNames.has(key)) continue;
+      seenNames.add(key);
+      results.push({
+        id: `external:${p.source}:${p.id}`,
+        name: p.name,
+        address: p.address ?? null,
+        latitude: p.lat,
+        longitude: p.lng,
+        status: 'EXTERNAL',
+        locationType: null,
+        avgRating: 0,
+        totalReview: 0,
+        distanceKm: Math.round(distanceKm * 100) / 100,
+      });
+      if (results.length >= cap) break;
+    }
+
+    if (sort === 'rating') {
+      results.sort(
+        (a, b) => b.avgRating - a.avgRating || b.totalReview - a.totalReview || a.distanceKm - b.distanceKm,
+      );
+    }
+
+    return results.slice(0, cap);
   }
 
   async findById(id: string): Promise<LocationResponse> {
