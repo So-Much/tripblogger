@@ -7,6 +7,7 @@ import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { CreateLocationDto, UpsertFromPlaceDto } from './dto/create-location.dto';
 import { QueryLocationsSearchDto } from './dto/query-locations.dto';
 import { QueryLocationsNearbyDto } from './dto/query-locations-nearby.dto';
+import { QueryDrivingRouteDto } from './dto/query-driving-route.dto';
 import { LocationsService } from './locations.service';
 
 @Controller('locations')
@@ -38,6 +39,19 @@ export class LocationsController {
       query.radiusKm ?? 10,
       query.sort ?? 'rating',
       query.limit ?? 30,
+    );
+  }
+
+  @Get('driving-route')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  drivingRoute(@Query() query: QueryDrivingRouteDto) {
+    return this.locationsService.drivingRoute(
+      query.fromLat,
+      query.fromLng,
+      query.toLat,
+      query.toLng,
     );
   }
 

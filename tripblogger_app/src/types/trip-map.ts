@@ -1,8 +1,11 @@
+import type { LocationTypeRef } from '@/src/utils/location-type-display';
+
 export type MapCheckpoint = {
   lat: number;
   lng: number;
   name: string;
   locationId?: string;
+  locationType?: LocationTypeRef | null;
 };
 
 export type MapExplorePin = {
@@ -14,6 +17,7 @@ export type MapExplorePin = {
   avgRating: number;
   totalReview: number;
   distanceKm?: number;
+  locationType?: LocationTypeRef | null;
 };
 
 export type MapRouteStop = {
@@ -24,4 +28,5 @@ export type MapRouteStop = {
   status: 'PLANNED' | 'VISITING' | 'VISITED' | 'SKIPPED';
   orderIndex: number;
   dayNumber: number;
+  locationType?: LocationTypeRef | null;
 };

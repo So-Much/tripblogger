@@ -6,8 +6,8 @@ export default function TripsStackLayout() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="my" options={{ title: 'Chuyến đi của bạn' }} />
       <Stack.Screen name="create" options={{ title: 'Tạo chuyến đi' }} />
-      <Stack.Screen name="[id]" options={{ title: 'Chi tiết' }} />
-      <Stack.Screen name="[id]/day/[dayId]" options={{ title: 'Ngày' }} />
+      <Stack.Screen name="[id]" options={{ title: 'Chi tiết chuyến đi' }} />
+      <Stack.Screen name="[id]/day/[dayId]" options={{ title: 'Chi tiết ngày' }} />
     </Stack>
   );
 }

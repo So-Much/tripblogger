@@ -14,6 +14,12 @@ export type PersistedLocationDto = {
 
 export type NearbyLocationDto = PersistedLocationDto & { distanceKm: number };
 
+export type DrivingRouteDto = {
+  coordinates: { latitude: number; longitude: number }[];
+  distanceM: number;
+  durationS: number;
+};
+
 export const locationsService = {
   async search(q: string, limit = 15, lat?: number, lng?: number): Promise<PersistedLocationDto[]> {
     const res = await apiClient.get<PersistedLocationDto[]>('/locations/search', {
@@ -30,6 +36,16 @@ export const locationsService = {
     limit?: number;
   }): Promise<NearbyLocationDto[]> {
     const res = await apiClient.get<NearbyLocationDto[]>('/locations/nearby', { params });
+    return res.data;
+  },
+
+  async drivingRoute(params: {
+    fromLat: number;
+    fromLng: number;
+    toLat: number;
+    toLng: number;
+  }): Promise<DrivingRouteDto> {
+    const res = await apiClient.get<DrivingRouteDto>('/locations/driving-route', { params });
     return res.data;
   },
 

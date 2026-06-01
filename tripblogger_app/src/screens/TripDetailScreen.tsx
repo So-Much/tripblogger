@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { TripDayCard } from '@/src/components/trips/TripDayCard';
+import { TripDetailActions } from '@/src/components/trips/TripDetailActions';
+import { TripDetailHero } from '@/src/components/trips/TripDetailHero';
+import { TripRecommendationsPanel } from '@/src/components/trips/TripRecommendationsPanel';
+import { TripStatsRow } from '@/src/components/trips/TripStatsRow';
 import { tripsService } from '@/src/services/api/trips.service';
-import type { TripDayDto, TripStopDto } from '@/src/types/trip';
 import { formatApiError } from '@/src/utils/format-api-error';
 
 export function TripDetailScreen() {
@@ -16,9 +19,8 @@ export function TripDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const tint = useThemeColor({}, 'tint');
-  const border = useThemeColor({}, 'border');
-  const cta = useThemeColor({}, 'cta');
-  const onCta = useThemeColor({}, 'onCta');
+  const background = useThemeColor({}, 'background');
+  const muted = useThemeColor({}, 'textMuted');
   const [showRecs, setShowRecs] = useState(false);
 
   const tripQuery = useQuery({
@@ -37,6 +39,7 @@ export function TripDetailScreen() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['trips', tripId, 'recommendations'] });
     },
+    onError: (e) => Alert.alert('Lỗi', formatApiError(e, 'Không tạo được gợi ý')),
   });
 
   const invalidateTripQueries = () => {
@@ -51,7 +54,7 @@ export function TripDetailScreen() {
 
   const statusMutation = useMutation({
     mutationFn: (status: 'ACTIVE' | 'COMPLETED') => tripsService.updateStatus(tripId, status),
-    onSuccess: (updated, status) => {
+    onSuccess: (_updated, status) => {
       invalidateTripQueries();
       if (status === 'ACTIVE') {
         goToMapWithNavigation();
@@ -66,115 +69,78 @@ export function TripDetailScreen() {
         ? tripsService.checkinStop(tripId, stopId)
         : tripsService.completeStop(tripId, stopId),
     onSuccess: () => invalidateTripQueries(),
+    onError: (e) => Alert.alert('Lỗi', formatApiError(e, 'Không cập nhật điểm dừng')),
   });
 
   const trip = tripQuery.data;
+  const days = trip?.days ?? [];
   const isActive = trip?.status === 'ACTIVE';
-  const totalStops = useMemo(
-    () => (trip?.days ?? []).reduce((sum, d) => sum + (d.stops?.length ?? 0), 0),
-    [trip?.days],
-  );
+  const totalStops = days.reduce((sum, d) => sum + d.stops.length, 0);
 
-  const stopName = (s: TripStopDto) => s.location?.name ?? s.customName ?? 'Điểm dừng';
+  const onRefresh = () => {
+    void tripQuery.refetch();
+    if (showRecs) void recsQuery.refetch();
+  };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: background }]} edges={['bottom']}>
       {tripQuery.isLoading || !trip ? (
         <ActivityIndicator style={styles.loader} color={tint} />
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <ThemedText type="title">{trip.title}</ThemedText>
-          <ThemedText style={styles.meta}>
-            {trip.destinationName} · {trip.startDate} → {trip.endDate}
-          </ThemedText>
-          <ThemedText style={styles.meta}>Trạng thái: {trip.status}</ThemedText>
-          {trip.actualBudget != null ? (
-            <ThemedText style={styles.meta}>Chi tiêu: {trip.actualBudget.toLocaleString()} VND</ThemedText>
-          ) : null}
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          refreshControl={
+            <RefreshControl refreshing={tripQuery.isRefetching} onRefresh={onRefresh} tintColor={tint} />
+          }>
+          <TripDetailHero trip={trip} />
 
-          <ThemedView style={styles.row}>
-            {trip.status === 'PLANNING' || trip.status === 'DRAFT' ? (
-              <Pressable
-                style={[styles.chip, styles.primaryChip, { backgroundColor: cta }]}
-                onPress={() => statusMutation.mutate('ACTIVE')}
-                disabled={statusMutation.isPending}>
-                <ThemedText style={{ color: onCta, fontWeight: '600' }}>
-                  {statusMutation.isPending ? 'Đang bắt đầu…' : 'Bắt đầu chuyến đi'}
-                </ThemedText>
-              </Pressable>
-            ) : null}
-            {isActive && totalStops > 0 ? (
-              <Pressable style={[styles.chip, { borderColor: tint }]} onPress={goToMapWithNavigation}>
-                <ThemedText style={{ color: tint }}>Chỉ đường điểm tiếp theo</ThemedText>
-              </Pressable>
-            ) : null}
-            {trip.status === 'ACTIVE' ? (
-              <Pressable style={[styles.chip, { borderColor: tint }]} onPress={() => statusMutation.mutate('COMPLETED')}>
-                <ThemedText>Kết thúc</ThemedText>
-              </Pressable>
-            ) : null}
-            <Pressable style={[styles.chip, { borderColor: border }]} onPress={() => setShowRecs((v) => !v)}>
-              <ThemedText>Gợi ý địa điểm</ThemedText>
-            </Pressable>
-          </ThemedView>
+          <TripStatsRow days={days} showProgress={isActive || trip.status === 'COMPLETED'} />
+
+          <TripDetailActions
+            status={trip.status}
+            totalStops={totalStops}
+            showRecommendations={showRecs}
+            isStarting={statusMutation.isPending}
+            isRefreshingRecs={refreshRecs.isPending}
+            onStart={() => statusMutation.mutate('ACTIVE')}
+            onNavigateNext={goToMapWithNavigation}
+            onComplete={() => statusMutation.mutate('COMPLETED')}
+            onToggleRecommendations={() => setShowRecs((v) => !v)}
+            onRefreshRecommendations={() => refreshRecs.mutate()}
+          />
 
           {showRecs ? (
-            <ThemedView style={[styles.section, { borderColor: border }]}>
-              <Pressable onPress={() => refreshRecs.mutate()} disabled={refreshRecs.isPending}>
-                <ThemedText type="defaultSemiBold">
-                  {refreshRecs.isPending ? 'Đang tạo gợi ý…' : 'Làm mới gợi ý'}
-                </ThemedText>
-              </Pressable>
-              {recsQuery.isLoading ? (
-                <ActivityIndicator color={tint} />
-              ) : (
-                (recsQuery.data ?? []).map((r) => (
-                  <ThemedText key={r.id} style={styles.rec}>
-                    {r.location.name} · {r.score.toFixed(2)} · {r.distanceKm?.toFixed(1)} km
-                  </ThemedText>
-                ))
-              )}
-            </ThemedView>
+            <TripRecommendationsPanel items={recsQuery.data ?? []} loading={recsQuery.isLoading} />
           ) : null}
 
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            Lịch trình
-          </ThemedText>
-          {(trip.days ?? []).map((day: TripDayDto) => (
-            <Pressable
-              key={day.id}
-              style={[styles.dayCard, { borderColor: border }]}
-              onPress={() =>
-                router.push({
-                  pathname: '/(tabs)/trips/[id]/day/[dayId]',
-                  params: { id: tripId, dayId: day.id },
-                })
-              }>
-              <ThemedText type="defaultSemiBold">
-                {day.title ?? `Ngày ${day.dayNumber}`} · {day.date}
-              </ThemedText>
-              <ThemedText style={styles.meta}>{day.stops.length} điểm dừng</ThemedText>
-              {isActive
-                ? day.stops.map((s) => (
-                    <ThemedView key={s.id} style={styles.stopRow}>
-                      <ThemedText>
-                        {stopName(s)} — {s.status}
-                      </ThemedText>
-                      {s.status === 'PLANNED' ? (
-                        <Pressable onPress={() => stopAction.mutate({ stopId: s.id, action: 'checkin' })}>
-                          <ThemedText style={{ color: tint }}>Check-in</ThemedText>
-                        </Pressable>
-                      ) : null}
-                      {s.status === 'VISITING' ? (
-                        <Pressable onPress={() => stopAction.mutate({ stopId: s.id, action: 'complete' })}>
-                          <ThemedText style={{ color: tint }}>Hoàn thành</ThemedText>
-                        </Pressable>
-                      ) : null}
-                    </ThemedView>
-                  ))
-                : null}
-            </Pressable>
-          ))}
+          <View style={styles.sectionHead}>
+            <ThemedText type="subtitle">Lịch trình</ThemedText>
+            <ThemedText style={{ color: muted, fontSize: 13 }}>
+              {days.length} ngày · {totalStops} điểm
+            </ThemedText>
+          </View>
+
+          {days.length === 0 ? (
+            <ThemedText style={{ color: muted, textAlign: 'center', marginTop: 8 }}>
+              Chưa có ngày trong lịch trình.
+            </ThemedText>
+          ) : (
+            days.map((day) => (
+              <TripDayCard
+                key={day.id}
+                day={day}
+                isActiveTrip={isActive}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(tabs)/trips/[id]/day/[dayId]',
+                    params: { id: tripId, dayId: day.id },
+                  })
+                }
+                onCheckin={(stopId) => stopAction.mutate({ stopId, action: 'checkin' })}
+                onComplete={(stopId) => stopAction.mutate({ stopId, action: 'complete' })}
+              />
+            ))
+          )}
         </ScrollView>
       )}
     </SafeAreaView>
@@ -183,15 +149,12 @@ export function TripDetailScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { padding: 16, gap: 10, paddingBottom: 40 },
+  scroll: { padding: 16, gap: 16, paddingBottom: 40 },
   loader: { marginTop: 40 },
-  meta: { fontSize: 14, opacity: 0.75 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 8 },
-  chip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  primaryChip: { borderWidth: 0 },
-  section: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 6 },
-  sectionTitle: { marginTop: 12 },
-  dayCard: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 4 },
-  stopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  rec: { fontSize: 13 },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
 });

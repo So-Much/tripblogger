@@ -50,6 +50,10 @@ const MAPPING = {
   'tag.fill': 'local-offer',
   'eye.fill': 'visibility',
   'eye.slash.fill': 'visibility-off',
+  'checkmark.circle.fill': 'check-circle',
+  'star.fill': 'star',
+  'calendar': 'event',
+  'map.fill': 'map',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

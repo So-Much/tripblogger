@@ -259,6 +259,56 @@ export class LocationsService {
     return null;
   }
 
+  async drivingRoute(
+    fromLat: number,
+    fromLng: number,
+    toLat: number,
+    toLng: number,
+  ): Promise<{ coordinates: { latitude: number; longitude: number }[]; distanceM: number; durationS: number }> {
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          code?: string;
+          routes?: { distance: number; duration: number; geometry: { coordinates: [number, number][] } }[];
+        };
+        const route = data.routes?.[0];
+        if (data.code === 'Ok' && route?.geometry?.coordinates?.length) {
+          return {
+            coordinates: route.geometry.coordinates.map(([lng, lat]) => ({
+              latitude: lat,
+              longitude: lng,
+            })),
+            distanceM: route.distance,
+            durationS: route.duration,
+          };
+        }
+      }
+    } catch {
+      // fall through to straight line
+    }
+
+    const distanceKm = haversineKm(fromLat, fromLng, toLat, toLng);
+    const distanceM = distanceKm * 1000;
+    const steps = 24;
+    const coordinates = Array.from({ length: steps + 1 }, (_, i) => {
+      const t = i / steps;
+      return {
+        latitude: fromLat + (toLat - fromLat) * t,
+        longitude: fromLng + (toLng - fromLng) * t,
+      };
+    });
+    return {
+      coordinates,
+      distanceM,
+      durationS: Math.max(60, (distanceM / 1000 / 30) * 3600),
+    };
+  }
+
   toResponse(loc: LocationEntity): LocationResponse {
     return {
       id: loc.id,

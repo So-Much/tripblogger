@@ -34,6 +34,13 @@ export function useTripMapExplore() {
           avgRating: item.avgRating ?? 0,
           totalReview: item.totalReview ?? 0,
           distanceKm: item.distanceKm,
+          locationType: item.locationType
+            ? {
+                code: item.locationType.code,
+                name: item.locationType.name,
+                icon: item.locationType.icon,
+              }
+            : null,
         })),
       );
     } catch (e) {

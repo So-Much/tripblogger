@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,17 +8,17 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { TripExploreSheet } from '@/src/components/trips/TripExploreSheet';
-import { TripMapSearchBar } from '@/src/components/trips/TripMapSearchBar';
+import { TripMapSearchBar, type TripMapSearchBarHandle } from '@/src/components/trips/TripMapSearchBar';
 import { TripMapView } from '@/src/components/trips/TripMapView';
 import { TripPinActionSheet } from '@/src/components/trips/TripPinActionSheet';
 import { useActiveTripRoute } from '@/src/hooks/useActiveTripRoute';
+import { useTurnByTurnNavigation } from '@/src/hooks/useTurnByTurnNavigation';
 import { useTripMapExplore } from '@/src/hooks/useTripMapExplore';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { tripsService } from '@/src/services/api/trips.service';
 import type { MapCheckpoint, MapExplorePin } from '@/src/types/trip-map';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { buildAddStopPayload } from '@/src/utils/map-stop-payload';
-import { openDirectionsTo } from '@/src/utils/open-directions';
 import { pickTripDayForNewStop } from '@/src/utils/pick-trip-day';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -32,6 +32,7 @@ function pinFromCheckpoint(cp: MapCheckpoint, id = 'checkpoint'): MapExplorePin 
     longitude: cp.lng,
     avgRating: 0,
     totalReview: 0,
+    locationType: cp.locationType ?? { code: 'accommodation', name: 'Checkpoint' },
   };
 }
 
@@ -40,6 +41,8 @@ export function TripMapScreen() {
   const { navigateNext } = useLocalSearchParams<{ navigateNext?: string }>();
   const didAutoNavigateRef = useRef(false);
   const bootstrappedTripRef = useRef<string | null>(null);
+  const searchBarRef = useRef<TripMapSearchBarHandle>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const meQuery = useMeQuery();
@@ -52,6 +55,7 @@ export function TripMapScreen() {
 
   const explore = useTripMapExplore();
   const activeRoute = useActiveTripRoute(isMember);
+  const navigation = useTurnByTurnNavigation();
 
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [actionPin, setActionPin] = useState<MapExplorePin | null>(null);
@@ -69,12 +73,25 @@ export function TripMapScreen() {
     return { latitude: c.lat, longitude: c.lng };
   }, [activeRoute.trip?.status, activeRoute.nextStop, explore.exploreCenter]);
 
+  const beginNavigation = useCallback(
+    async (dest: { lat: number; lng: number; name?: string }) => {
+      try {
+        await navigation.startNavigation(dest);
+      } catch (e) {
+        Alert.alert('Không bắt đầu chỉ đường', formatApiError(e, 'Thử lại sau.'));
+      }
+    },
+    [navigation],
+  );
+
   const activeCheckpoint = useMemo((): MapCheckpoint | null => {
+    if (navigation.active) return null;
     if (activeRoute.trip?.status === 'ACTIVE' && activeRoute.nextStop) {
       return {
         lat: activeRoute.nextStop.latitude,
         lng: activeRoute.nextStop.longitude,
         name: activeRoute.nextStop.name,
+        locationType: activeRoute.nextStop.locationType,
       };
     }
     return explore.checkpoint;
@@ -93,9 +110,14 @@ export function TripMapScreen() {
       lat: stop.latitude,
       lng: stop.longitude,
       name: stop.name,
+      locationType: stop.locationType,
     });
 
-    void openDirectionsTo({ lat: stop.latitude, lng: stop.longitude }, explore.userCoords);
+    void beginNavigation({
+      lat: stop.latitude,
+      lng: stop.longitude,
+      name: stop.name,
+    });
   }, [
     navigateNext,
     activeRoute.isLoading,
@@ -103,6 +125,7 @@ export function TripMapScreen() {
     activeRoute.nextStop,
     explore,
     router,
+    beginNavigation,
   ]);
 
   useEffect(() => {
@@ -145,16 +168,36 @@ export function TripMapScreen() {
     setActionPin(null);
   };
 
+  const navigationDestination = useMemo((): MapCheckpoint | null => {
+    if (!navigation.active || !navigation.destination) return null;
+    const d = navigation.destination;
+    return {
+      lat: d.lat,
+      lng: d.lng,
+      name: d.name ?? 'Đích đến',
+      locationType: { code: 'attraction', name: 'Đích đến' },
+    };
+  }, [navigation.active, navigation.destination]);
+
   const handleMapPress = (coords: { lat: number; lng: number }) => {
+    if (navigation.active) return;
+    if (searchFocused) {
+      searchBarRef.current?.dismiss();
+      return;
+    }
+    navigation.stopNavigation();
     setSelectedPinId(null);
     void explore.selectCheckpoint({
       lat: coords.lat,
       lng: coords.lng,
       name: 'Vị trí đã chọn',
+      locationType: { code: 'other', name: 'Vị trí tùy chọn' },
     });
   };
 
   const handleSelectCheckpoint = (cp: MapCheckpoint) => {
+    if (navigation.active) return;
+    navigation.stopNavigation();
     setSelectedPinId(null);
     void explore.selectCheckpoint(cp);
   };
@@ -214,12 +257,12 @@ export function TripMapScreen() {
 
   const handleDirections = () => {
     if (!actionPin) return;
-    const origin = explore.userCoords ?? (explore.checkpoint ? { lat: explore.checkpoint.lat, lng: explore.checkpoint.lng } : null);
-    void openDirectionsTo(
-      { lat: actionPin.latitude, lng: actionPin.longitude },
-      origin,
-    );
     closePinActions();
+    void beginNavigation({
+      lat: actionPin.latitude,
+      lng: actionPin.longitude,
+      name: actionPin.name,
+    });
   };
 
   if (!isMember) {
@@ -240,11 +283,17 @@ export function TripMapScreen() {
         <TripMapView
           center={mapCenter}
           checkpoint={activeCheckpoint}
-          pins={explore.nearbyResults}
-          routeStops={activeRoute.routeStops}
-          polylineCoords={activeRoute.polylineCoords}
-          upcomingPolyline={activeRoute.upcomingPolyline}
+          navigationDestination={navigationDestination}
+          pins={navigation.active ? [] : explore.nearbyResults}
+          routeStops={navigation.active ? [] : activeRoute.routeStops}
+          polylineCoords={navigation.active ? [] : activeRoute.polylineCoords}
+          upcomingPolyline={navigation.active ? [] : activeRoute.upcomingPolyline}
+          directionPolyline={navigation.displayPolyline}
           selectedPinId={selectedPinId}
+          allowMapPress={!searchFocused && !navigation.active}
+          followUser={navigation.active}
+          liveUserPosition={navigation.livePosition}
+          userHeading={navigation.heading}
           onMapPress={handleMapPress}
           onPinPress={openPinActions}
           onCheckpointPress={(cp) => openPinActions(pinFromCheckpoint(cp, cp.locationId ?? 'checkpoint'))}
@@ -260,6 +309,15 @@ export function TripMapScreen() {
         </View>
       )}
 
+      {searchFocused ? (
+        <Pressable
+          style={styles.searchDismissLayer}
+          onPress={() => searchBarRef.current?.dismiss()}
+          accessibilityRole="button"
+          accessibilityLabel="Đóng tìm kiếm"
+        />
+      ) : null}
+
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8, paddingHorizontal: 12 }]}>
         <View style={styles.topRow}>
           <ThemedText type="defaultSemiBold" style={styles.screenTitle}>
@@ -273,16 +331,20 @@ export function TripMapScreen() {
             <IconSymbol name="plus.circle.fill" size={28} color={tint} />
           </Pressable>
         </View>
-        <TripMapSearchBar
-          userLat={explore.userCoords?.lat}
-          userLng={explore.userCoords?.lng}
-          checkpoint={explore.checkpoint}
-          onSelectCheckpoint={handleSelectCheckpoint}
-          onClearCheckpoint={() => {
-            setSelectedPinId(null);
-            void explore.clearCheckpoint();
-          }}
-        />
+        {!navigation.active ? (
+          <TripMapSearchBar
+            ref={searchBarRef}
+            userLat={explore.userCoords?.lat}
+            userLng={explore.userCoords?.lng}
+            checkpoint={explore.checkpoint}
+            onFocusChange={setSearchFocused}
+            onSelectCheckpoint={handleSelectCheckpoint}
+            onClearCheckpoint={() => {
+              setSelectedPinId(null);
+              void explore.clearCheckpoint();
+            }}
+          />
+        ) : null}
         {explore.error ? (
           <ThemedText style={[styles.error, { color: muted }]}>{explore.error}</ThemedText>
         ) : null}
@@ -299,12 +361,20 @@ export function TripMapScreen() {
         activeTrip={activeRoute.trip}
         nextStop={activeRoute.nextStop}
         selectedPinId={selectedPinId}
+        navSummary={navigation.loading ? 'Đang tính tuyến…' : navigation.summary}
+        navigationActive={navigation.active}
+        navigationDestName={navigation.destination?.name}
         onPinPress={openPinActions}
         onNavigateNextStop={() => {
           const stop = activeRoute.nextStop;
           if (!stop) return;
-          void openDirectionsTo({ lat: stop.latitude, lng: stop.longitude }, explore.userCoords);
+          void beginNavigation({
+            lat: stop.latitude,
+            lng: stop.longitude,
+            name: stop.name,
+          });
         }}
+        onStopNavigation={navigation.stopNavigation}
         onTripPress={() => {
           if (activeRoute.trip) {
             router.push({ pathname: '/(tabs)/trips/[id]', params: { id: activeRoute.trip.id } });
@@ -345,6 +415,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  searchDismissLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 8,
   },
   topOverlay: {
     position: 'absolute',

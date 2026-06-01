@@ -1,6 +1,7 @@
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { LocationNameLabel } from '@/src/components/locations/LocationNameLabel';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
@@ -13,10 +14,21 @@ type TripExploreSheetProps = {
   activeTrip?: TripDto | null;
   nextStop?: MapRouteStop | null;
   selectedPinId?: string | null;
+  navSummary?: string | null;
+  navigationActive?: boolean;
+  navigationDestName?: string | null;
   onPinPress: (pin: MapExplorePin) => void;
   onNavigateNextStop?: () => void;
+  onStopNavigation?: () => void;
   onTripPress?: () => void;
 };
+
+function pinMeta(item: MapExplorePin): string | null {
+  const parts: string[] = [];
+  if (item.distanceKm != null) parts.push(`${item.distanceKm.toFixed(1)} km`);
+  if (item.avgRating > 0) parts.push(`★${item.avgRating.toFixed(1)}`);
+  return parts.length ? parts.join(' · ') : null;
+}
 
 export function TripExploreSheet({
   pins,
@@ -25,8 +37,12 @@ export function TripExploreSheet({
   activeTrip,
   nextStop,
   selectedPinId,
+  navSummary,
+  navigationActive = false,
+  navigationDestName,
   onPinPress,
   onNavigateNextStop,
+  onStopNavigation,
   onTripPress,
 }: TripExploreSheetProps) {
   const border = useThemeColor({}, 'border');
@@ -38,48 +54,52 @@ export function TripExploreSheet({
 
   const isActiveTrip = activeTrip?.status === 'ACTIVE';
   const title = isActiveTrip && nextStop
-    ? `Điểm tiếp theo: ${nextStop.name}`
+    ? `Tiếp theo: ${nextStop.name}`
     : checkpointLabel
-      ? `Checkpoint quanh ${checkpointLabel}`
-      : 'Địa điểm gần bạn';
+      ? `Quanh ${checkpointLabel}`
+      : 'Gần bạn';
+
+  if (navigationActive) {
+    return (
+      <View style={[styles.sheet, styles.navSheet, { borderColor: border, backgroundColor: `${card}FA` }]}>
+        <View style={styles.navHud}>
+          <PressableScale style={[styles.endBtn, { borderColor: border }]} onPress={onStopNavigation}>
+            <ThemedText style={{ fontWeight: '700', fontSize: 13 }}>Kết thúc</ThemedText>
+          </PressableScale>
+          <View style={styles.navHudText}>
+            <ThemedText type="defaultSemiBold" numberOfLines={1}>
+              {navigationDestName ?? 'Đích đến'}
+            </ThemedText>
+            <ThemedText style={{ color: muted, fontSize: 12 }} numberOfLines={1}>
+              {navSummary ?? 'Đang theo dõi GPS…'}
+            </ThemedText>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.sheet, { borderColor: border, backgroundColor: `${card}F2` }]}>
       <View style={[styles.handle, { backgroundColor: muted }]} />
 
-      {activeTrip ? (
-        <PressableScale style={[styles.tripBanner, { borderColor: border }]} onPress={onTripPress}>
-          <IconSymbol name="location.fill" size={18} color={tint} />
-          <View style={styles.tripBannerText}>
-            <ThemedText type="defaultSemiBold" numberOfLines={1}>
-              {activeTrip.title}
-            </ThemedText>
-            {nextStop ? (
-              <ThemedText style={{ color: muted, fontSize: 12 }} numberOfLines={1}>
-                {isActiveTrip ? 'Đang đi tới' : 'Tiếp theo'}: {nextStop.name}
-              </ThemedText>
-            ) : (
-              <ThemedText style={{ color: muted, fontSize: 12 }}>
-                Chuyến đi đang diễn ra
-              </ThemedText>
-            )}
-          </View>
-          <IconSymbol name="chevron.right" size={16} color={muted} />
-        </PressableScale>
-      ) : null}
-
       {isActiveTrip && nextStop && onNavigateNextStop ? (
-        <PressableScale
-          style={[styles.navigateBtn, { backgroundColor: cta }]}
-          onPress={onNavigateNextStop}>
-          <IconSymbol name="location.fill" size={18} color={onCta} />
+        <PressableScale style={[styles.navRow, { backgroundColor: cta }]} onPress={onNavigateNextStop}>
+          <IconSymbol name="location.fill" size={16} color={onCta} />
           <ThemedText type="defaultSemiBold" style={{ color: onCta, flex: 1 }} numberOfLines={1}>
-            Chỉ đường tới {nextStop.name}
+            Chỉ đường{navSummary ? ` · ${navSummary}` : ''}
           </ThemedText>
         </PressableScale>
+      ) : activeTrip ? (
+        <PressableScale style={[styles.tripRow, { borderColor: border }]} onPress={onTripPress}>
+          <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ flex: 1 }}>
+            {activeTrip.title}
+          </ThemedText>
+          <IconSymbol name="chevron.right" size={14} color={muted} />
+        </PressableScale>
       ) : null}
 
-      <ThemedText type="defaultSemiBold" style={styles.title}>
+      <ThemedText style={[styles.title, { color: muted }]} numberOfLines={1}>
         {title}
       </ThemedText>
 
@@ -93,9 +113,7 @@ export function TripExploreSheet({
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <ThemedText style={[styles.empty, { color: muted }]}>
-              Không có địa điểm gần đây. Thử tìm checkpoint khác.
-            </ThemedText>
+            <ThemedText style={[styles.empty, { color: muted }]}>Không có địa điểm gần đây.</ThemedText>
           }
           renderItem={({ item }) => (
             <PressableScale
@@ -107,21 +125,13 @@ export function TripExploreSheet({
                 },
               ]}
               onPress={() => onPinPress(item)}>
-              <View style={[styles.ratingBadge, { backgroundColor: `${cta}18` }]}>
-                <ThemedText style={{ color: cta, fontWeight: '700', fontSize: 12 }}>
-                  {item.avgRating > 0 ? item.avgRating.toFixed(1) : '—'}
-                </ThemedText>
-              </View>
-              <View style={styles.rowBody}>
-                <ThemedText type="defaultSemiBold" numberOfLines={1}>
-                  {item.name}
-                </ThemedText>
-                <ThemedText style={{ color: muted, fontSize: 12 }} numberOfLines={1}>
-                  {item.distanceKm != null ? `${item.distanceKm.toFixed(1)} km` : ''}
-                  {item.address ? ` · ${item.address}` : ''}
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={14} color={muted} />
+              <LocationNameLabel
+                name={item.name}
+                locationType={item.locationType}
+                variant="dense"
+                selected={selectedPinId === item.id}
+                subtitle={pinMeta(item)}
+              />
             </PressableScale>
           )}
         />
@@ -136,80 +146,80 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: '38%',
-    minHeight: 180,
-    borderTopWidth: 1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    maxHeight: '34%',
+    minHeight: 140,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 6,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
   },
   handle: {
     alignSelf: 'center',
-    width: 40,
-    height: 4,
+    width: 36,
+    height: 3,
     borderRadius: 2,
-    marginBottom: 8,
+    marginBottom: 6,
     opacity: 0.35,
   },
-  tripBanner: {
+  navRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 8,
-  },
-  tripBannerText: {
-    flex: 1,
-    gap: 2,
-  },
-  navigateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 14,
+    gap: 8,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     marginBottom: 6,
   },
-  loader: {
-    marginTop: 20,
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    gap: 8,
-    paddingBottom: 8,
-  },
-  row: {
+  tripRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-  },
-  ratingBadge: {
-    width: 36,
-    height: 36,
+    gap: 6,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
   },
-  rowBody: {
-    flex: 1,
-    gap: 2,
+  title: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  loader: { marginTop: 12 },
+  list: { flex: 1 },
+  listContent: { gap: 4, paddingBottom: 4 },
+  row: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
   empty: {
     textAlign: 'center',
-    paddingVertical: 16,
-    fontSize: 13,
+    paddingVertical: 12,
+    fontSize: 12,
+  },
+  navSheet: {
+    maxHeight: 88,
+    minHeight: 72,
+  },
+  navHud: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  endBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  navHudText: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
   },
 });

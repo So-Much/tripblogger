@@ -22,6 +22,15 @@ function flattenStops(trip: TripDto): MapRouteStop[] {
         status: stop.status,
         orderIndex: stop.orderIndex,
         dayNumber: day.dayNumber,
+        locationType: stop.location?.locationType
+          ? {
+              code: stop.location.locationType.code,
+              name: stop.location.locationType.name,
+              icon: stop.location.locationType.icon,
+            }
+          : stop.customName
+            ? { code: 'other', name: 'Tùy chỉnh' }
+            : null,
       });
     }
   }

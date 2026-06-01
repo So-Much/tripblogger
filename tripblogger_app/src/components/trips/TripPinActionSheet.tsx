@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { LocationNameLabel } from '@/src/components/locations/LocationNameLabel';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { MapExplorePin } from '@/src/types/trip-map';
@@ -48,9 +49,16 @@ export function TripPinActionSheet({
           },
         ]}>
         <View style={[styles.handle, { backgroundColor: muted }]} />
-        <ThemedText type="defaultSemiBold" numberOfLines={2}>
-          {pin.name}
-        </ThemedText>
+        <LocationNameLabel
+          name={pin.name}
+          locationType={pin.locationType}
+          variant="dense"
+          subtitle={
+            pin.distanceKm != null
+              ? `${pin.distanceKm.toFixed(1)} km${pin.avgRating > 0 ? ` · ★${pin.avgRating.toFixed(1)}` : ''}`
+              : null
+          }
+        />
         {pin.address ? (
           <ThemedText style={{ color: muted, fontSize: 13, marginTop: 4 }} numberOfLines={2}>
             {pin.address}
@@ -68,8 +76,8 @@ export function TripPinActionSheet({
           onPress={onDirections}>
           <IconSymbol name="location.fill" size={20} color={tint} />
           <View style={styles.actionText}>
-            <ThemedText type="defaultSemiBold">Chỉ đường</ThemedText>
-            <ThemedText style={{ color: muted, fontSize: 12 }}>Mở Google Maps / Apple Maps</ThemedText>
+            <ThemedText type="defaultSemiBold">Bắt đầu chỉ đường</ThemedText>
+            <ThemedText style={{ color: muted, fontSize: 12 }}>Từ vị trí của bạn tới điểm đích</ThemedText>
           </View>
         </PressableScale>
 
