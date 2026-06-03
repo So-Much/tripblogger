@@ -1,4 +1,5 @@
 import { StyleSheet, View } from 'react-native';
+import { ThemedText } from '@/components/themed-text';
 import { Marker } from 'react-native-maps';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
@@ -13,6 +14,7 @@ type TripMapLabeledMarkerProps = {
   locationType?: LocationTypeRef | null;
   selected?: boolean;
   variant?: 'checkpoint' | 'nearby' | 'route';
+  sequenceNumber?: number;
   onPress?: () => void;
 };
 
@@ -33,6 +35,7 @@ export function TripMapLabeledMarker({
   locationType,
   selected = false,
   variant = 'nearby',
+  sequenceNumber,
   onPress,
 }: TripMapLabeledMarkerProps) {
   const card = useThemeColor({}, 'card');
@@ -55,7 +58,13 @@ export function TripMapLabeledMarker({
         />
         <View style={[styles.pinStem, { backgroundColor: visual.color }]} />
         <View style={[styles.pinCap, { borderColor: card }]}>
-          <LocationTypeIcon locationType={resolvedType} size="sm" selected={selected} />
+          {sequenceNumber != null ? (
+            <View style={[styles.seqBadge, { backgroundColor: visual.color }]}>
+              <ThemedText style={styles.seqText}>{sequenceNumber}</ThemedText>
+            </View>
+          ) : (
+            <LocationTypeIcon locationType={resolvedType} size="sm" selected={selected} />
+          )}
         </View>
         {variant === 'route' && selected ? (
           <View style={[styles.routePulse, { borderColor: visual.color }]} />
@@ -90,5 +99,18 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 2,
     opacity: 0.35,
+  },
+  seqBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  seqText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

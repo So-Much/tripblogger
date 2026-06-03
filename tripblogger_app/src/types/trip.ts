@@ -33,6 +33,7 @@ export type TripStopDto = {
   budgetEstimate: number | null;
   actualSpent: number | null;
   notes: string | null;
+  visitedAt?: string | null;
 };
 
 export type TripDayDto = {

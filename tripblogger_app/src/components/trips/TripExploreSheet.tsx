@@ -4,6 +4,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { LocationNameLabel } from '@/src/components/locations/LocationNameLabel';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useI18n } from '@/src/i18n';
 import type { MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
 import type { TripDto } from '@/src/types/trip';
 
@@ -12,6 +13,7 @@ type TripExploreSheetProps = {
   loading: boolean;
   checkpointLabel?: string | null;
   activeTrip?: TripDto | null;
+  routeStops?: MapRouteStop[];
   nextStop?: MapRouteStop | null;
   selectedPinId?: string | null;
   navSummary?: string | null;
@@ -21,6 +23,9 @@ type TripExploreSheetProps = {
   onNavigateNextStop?: () => void;
   onStopNavigation?: () => void;
   onTripPress?: () => void;
+  bottomInset?: number;
+  visitedCount?: number;
+  minimalActive?: boolean;
 };
 
 function pinMeta(item: MapExplorePin): string | null {
@@ -35,6 +40,7 @@ export function TripExploreSheet({
   loading,
   checkpointLabel,
   activeTrip,
+  routeStops = [],
   nextStop,
   selectedPinId,
   navSummary,
@@ -44,7 +50,11 @@ export function TripExploreSheet({
   onNavigateNextStop,
   onStopNavigation,
   onTripPress,
+  bottomInset = 0,
+  visitedCount = 0,
+  minimalActive = false,
 }: TripExploreSheetProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
@@ -80,7 +90,11 @@ export function TripExploreSheet({
   }
 
   return (
-    <View style={[styles.sheet, { borderColor: border, backgroundColor: `${card}F2` }]}>
+    <View
+      style={[
+        styles.sheet,
+        { borderColor: border, backgroundColor: `${card}F2`, bottom: bottomInset },
+      ]}>
       <View style={[styles.handle, { backgroundColor: muted }]} />
 
       {isActiveTrip && nextStop && onNavigateNextStop ? (
@@ -99,43 +113,57 @@ export function TripExploreSheet({
         </PressableScale>
       ) : null}
 
-      <ThemedText style={[styles.title, { color: muted }]} numberOfLines={1}>
-        {title}
-      </ThemedText>
+      {isActiveTrip && minimalActive && nextStop ? (
+        <ThemedText style={{ color: tint, fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
+          {t('tripHudProgress', {
+            visited: visitedCount,
+            total: routeStops.length,
+            name: nextStop.name,
+          })}
+        </ThemedText>
+      ) : null}
 
-      {loading ? (
-        <ActivityIndicator style={styles.loader} color={tint} />
-      ) : (
-        <FlatList
-          data={pins}
-          keyExtractor={(item) => item.id}
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <ThemedText style={[styles.empty, { color: muted }]}>Không có địa điểm gần đây.</ThemedText>
-          }
-          renderItem={({ item }) => (
-            <PressableScale
-              style={[
-                styles.row,
-                {
-                  borderColor: selectedPinId === item.id ? cta : border,
-                  backgroundColor: selectedPinId === item.id ? `${cta}10` : 'transparent',
-                },
-              ]}
-              onPress={() => onPinPress(item)}>
-              <LocationNameLabel
-                name={item.name}
-                locationType={item.locationType}
-                variant="dense"
-                selected={selectedPinId === item.id}
-                subtitle={pinMeta(item)}
-              />
-            </PressableScale>
-          )}
-        />
-      )}
+      {!minimalActive ? (
+        <ThemedText style={[styles.title, { color: muted }]} numberOfLines={1}>
+          {title}
+        </ThemedText>
+      ) : null}
+
+      {!minimalActive ? (
+        loading ? (
+          <ActivityIndicator style={styles.loader} color={tint} />
+        ) : (
+          <FlatList
+            data={pins}
+            keyExtractor={(item) => item.id}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <ThemedText style={[styles.empty, { color: muted }]}>Không có địa điểm gần đây.</ThemedText>
+            }
+            renderItem={({ item }) => (
+              <PressableScale
+                style={[
+                  styles.row,
+                  {
+                    borderColor: selectedPinId === item.id ? cta : border,
+                    backgroundColor: selectedPinId === item.id ? `${cta}10` : 'transparent',
+                  },
+                ]}
+                onPress={() => onPinPress(item)}>
+                <LocationNameLabel
+                  name={item.name}
+                  locationType={item.locationType}
+                  variant="dense"
+                  selected={selectedPinId === item.id}
+                  subtitle={pinMeta(item)}
+                />
+              </PressableScale>
+            )}
+          />
+        )
+      ) : null}
     </View>
   );
 }

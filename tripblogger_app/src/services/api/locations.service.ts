@@ -20,7 +20,37 @@ export type DrivingRouteDto = {
   durationS: number;
 };
 
+export type LocationDetailDto = PersistedLocationDto & {
+  phone: string | null;
+  website: string | null;
+  priceLevel: number | null;
+  openHours: unknown | null;
+  savedByMe: boolean;
+  savedLocationId: string | null;
+  hasMyReview: boolean;
+};
+
+export type LocationMediaDto = {
+  id: string;
+  mediaId: string;
+  url: string;
+  thumbnailUrl: string | null;
+  aestheticScore: number | null;
+  isPrimary: boolean;
+};
+
 export const locationsService = {
+  async getById(id: string): Promise<LocationDetailDto> {
+    const res = await apiClient.get<LocationDetailDto>(`/locations/${id}`);
+    return res.data;
+  },
+
+  async listMedia(locationId: string): Promise<{ items: LocationMediaDto[] }> {
+    const res = await apiClient.get<{ items: LocationMediaDto[] }>(
+      `/locations/${locationId}/media`,
+    );
+    return res.data;
+  },
   async search(q: string, limit = 15, lat?: number, lng?: number): Promise<PersistedLocationDto[]> {
     const res = await apiClient.get<PersistedLocationDto[]>('/locations/search', {
       params: { q, limit, lat, lng },
@@ -33,9 +63,17 @@ export const locationsService = {
     lng: number;
     radiusKm?: number;
     sort?: 'rating' | 'popularity';
+    typeCode?: string;
+    typeCodes?: string[];
     limit?: number;
   }): Promise<NearbyLocationDto[]> {
-    const res = await apiClient.get<NearbyLocationDto[]>('/locations/nearby', { params });
+    const { typeCodes, ...rest } = params;
+    const res = await apiClient.get<NearbyLocationDto[]>('/locations/nearby', {
+      params: {
+        ...rest,
+        ...(typeCodes?.length ? { typeCodes: typeCodes.join(',') } : {}),
+      },
+    });
     return res.data;
   },
 

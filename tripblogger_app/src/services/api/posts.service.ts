@@ -53,6 +53,17 @@ export const postsService = {
     return { ...res.data, items: res.data.items.map(normalizePost) };
   },
 
+  async listMineNear(params: {
+    locationId?: string;
+    lat?: number;
+    lng?: number;
+    radiusM?: number;
+    limit?: number;
+  }): Promise<{ items: PostDto[] }> {
+    const res = await apiClient.get<{ items: PostDto[] }>('/posts/mine/near', { params });
+    return { items: (res.data.items ?? []).map(normalizePost) };
+  },
+
   async listMine(params: { limit?: number; cursor?: string; status?: 'DRAFT' | 'PUBLISHED' }): Promise<PaginatedPosts> {
     const res = await apiClient.get<PaginatedPosts>('/posts/mine', {
       params: {

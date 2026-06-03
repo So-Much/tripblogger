@@ -54,6 +54,10 @@ const MAPPING = {
   'star.fill': 'star',
   'calendar': 'event',
   'map.fill': 'map',
+  'flame.fill': 'whatshot',
+  'trash.fill': 'delete',
+  'bookmark.fill': 'bookmark',
+  'square.and.arrow.up': 'share',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

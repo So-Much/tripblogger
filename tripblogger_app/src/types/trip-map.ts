@@ -28,5 +28,8 @@ export type MapRouteStop = {
   status: 'PLANNED' | 'VISITING' | 'VISITED' | 'SKIPPED';
   orderIndex: number;
   dayNumber: number;
+  sequenceIndex: number;
+  locationId?: string;
+  visitedAt?: string | null;
   locationType?: LocationTypeRef | null;
 };

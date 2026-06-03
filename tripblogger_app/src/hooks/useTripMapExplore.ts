@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import * as Location from 'expo-location';
 import { locationsService } from '@/src/services/api/locations.service';
 import type { MapCheckpoint, MapExplorePin } from '@/src/types/trip-map';
+import type { TripPlannerFilters } from '@/src/types/trip-planner';
 import { formatApiError } from '@/src/utils/format-api-error';
 
 type Coords = { lat: number; lng: number };
 
-export function useTripMapExplore() {
+export function useTripMapExplore(filters?: TripPlannerFilters) {
   const [userCoords, setUserCoords] = useState<Coords | null>(null);
   const [checkpoint, setCheckpoint] = useState<MapCheckpoint | null>(null);
   const [nearbyResults, setNearbyResults] = useState<MapExplorePin[]>([]);
@@ -20,7 +21,8 @@ export function useTripMapExplore() {
       const items = await locationsService.nearby({
         lat: center.lat,
         lng: center.lng,
-        sort: 'rating',
+        sort: filters?.sort ?? 'rating',
+        typeCodes: filters?.typeCodes,
         radiusKm: 10,
         limit: 30,
       });
@@ -49,7 +51,7 @@ export function useTripMapExplore() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters?.sort, filters?.typeCodes?.join(',')]);
 
   const initLocation = useCallback(async () => {
     setLoading(true);
@@ -74,6 +76,11 @@ export function useTripMapExplore() {
   useEffect(() => {
     void initLocation();
   }, [initLocation]);
+
+  useEffect(() => {
+    const center = checkpoint ?? userCoords;
+    if (center) void loadNearby(center);
+  }, [filters?.sort, filters?.typeCodes?.join(','), checkpoint, userCoords, loadNearby]);
 
   const selectCheckpoint = useCallback(
     async (next: MapCheckpoint) => {

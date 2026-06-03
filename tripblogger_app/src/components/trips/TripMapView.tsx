@@ -1,11 +1,29 @@
-import { useRef, useEffect } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Polyline, type MapPressEvent, type Region } from 'react-native-maps';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { TripLegDirectionMarker } from '@/src/components/trips/TripLegDirectionMarker';
 import { TripMapLabeledMarker } from '@/src/components/trips/TripMapLabeledMarker';
+import { TripRouteStopMarker } from '@/src/components/trips/TripRouteStopMarker';
+import type { LegDirectionMarker } from '@/src/utils/leg-bearing';
 import type { MapCheckpoint, MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
+import type { UserMapMarker } from '@/src/store/user-map-markers.store';
+import type { LocationTypeRef } from '@/src/utils/location-type-display';
 
 type LatLng = { latitude: number; longitude: number };
+
+export type PlannerMapStop = {
+  clientId: string;
+  lat: number;
+  lng: number;
+  name: string;
+  sequenceNumber: number;
+  locationType?: LocationTypeRef | null;
+};
+
+export type TripMapViewHandle = {
+  fitToCoordinates: (coords: LatLng[]) => void;
+};
 
 type TripMapViewProps = {
   center: LatLng | null;
@@ -15,8 +33,16 @@ type TripMapViewProps = {
   routeStops?: MapRouteStop[];
   polylineCoords?: LatLng[];
   upcomingPolyline?: LatLng[];
+  completedPolyline?: LatLng[];
+  routeStopDisplayMode?: 'default' | 'minimal';
   directionPolyline?: LatLng[];
+  plannerStops?: PlannerMapStop[];
+  legDirectionMarkers?: LegDirectionMarker[];
+  fitBounds?: LatLng[];
+  dimUnselectedPins?: boolean;
   selectedPinId?: string | null;
+  customMarkers?: UserMapMarker[];
+  pendingMarker?: { lat: number; lng: number; name: string } | null;
   allowMapPress?: boolean;
   followUser?: boolean;
   liveUserPosition?: { lat: number; lng: number } | null;
@@ -24,36 +50,67 @@ type TripMapViewProps = {
   onMapPress?: (coords: { lat: number; lng: number }) => void;
   onPinPress?: (pin: MapExplorePin) => void;
   onCheckpointPress?: (checkpoint: MapCheckpoint) => void;
+  onCustomMarkerPress?: (marker: UserMapMarker) => void;
   onRouteStopPress?: (stop: MapRouteStop) => void;
 };
 
 const DEFAULT_DELTA = { latitudeDelta: 0.08, longitudeDelta: 0.08 };
 const NAV_ZOOM = 17;
 
-export function TripMapView({
-  center,
-  checkpoint,
-  navigationDestination,
-  pins,
-  routeStops = [],
-  polylineCoords = [],
-  upcomingPolyline = [],
-  directionPolyline = [],
-  selectedPinId,
-  allowMapPress = true,
-  followUser = false,
-  liveUserPosition,
-  userHeading,
-  onMapPress,
-  onPinPress,
-  onCheckpointPress,
-  onRouteStopPress,
-}: TripMapViewProps) {
+export const TripMapView = forwardRef<TripMapViewHandle, TripMapViewProps>(function TripMapView(
+  {
+    center,
+    checkpoint,
+    navigationDestination,
+    pins,
+    routeStops = [],
+    polylineCoords = [],
+    upcomingPolyline = [],
+    completedPolyline = [],
+    routeStopDisplayMode = 'default',
+    directionPolyline = [],
+    plannerStops = [],
+    legDirectionMarkers = [],
+    fitBounds,
+    dimUnselectedPins = false,
+    selectedPinId,
+    customMarkers = [],
+    pendingMarker,
+    allowMapPress = true,
+    followUser = false,
+    liveUserPosition,
+    userHeading,
+    onMapPress,
+    onPinPress,
+    onCheckpointPress,
+    onCustomMarkerPress,
+    onRouteStopPress,
+  },
+  ref,
+) {
   const mapRef = useRef<MapView>(null);
   const tint = useThemeColor({}, 'tint');
   const accent = useThemeColor({}, 'accent');
   const muted = useThemeColor({}, 'textMuted');
   const didFitNavRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    fitToCoordinates: (coords: LatLng[]) => {
+      if (!mapRef.current || coords.length === 0) return;
+      mapRef.current.fitToCoordinates(coords, {
+        edgePadding: { top: 120, right: 48, bottom: 280, left: 48 },
+        animated: true,
+      });
+    },
+  }));
+
+  useEffect(() => {
+    if (followUser || !mapRef.current || !fitBounds?.length) return;
+    mapRef.current.fitToCoordinates(fitBounds, {
+      edgePadding: { top: 120, right: 48, bottom: 280, left: 48 },
+      animated: true,
+    });
+  }, [fitBounds, followUser]);
 
   useEffect(() => {
     if (followUser) return;
@@ -110,7 +167,9 @@ export function TripMapView({
     onMapPress?.({ lat: latitude, lng: longitude });
   };
 
-  const destMarker = navigationDestination ?? (followUser ? null : checkpoint);
+  const destMarker =
+    navigationDestination ?? (followUser || plannerStops.length > 0 ? null : checkpoint);
+  const routeLine = directionPolyline.length > 1 ? directionPolyline : polylineCoords;
 
   return (
     <View style={styles.wrap}>
@@ -150,12 +209,30 @@ export function TripMapView({
           />
         ) : null}
 
-        {!followUser && polylineCoords.length > 1 ? (
-          <Polyline coordinates={polylineCoords} strokeColor={muted} strokeWidth={3} lineDashPattern={[8, 6]} />
+        {!followUser && routeLine.length > 1 ? (
+          <Polyline
+            coordinates={routeLine}
+            strokeColor={plannerStops.length > 0 ? tint : muted}
+            strokeWidth={plannerStops.length > 0 ? 4 : 3}
+            lineDashPattern={plannerStops.length > 0 ? undefined : [8, 6]}
+            lineCap="round"
+            lineJoin="round"
+          />
         ) : null}
 
-        {!followUser && upcomingPolyline.length > 1 ? (
-          <Polyline coordinates={upcomingPolyline} strokeColor={tint} strokeWidth={4} />
+        {!followUser && completedPolyline.length > 1 ? (
+          <Polyline
+            coordinates={completedPolyline}
+            strokeColor={muted}
+            strokeWidth={3}
+            lineDashPattern={[6, 6]}
+            lineCap="round"
+            lineJoin="round"
+          />
+        ) : null}
+
+        {!followUser && upcomingPolyline.length > 1 && plannerStops.length === 0 ? (
+          <Polyline coordinates={upcomingPolyline} strokeColor={tint} strokeWidth={4} lineCap="round" lineJoin="round" />
         ) : null}
 
         {directionPolyline.length > 1 ? (
@@ -169,38 +246,105 @@ export function TripMapView({
         ) : null}
 
         {!followUser &&
-          routeStops
-            .filter((s) => s.status !== 'SKIPPED')
-            .map((stop) => (
-              <TripMapLabeledMarker
-                key={`route-${stop.id}`}
-                latitude={stop.latitude}
-                longitude={stop.longitude}
-                name={stop.name}
-                locationType={stop.locationType}
-                variant="route"
-                selected={stop.status === 'VISITING'}
-                onPress={() => onRouteStopPress?.(stop)}
-              />
-            ))}
+          legDirectionMarkers.map((leg) => <TripLegDirectionMarker key={leg.id} marker={leg} />)}
 
         {!followUser &&
-          pins.map((pin) => (
+          plannerStops.map((stop) => (
             <TripMapLabeledMarker
-              key={pin.id}
-              latitude={pin.latitude}
-              longitude={pin.longitude}
-              name={pin.name}
-              locationType={pin.locationType}
-              variant="nearby"
-              selected={selectedPinId === pin.id}
-              onPress={() => onPinPress?.(pin)}
+              key={`plan-${stop.clientId}`}
+              latitude={stop.lat}
+              longitude={stop.lng}
+              name={stop.name}
+              locationType={stop.locationType}
+              variant="route"
+              sequenceNumber={stop.sequenceNumber}
+              selected
+              onPress={() =>
+                onCheckpointPress?.({
+                  lat: stop.lat,
+                  lng: stop.lng,
+                  name: stop.name,
+                  locationType: stop.locationType,
+                })
+              }
             />
           ))}
+
+        {!followUser &&
+          routeStops
+            .filter((s) => s.status !== 'SKIPPED')
+            .map((stop) =>
+              routeStopDisplayMode === 'minimal' ? (
+                <TripRouteStopMarker
+                  key={`route-${stop.id}`}
+                  stop={stop}
+                  sequenceIndex={stop.sequenceIndex}
+                  onPress={() => onRouteStopPress?.(stop)}
+                />
+              ) : (
+                <TripMapLabeledMarker
+                  key={`route-${stop.id}`}
+                  latitude={stop.latitude}
+                  longitude={stop.longitude}
+                  name={stop.name}
+                  locationType={stop.locationType}
+                  variant="route"
+                  selected={stop.status === 'VISITING'}
+                  onPress={() => onRouteStopPress?.(stop)}
+                />
+              ),
+            )}
+
+        {!followUser &&
+          customMarkers.map((marker) => {
+            const pinId = `user-marker:${marker.id}`;
+            const isSelected = selectedPinId === pinId;
+            return (
+              <TripMapLabeledMarker
+                key={pinId}
+                latitude={marker.lat}
+                longitude={marker.lng}
+                name={marker.name}
+                locationType={{ code: 'other', name: 'Mốc riêng' }}
+                variant="nearby"
+                selected={isSelected}
+                onPress={() => onCustomMarkerPress?.(marker)}
+              />
+            );
+          })}
+
+        {!followUser && pendingMarker ? (
+          <TripMapLabeledMarker
+            latitude={pendingMarker.lat}
+            longitude={pendingMarker.lng}
+            name={pendingMarker.name}
+            locationType={{ code: 'other', name: 'Mốc riêng' }}
+            variant="checkpoint"
+            selected
+          />
+        ) : null}
+
+        {!followUser &&
+          pins.map((pin) => {
+            const isSelected = selectedPinId === pin.id;
+            if (dimUnselectedPins && !isSelected && selectedPinId) return null;
+            return (
+              <TripMapLabeledMarker
+                key={pin.id}
+                latitude={pin.latitude}
+                longitude={pin.longitude}
+                name={pin.name}
+                locationType={pin.locationType}
+                variant="nearby"
+                selected={isSelected}
+                onPress={() => onPinPress?.(pin)}
+              />
+            );
+          })}
       </MapView>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },

@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useTripMapStore } from '@/src/store/trip-map.store';
 import { tripsService } from '@/src/services/api/trips.service';
 import type { TripDto } from '@/src/types/trip';
 import type { MapRouteStop } from '@/src/types/trip-map';
+import { useTripsInProgress } from '@/src/hooks/useTripsInProgress';
 
 function flattenStops(trip: TripDto): MapRouteStop[] {
   const days = [...(trip.days ?? [])].sort((a, b) => a.dayNumber - b.dayNumber);
   const out: MapRouteStop[] = [];
+  let seq = 0;
 
   for (const day of days) {
     const stops = [...(day.stops ?? [])].sort((a, b) => a.orderIndex - b.orderIndex);
@@ -14,6 +17,7 @@ function flattenStops(trip: TripDto): MapRouteStop[] {
       const lat = stop.location?.latitude ?? stop.customLatitude ?? null;
       const lng = stop.location?.longitude ?? stop.customLongitude ?? null;
       if (lat == null || lng == null) continue;
+      seq += 1;
       out.push({
         id: stop.id,
         name: stop.location?.name ?? stop.customName ?? 'Điểm dừng',
@@ -22,6 +26,9 @@ function flattenStops(trip: TripDto): MapRouteStop[] {
         status: stop.status,
         orderIndex: stop.orderIndex,
         dayNumber: day.dayNumber,
+        sequenceIndex: seq,
+        locationId: stop.location?.id,
+        visitedAt: stop.visitedAt ?? null,
         locationType: stop.location?.locationType
           ? {
               code: stop.location.locationType.code,
@@ -45,18 +52,18 @@ function pickNextStop(stops: MapRouteStop[]): MapRouteStop | null {
 }
 
 export function useActiveTripRoute(enabled = true) {
-  const listQuery = useQuery({
-    queryKey: ['trips', 'active-or-planning'],
-    queryFn: async () => {
-      const active = await tripsService.listMine({ status: 'ACTIVE', limit: 1 });
-      if (active.items.length > 0) return active.items[0];
-      const planning = await tripsService.listMine({ status: 'PLANNING', limit: 1 });
-      return planning.items[0] ?? null;
-    },
-    enabled,
-  });
+  const selectedTripId = useTripMapStore((s) => s.selectedTripId);
+  const inProgress = useTripsInProgress(enabled);
 
-  const tripId = listQuery.data?.id;
+  const tripId = useMemo(() => {
+    if (!inProgress.trips.length) return null;
+    if (selectedTripId && inProgress.trips.some((t) => t.id === selectedTripId)) {
+      return selectedTripId;
+    }
+    const active = inProgress.trips.find((t) => t.status === 'ACTIVE');
+    if (active) return active.id;
+    return inProgress.trips[0]?.id ?? null;
+  }, [inProgress.trips, selectedTripId]);
 
   const detailQuery = useQuery({
     queryKey: ['trips', 'route', tripId],
@@ -81,6 +88,13 @@ export function useActiveTripRoute(enabled = true) {
     [routeStops],
   );
 
+  const completedPolyline = useMemo(() => {
+    if (visitingIndex <= 0) return [];
+    return routeStops
+      .slice(0, visitingIndex + 1)
+      .map((s) => ({ latitude: s.latitude, longitude: s.longitude }));
+  }, [routeStops, visitingIndex]);
+
   const upcomingPolyline = useMemo(() => {
     if (visitingIndex >= 0) {
       return routeStops.slice(visitingIndex).map((s) => ({ latitude: s.latitude, longitude: s.longitude }));
@@ -92,12 +106,20 @@ export function useActiveTripRoute(enabled = true) {
     return polylineCoords;
   }, [polylineCoords, routeStops, visitingIndex]);
 
+  const visitedCount = useMemo(
+    () => routeStops.filter((s) => s.status === 'VISITED').length,
+    [routeStops],
+  );
+
   return {
     trip: detailQuery.data ?? null,
     routeStops,
     polylineCoords,
+    completedPolyline,
     upcomingPolyline,
     nextStop,
-    isLoading: listQuery.isLoading || detailQuery.isLoading,
+    visitedCount,
+    isLoading: inProgress.isLoading || detailQuery.isLoading,
+    inProgress,
   };
 }

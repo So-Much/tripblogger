@@ -92,6 +92,17 @@ export const tripsService = {
     return res.data;
   },
 
+  async deleteStop(tripId: string, stopId: string): Promise<void> {
+    await apiClient.delete(`/trips/${tripId}/stops/${stopId}`);
+  },
+
+  async reorderStops(
+    tripId: string,
+    stops: Array<{ id: string; orderIndex: number }>,
+  ): Promise<void> {
+    await apiClient.patch(`/trips/${tripId}/stops/reorder`, { stops });
+  },
+
   async listRecommendations(tripId: string): Promise<TripRecommendationDto[]> {
     const res = await apiClient.get<TripRecommendationDto[]>(`/trips/${tripId}/recommendations`);
     return res.data;
