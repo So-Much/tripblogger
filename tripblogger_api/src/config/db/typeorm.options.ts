@@ -35,6 +35,8 @@ import { ProductRatingEntity } from '../../modules/commerce/entities/product-rat
 import { LocationEntity } from '../../modules/locations/entities/location.entity';
 import { LocationTypeEntity } from '../../modules/locations/entities/location-type.entity';
 import { LocationReviewEntity } from '../../modules/locations/entities/location-review.entity';
+import { LocationMediaEntity } from '../../modules/locations/entities/location-media.entity';
+import { UserCheckinEntity } from '../../modules/locations/entities/user-checkin.entity';
 import { TripEntity } from '../../modules/trips/entities/trip.entity';
 import { TripMemberEntity } from '../../modules/trips/entities/trip-member.entity';
 import { TripDayEntity } from '../../modules/trips/entities/trip-day.entity';
@@ -97,6 +99,8 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       LocationEntity,
       LocationTypeEntity,
       LocationReviewEntity,
+      LocationMediaEntity,
+      UserCheckinEntity,
       TripEntity,
       TripMemberEntity,
       TripDayEntity,

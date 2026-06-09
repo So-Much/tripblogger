@@ -146,7 +146,31 @@ tripblogger/
 
 ---
 
-## 6. Domain: Capture / Composition
+## 6. Domain: Trips / Planner (feat/trip)
+
+### Luồng tạo chuyến đi (map-first)
+
+- `TripCreateScreen`: search → **điểm đầu** (không bắt buộc chỗ ở) → thêm điểm trên map/filter; `addAccommodation` chỉ khi `locationType.code === accommodation`.
+- `startDate` mặc định **hôm nay**; stops day 1 + `orderIndex`.
+- Filter đa loại: `typeCodes` (CSV API) + `TripLocationFilterSheet`.
+
+### Tab bản đồ (minimal UX)
+
+- `DirectionsPickerSheet` + `useDirectionsLauncher`: TripBlogger / Google / Apple Maps; overlay loading khi tính tuyến in-app.
+- `TripLocationDetailSheet`: 1 hàng CTA (chỉ đường / thêm / điểm đầu / xóa).
+- ACTIVE: marker gọn (`TripRouteStopMarker`: số hoặc ✓ + ngày check-in); ẩn pin nearby; HUD 1 dòng trong `TripExploreSheet`.
+- `TripSwitcherFab` + `useTripsInProgress`: đổi trip PLANNING/ACTIVE (`trip-map.store` `selectedTripId`).
+- Chạm stop ACTIVE → `TripStopPostsSheet` + `GET /posts/mine/near` (locationId ưu tiên, geo fallback).
+- `useArrivalCheckInPrompt`: ~80m → xác nhận check-in.
+
+### Spec
+
+- `docs/superpowers/specs/2026-06-03-trip-planner-ux-design.md`
+- `docs/superpowers/specs/2026-06-03-trip-map-ux-minimal-design.md` (UX minimal map)
+
+---
+
+## 7. Domain: Capture / Composition
 
 - Tab `capture.tsx`, components `TakeMediaZoomRail`, `CaptureFlashTorchBar`
 - `boomerang-encode.ts` — có thể lỗi tsc nếu thiếu `ffmpeg-kit`
@@ -154,7 +178,7 @@ tripblogger/
 
 ---
 
-## 7. Home shell
+## 8. Home shell
 
 **feat/product (hiện tại có thể vẫn mock feed):**
 - `FeedSection` + `FEED_POSTS` mock
@@ -164,7 +188,7 @@ tripblogger/
 
 ---
 
-## 8. Convention code
+## 9. Convention code
 
 ### API
 - Guards: `JwtAuthGuard`, `RolesGuard`, `StatusesGuard` — `@Roles('MEMBER','GUEST')`, `@RequiredStatuses('ACTIVE')`
@@ -186,7 +210,7 @@ tripblogger/
 
 ---
 
-## 9. Lệnh verify
+## 10. Lệnh verify
 
 ```powershell
 cd tripblogger_api; npm run build
@@ -197,7 +221,7 @@ Lỗi tsc đã biết (không chặn commerce): `boomerang-encode.ts`, một s�
 
 ---
 
-## 10. Env & chạy app
+## 11. Env & chạy app
 
 - API: `.env` (không commit) — MSSQL connection, JWT, upload paths
 - App: `EXPO_PUBLIC_API_URL` hoặc tương đương trong config client (`src/services/api/client.ts`)
@@ -205,7 +229,7 @@ Lỗi tsc đã biết (không chặn commerce): `boomerang-encode.ts`, một s�
 
 ---
 
-## 11. UX principles (marketplace plan)
+## 12. UX principles (marketplace plan)
 
 | Vai trò | Mục tiêu tap |
 |---------|----------------|
@@ -217,7 +241,7 @@ Sticky patterns: shop header (search, wishlist, cart badge); detail footer Thêm
 
 ---
 
-## 12. Tài liệu tham chiếu (local, có thể không trên git)
+## 13. Tài liệu tham chiếu (local, có thể không trên git)
 
 | Tài liệu | Nội dung |
 |----------|----------|

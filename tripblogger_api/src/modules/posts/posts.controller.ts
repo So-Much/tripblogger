@@ -23,6 +23,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { QueryPostsNearLocationDto } from './dto/query-posts-near-location.dto';
 import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { ToggleReactionDto } from './dto/reaction.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -60,6 +61,14 @@ export class PostsController {
   @RequiredStatuses('ACTIVE')
   findMine(@Req() req: { user: { sub: string } }, @Query() query: QueryMinePostsDto) {
     return this.postsService.findMine(req.user.sub, query);
+  }
+
+  @Get('mine/near')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  findMineNear(@Req() req: { user: { sub: string } }, @Query() query: QueryPostsNearLocationDto) {
+    return this.postsService.findMineNear(req.user.sub, query);
   }
 
   @Get('feed')

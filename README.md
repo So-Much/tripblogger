@@ -24,11 +24,11 @@ Chi tiết từng package: [`tripblogger_api/README.md`](./tripblogger_api/READM
 1. Sao chép môi trường: `cp tripblogger_api/.env.example tripblogger_api/.env` (Windows: copy tay) và điền `DB_*`, `JWT_*`.
 2. Cài đặt: `cd tripblogger_api && npm install`
 3. Migration: `npm run migration:run`
-4. Seed vai trò/trạng thái và user demo:
+4. Seed dữ liệu demo:
    ```bash
-   npm run seed:roles-statuses
-   npm run seed:user
+   npm run seed:all
    ```
+   Hoặc seed từng module — xem bảng lệnh trong [`tripblogger_api/README.md`](./tripblogger_api/README.md).
 5. Chạy dev: `npm run start:dev`  
    API chạy tại cổng mặc định **`http://localhost:3000`** với prefix **`/api`** (ví dụ đăng nhập: `POST /api/auth/login`).
 

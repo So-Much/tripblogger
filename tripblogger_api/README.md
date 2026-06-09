@@ -7,7 +7,29 @@ Tài liệu monorepo (app + hạ tầng): [README gốc](../README.md).
 1. Copy `.env.example` to `.env` and fill values.
 2. Install deps: `npm install`
 3. Run migrations: `npm run migration:run`
-4. Seed roles/statuses: `npm run seed:roles-statuses`
+4. Seed dữ liệu demo (chọn một trong hai cách):
+
+   **Chạy tất cả một lượt:**
+   ```bash
+   npm run seed:all
+   ```
+
+   **Hoặc từng module:**
+
+   | Lệnh | Mô tả | Phụ thuộc |
+   |------|--------|-----------|
+   | `npm run seed:roles-statuses` | Roles + status catalog | migration |
+   | `npm run seed:categories` | Danh mục sản phẩm | migration |
+   | `npm run seed:compositions` | Bố cục chụp ảnh | migration |
+   | `npm run seed:user` | Tài khoản seller demo | roles-statuses |
+   | `npm run seed:buyer-user` | Tài khoản buyer demo | roles-statuses |
+   | `npm run seed:posts` | Bài viết feed + comment + reaction | user, buyer-user |
+   | `npm run seed:commerce-products` | Sản phẩm marketplace | categories, user |
+   | `npm run seed:coupons` | Mã giảm giá demo (`TB-*`) | — |
+   | `npm run seed:locations` | POI + chuyến đi demo | user |
+
+**Locations API:** `GET /api/locations/nearby` hỗ trợ `typeCode` (ví dụ `restaurant`), `sort=rating|popularity`, `radiusKm`, `limit`.
+
 5. Start dev server: `npm run start:dev`
 
 ## Timestamps (UTC)

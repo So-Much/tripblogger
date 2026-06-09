@@ -3,9 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlaceResultDto } from '../places/dto/place.dto';
 import { PlacesService } from '../places/places.service';
+import { SavedLocationEntity } from '../trips/entities/saved-location.entity';
 import { CreateLocationDto, UpsertFromPlaceDto } from './dto/create-location.dto';
 import { LocationEntity } from './entities/location.entity';
+import { LocationMediaEntity } from './entities/location-media.entity';
 import { LocationTypeEntity } from './entities/location-type.entity';
+import { LocationReviewsService } from './location-reviews.service';
 import { haversineKm } from '../../common/utils/haversine';
 
 export type LocationResponse = {
@@ -20,7 +23,37 @@ export type LocationResponse = {
   totalReview: number;
 };
 
+export type LocationDetailResponse = LocationResponse & {
+  phone: string | null;
+  website: string | null;
+  priceLevel: number | null;
+  openHours: unknown | null;
+  savedByMe: boolean;
+  savedLocationId: string | null;
+  hasMyReview: boolean;
+};
+
+export type LocationMediaItem = {
+  id: string;
+  mediaId: string;
+  url: string;
+  thumbnailUrl: string | null;
+  aestheticScore: number | null;
+  isPrimary: boolean;
+};
+
 export type NearbyLocationResponse = LocationResponse & { distanceKm: number };
+
+function parseNearbyTypeCodes(typeCode?: string, typeCodes?: string): string[] {
+  const fromCsv =
+    typeCodes
+      ?.split(',')
+      .map((c) => c.trim())
+      .filter(Boolean) ?? [];
+  if (fromCsv.length > 0) return [...new Set(fromCsv)];
+  const single = typeCode?.trim();
+  return single ? [single] : [];
+}
 
 @Injectable()
 export class LocationsService {
@@ -29,7 +62,12 @@ export class LocationsService {
     private readonly locationsRepo: Repository<LocationEntity>,
     @InjectRepository(LocationTypeEntity)
     private readonly typesRepo: Repository<LocationTypeEntity>,
+    @InjectRepository(LocationMediaEntity)
+    private readonly locationMediaRepo: Repository<LocationMediaEntity>,
+    @InjectRepository(SavedLocationEntity)
+    private readonly savedRepo: Repository<SavedLocationEntity>,
     private readonly placesService: PlacesService,
+    private readonly reviewsService: LocationReviewsService,
   ) {}
 
   async search(
@@ -115,13 +153,19 @@ export class LocationsService {
     radiusKm = 10,
     sort: 'rating' | 'popularity' = 'rating',
     limit = 30,
+    typeCode?: string,
+    typeCodes?: string,
   ): Promise<NearbyLocationResponse[]> {
     const cap = Math.min(limit, 50);
-    const rows = await this.locationsRepo
+    const codes = parseNearbyTypeCodes(typeCode, typeCodes);
+    const qb = this.locationsRepo
       .createQueryBuilder('l')
       .leftJoinAndSelect('l.locationType', 'lt')
-      .where('l.status = :status', { status: 'ACTIVE' })
-      .getMany();
+      .where('l.status = :status', { status: 'ACTIVE' });
+    if (codes.length > 0) {
+      qb.andWhere('lt.code IN (:...codes)', { codes });
+    }
+    const rows = await qb.getMany();
 
     const within = rows
       .map((loc) => {
@@ -152,7 +196,7 @@ export class LocationsService {
       distanceKm: Math.round(distanceKm * 100) / 100,
     }));
 
-    if (results.length >= cap) {
+    if (results.length >= cap || codes.length > 0) {
       return results;
     }
 
@@ -193,13 +237,36 @@ export class LocationsService {
     return results.slice(0, cap);
   }
 
-  async findById(id: string): Promise<LocationResponse> {
+  async findById(id: string, userId?: string): Promise<LocationDetailResponse> {
     const loc = await this.locationsRepo.findOne({
       where: { id },
       relations: ['locationType'],
     });
     if (!loc) throw new NotFoundException('Location not found');
-    return this.toResponse(loc);
+    return this.toDetailResponse(loc, userId);
+  }
+
+  async listMedia(locationId: string): Promise<{ items: LocationMediaItem[] }> {
+    const loc = await this.locationsRepo.exist({ where: { id: locationId } });
+    if (!loc) throw new NotFoundException('Location not found');
+
+    const rows = await this.locationMediaRepo.find({
+      where: { locationId },
+      relations: ['media'],
+      order: { aestheticScore: 'DESC', createdAt: 'DESC' },
+      take: 40,
+    });
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        mediaId: row.mediaId,
+        url: row.media.url,
+        thumbnailUrl: row.media.thumbnailUrl ?? row.media.url,
+        aestheticScore: row.aestheticScore != null ? Number(row.aestheticScore) : null,
+        isPrimary: Boolean(row.isPrimary),
+      })),
+    };
   }
 
   async create(dto: CreateLocationDto): Promise<LocationResponse> {
@@ -327,6 +394,44 @@ export class LocationsService {
         : null,
       avgRating: Number(loc.avgRating),
       totalReview: loc.totalReview,
+    };
+  }
+
+  private async toDetailResponse(
+    loc: LocationEntity,
+    userId?: string,
+  ): Promise<LocationDetailResponse> {
+    let savedByMe = false;
+    let savedLocationId: string | null = null;
+    let hasMyReview = false;
+
+    if (userId) {
+      const saved = await this.savedRepo.findOne({
+        where: { userId, locationId: loc.id },
+      });
+      savedByMe = Boolean(saved);
+      savedLocationId = saved?.id ?? null;
+      hasMyReview = await this.reviewsService.hasReview(loc.id, userId);
+    }
+
+    let openHours: unknown | null = null;
+    if (loc.openHoursJson) {
+      try {
+        openHours = JSON.parse(loc.openHoursJson);
+      } catch {
+        openHours = null;
+      }
+    }
+
+    return {
+      ...this.toResponse(loc),
+      phone: loc.phone,
+      website: loc.website,
+      priceLevel: loc.priceLevel,
+      openHours,
+      savedByMe,
+      savedLocationId,
+      hasMyReview,
     };
   }
 }

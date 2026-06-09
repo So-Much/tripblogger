@@ -12,7 +12,9 @@ import { In, Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { QueryPostsNearLocationDto } from './dto/query-posts-near-location.dto';
 import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
+import { haversineKm } from '../../common/utils/haversine';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CompositionEntity } from '../compositions/entities/composition.entity';
 import { CommentEntity } from './entities/comment.entity';
@@ -561,6 +563,58 @@ export class PostsService {
     );
 
     return { items: payloads, nextCursor };
+  }
+
+  async findMineNear(userId: string, query: QueryPostsNearLocationDto) {
+    const limit = Math.min(query.limit ?? 20, 30);
+    const radiusKm = (query.radiusM ?? 300) / 1000;
+    const rows = await this.postsRepo.find({
+      where: { userId, status: 'PUBLISHED' },
+      order: { createdAt: 'DESC' },
+      take: 150,
+      relations: ['postMedia', 'postMedia.media', 'user', 'user.memberProfile'],
+    });
+
+    const byId: PostEntity[] = [];
+    const byGeo: PostEntity[] = [];
+    const seen = new Set<string>();
+
+    for (const post of rows) {
+      const loc = parseLocation(post.locationJson);
+      if (!loc) continue;
+
+      if (query.locationId) {
+        const lid = typeof loc.locationId === 'string' ? loc.locationId : undefined;
+        if (lid && lid === query.locationId && !seen.has(post.id)) {
+          seen.add(post.id);
+          byId.push(post);
+          continue;
+        }
+      }
+
+      if (query.lat != null && query.lng != null) {
+        const lat = Number(loc.lat);
+        const lng = Number(loc.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          const d = haversineKm(query.lat, query.lng, lat, lng);
+          if (d <= radiusKm && !seen.has(post.id)) {
+            seen.add(post.id);
+            byGeo.push(post);
+          }
+        }
+      }
+    }
+
+    const items = [...byId, ...byGeo].slice(0, limit);
+    const payloads = await Promise.all(
+      items.map(async (p) => {
+        const meta = await this.getPostReactionMeta(p.id, userId);
+        const commentCount = await this.getPostCommentCount(p.id);
+        return this.serializePost(p, { ...meta, commentCount });
+      }),
+    );
+
+    return { items: payloads };
   }
 
   async findFeed(viewerUserId: string, query: QueryFeedPostsDto) {

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CheckinsService } from '../locations/checkins.service';
 import { CreateStopDto, ReorderStopsDto, UpdateStopDto } from './dto/trip.dto';
 import { TripDayEntity } from './entities/trip-day.entity';
 import { TripStopEntity } from './entities/trip-stop.entity';
@@ -18,6 +19,7 @@ export class TripStopsService {
     private readonly daysRepo: Repository<TripDayEntity>,
     private readonly permissions: TripPermissionsService,
     private readonly tripsService: TripsService,
+    private readonly checkinsService: CheckinsService,
   ) {}
 
   async listByDay(tripId: string, dayId: string, userId: string) {
@@ -106,7 +108,31 @@ export class TripStopsService {
   }
 
   async checkin(tripId: string, stopId: string, userId: string) {
-    return this.updateStop(tripId, stopId, userId, { status: 'VISITING' });
+    const stop = await this.findStopInTrip(tripId, stopId);
+    const result = await this.updateStop(tripId, stopId, userId, { status: 'VISITING' });
+
+    if (stop.locationId) {
+      const lat = stop.location
+        ? Number(stop.location.latitude)
+        : stop.customLatitude
+          ? Number(stop.customLatitude)
+          : null;
+      const lng = stop.location
+        ? Number(stop.location.longitude)
+        : stop.customLongitude
+          ? Number(stop.customLongitude)
+          : null;
+      if (lat != null && lng != null) {
+        await this.checkinsService.recordFromTripStop(
+          userId,
+          stop.locationId,
+          lat,
+          lng,
+        );
+      }
+    }
+
+    return result;
   }
 
   async complete(tripId: string, stopId: string, userId: string) {
@@ -130,7 +156,7 @@ export class TripStopsService {
   private async findStopInTrip(tripId: string, stopId: string) {
     const stop = await this.stopsRepo.findOne({
       where: { id: stopId },
-      relations: ['tripDay'],
+      relations: ['tripDay', 'location'],
     });
     if (!stop || stop.tripDay?.tripId !== tripId) throw new NotFoundException('Stop not found');
     return stop;
