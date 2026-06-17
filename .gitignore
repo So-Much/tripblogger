@@ -102,3 +102,8 @@
 # Superpowers agent specs/plans (local design docs — not versioned)
 # -----------------------------------------------------------------------------
 docs/superpowers/
+
+# -----------------------------------------------------------------------------
+# Local project structure map (personal reference — not versioned)
+# -----------------------------------------------------------------------------
+docs/PROJECT_STRUCTURE.md

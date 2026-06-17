@@ -216,7 +216,15 @@ export function ShopScreen() {
           </Pressable>
         </View>
       ) : (
-        <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
+        <View style={[styles.loginPromptCard, { borderColor: border, backgroundColor: card }]}>
+          <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.btn, styles.btnPrimary, { backgroundColor: tint }]}
+            onPress={() => router.push('/login')}>
+            <ThemedText style={[styles.btnPrimaryTxt, { color: onCta }]}>{t('login')}</ThemedText>
+          </Pressable>
+        </View>
       )}
     </>
   );
@@ -287,4 +295,12 @@ const styles = StyleSheet.create({
   btnPrimary: { borderWidth: 0 },
   btnPrimaryTxt: { fontWeight: '700', fontSize: 14 },
   hint: { paddingHorizontal: 16, marginBottom: 8, fontSize: 13 },
+  loginPromptCard: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
 });

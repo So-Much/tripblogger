@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -35,6 +35,7 @@ const NEXT_SHIPMENT: Record<ShipmentStatus, ShipmentStatus[]> = {
 
 export function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { t } = useI18n();
   const qc = useQueryClient();
   const me = useMeQuery();
@@ -137,6 +138,9 @@ export function OrderDetailScreen() {
     return (
       <ThemedView style={styles.center}>
         <ThemedText>{t('shopMemberRequired')}</ThemedText>
+        <Pressable style={[styles.loginCta, { borderColor: border }]} onPress={() => router.push('/login')}>
+          <ThemedText type="link">{t('login')}</ThemedText>
+        </Pressable>
       </ThemedView>
     );
   }
@@ -383,6 +387,14 @@ export function OrderDetailScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', padding: 24 },
+  loginCta: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignSelf: 'flex-start',
+  },
   pad: { padding: 16, gap: 12, paddingBottom: 40 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 6, marginTop: 4 },
   small: { fontSize: 12, opacity: 0.8 },

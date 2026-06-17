@@ -85,6 +85,12 @@ export function TripCustomMarkerSheet({
         danger: true,
       });
     } else if (!inRoute) {
+      actions.push({
+        key: 'add',
+        label: t('tripAddRoute'),
+        icon: 'plus.circle.fill',
+        onPress: () => onAddToRoute(),
+      });
       if (!hasAnchor) {
         actions.push({
           key: 'anchor',
@@ -93,12 +99,6 @@ export function TripCustomMarkerSheet({
           onPress: () => onSetAnchor(),
         });
       } else {
-        actions.push({
-          key: 'add',
-          label: t('tripAddRoute'),
-          icon: 'plus.circle.fill',
-          onPress: () => onAddToRoute(),
-        });
         actions.push({
           key: 'anchor',
           label: t('tripAnchorSet'),
@@ -168,7 +168,7 @@ export function TripCustomMarkerSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  backdrop: { flex: 1, backgroundColor: 'transparent' },
   sheet: {
     borderTopWidth: 1,
     borderTopLeftRadius: 20,

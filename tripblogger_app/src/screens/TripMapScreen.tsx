@@ -1,53 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { TripExploreSheet } from '@/src/components/trips/TripExploreSheet';
-import {
-  TripLocationFilterSheet,
-  countTripLocationFilters,
-} from '@/src/components/trips/TripLocationFilterSheet';
+import { TripLocationFilterSheet, countTripLocationFilters } from '@/src/components/trips/TripLocationFilterSheet';
 import { TripCustomMarkerSheet } from '@/src/components/trips/TripCustomMarkerSheet';
 import { DirectionsLoadingOverlay } from '@/src/components/trips/DirectionsLoadingOverlay';
 import { DirectionsPickerSheet } from '@/src/components/trips/DirectionsPickerSheet';
 import { TripLocationDetailSheet } from '@/src/components/trips/TripLocationDetailSheet';
 import { TripMapSearchBar, type TripMapSearchBarHandle } from '@/src/components/trips/TripMapSearchBar';
 import { TripMapView } from '@/src/components/trips/TripMapView';
-import { useActiveTripRoute } from '@/src/hooks/useActiveTripRoute';
-import { useArrivalCheckInPrompt } from '@/src/hooks/useArrivalCheckInPrompt';
+import { TripHubSheet } from '@/src/components/trips/TripHubSheet';
 import { useDirectionsLauncher } from '@/src/hooks/useDirectionsLauncher';
 import { useTurnByTurnNavigation } from '@/src/hooks/useTurnByTurnNavigation';
-import { useArrivalWatch } from '@/src/hooks/useArrivalWatch';
 import { useI18n } from '@/src/i18n';
 import { useTripMapExplore } from '@/src/hooks/useTripMapExplore';
-import { useTripPlanner } from '@/src/hooks/useTripPlanner';
-import { useTripRoutePolylines } from '@/src/hooks/useTripRoutePolylines';
-import type { TripPlannerFilters } from '@/src/types/trip-planner';
 import { useMeQuery } from '@/src/hooks/useAuth';
-import { tripsService } from '@/src/services/api/trips.service';
-import { TripStopPostsSheet } from '@/src/components/trips/TripStopPostsSheet';
-import { TripSwitcherSheet } from '@/src/components/trips/TripSwitcherSheet';
-import { useTripMapStore } from '@/src/store/trip-map.store';
-import {
-  useUserMapMarkersStore,
-  userMarkerPinId,
-} from '@/src/store/user-map-markers.store';
+import { useActivePlan } from '@/src/hooks/useActivePlan';
+import { useUserMapMarkersStore, userMarkerPinId } from '@/src/store/user-map-markers.store';
 import type { MapCheckpoint, MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
-import { formatApiError } from '@/src/utils/format-api-error';
-import { buildAddStopPayload } from '@/src/utils/map-stop-payload';
-import { pickTripDayForNewStop } from '@/src/utils/pick-trip-day';
-import {
-  pinFromCustomCoords,
-  userMarkerToCheckpoint,
-  userMarkerToPin,
-} from '@/src/utils/user-map-marker-pin';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import type { TripPlannerFilters } from '@/src/types/trip-planner';
+import { pinFromCustomCoords, userMarkerToCheckpoint, userMarkerToPin } from '@/src/utils/user-map-marker-pin';
+import { locationsService } from '@/src/services/api/locations.service';
 
 function pinFromCheckpoint(cp: MapCheckpoint, id = 'checkpoint'): MapExplorePin {
   return {
@@ -58,20 +36,16 @@ function pinFromCheckpoint(cp: MapCheckpoint, id = 'checkpoint'): MapExplorePin 
     longitude: cp.lng,
     avgRating: 0,
     totalReview: 0,
-    locationType: cp.locationType ?? { code: 'accommodation', name: 'Checkpoint' },
+    locationType: cp.locationType ?? { code: 'other', name: 'Địa điểm' },
   };
 }
 
 export function TripMapScreen() {
   const { t } = useI18n();
   const router = useRouter();
-  const { navigateNext } = useLocalSearchParams<{ navigateNext?: string }>();
-  const didAutoNavigateRef = useRef(false);
-  const bootstrappedTripRef = useRef<string | null>(null);
   const searchBarRef = useRef<TripMapSearchBarHandle>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const insets = useSafeAreaInsets();
-  const qc = useQueryClient();
   const meQuery = useMeQuery();
   const tint = useThemeColor({}, 'tint');
   const card = useThemeColor({}, 'card');
@@ -81,56 +55,17 @@ export function TripMapScreen() {
   const onCta = useThemeColor({}, 'onCta');
 
   const isMember = meQuery.data?.role === 'MEMBER';
-
   const [mapFilters, setMapFilters] = useState<TripPlannerFilters>({ sort: 'rating' });
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterDraft, setFilterDraft] = useState<TripPlannerFilters>(mapFilters);
-
-  const activeRoute = useActiveTripRoute(isMember);
+  const activePlan = useActivePlan(isMember);
   const navigation = useTurnByTurnNavigation();
   const directions = useDirectionsLauncher(navigation);
-  const draftMode = isMember && !activeRoute.trip;
-  const planner = useTripPlanner(null, { sharedDraft: draftMode });
-  const exploreFilters = draftMode ? planner.filters : mapFilters;
-  const explore = useTripMapExplore(exploreFilters);
-  const arrivalCoords = useArrivalWatch(
-    isMember && activeRoute.trip?.status === 'ACTIVE' && !navigation.active,
-  );
-
-  const draftPolylines = useTripRoutePolylines(draftMode ? planner.stops : []);
-  const draftPlannerMapStops = useMemo(
-    () =>
-      planner.stops.map((s, i) => ({
-        clientId: s.clientId,
-        lat: s.lat,
-        lng: s.lng,
-        name: s.name,
-        sequenceNumber: i + 1,
-        locationType: s.locationType,
-      })),
-    [planner.stops],
-  );
-
-  useArrivalCheckInPrompt({
-    enabled: isMember && activeRoute.trip?.status === 'ACTIVE' && !navigation.active,
-    tripId: activeRoute.trip?.id,
-    nextStop: activeRoute.nextStop,
-    routeStops: activeRoute.routeStops,
-    userCoords: arrivalCoords ?? explore.userCoords,
-    onSuccess: () => {
-      const tripId = activeRoute.trip?.id;
-      if (tripId) {
-        void qc.invalidateQueries({ queryKey: ['trips', 'route', tripId] });
-        void qc.invalidateQueries({ queryKey: ['trips', tripId] });
-      }
-    },
-  });
+  const explore = useTripMapExplore(mapFilters, true);
 
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [actionPin, setActionPin] = useState<MapExplorePin | null>(null);
   const [actionVisible, setActionVisible] = useState(false);
-  const [switcherVisible, setSwitcherVisible] = useState(false);
-  const [stopPostsVisible, setStopPostsVisible] = useState(false);
   const [selectedRouteStop, setSelectedRouteStop] = useState<MapRouteStop | null>(null);
   const [customSheetVisible, setCustomSheetVisible] = useState(false);
   const [customCoords, setCustomCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -140,11 +75,6 @@ export function TripMapScreen() {
     null,
   );
   const userMarkers = useUserMapMarkersStore((s) => s.markers);
-  const selectedTripId = useTripMapStore((s) => s.selectedTripId);
-  const setSelectedTripId = useTripMapStore((s) => s.setSelectedTripId);
-
-  const isActiveTrip = activeRoute.trip?.status === 'ACTIVE';
-
   useEffect(() => {
     void useUserMapMarkersStore.getState().hydrate();
   }, []);
@@ -191,105 +121,90 @@ export function TripMapScreen() {
   }, [customCoords, customMarkerId, pendingMarker?.name, t, userMarkers]);
 
   const mapCenter = useMemo(() => {
-    if (activeRoute.trip?.status === 'ACTIVE' && activeRoute.nextStop) {
-      return {
-        latitude: activeRoute.nextStop.latitude,
-        longitude: activeRoute.nextStop.longitude,
-      };
-    }
     const c = explore.exploreCenter;
     if (!c) return null;
     return { latitude: c.lat, longitude: c.lng };
-  }, [activeRoute.trip?.status, activeRoute.nextStop, explore.exploreCenter]);
+  }, [explore.exploreCenter]);
 
-  const beginNavigation = useCallback(
-    async (dest: { lat: number; lng: number; name?: string }) => {
-      try {
-        await navigation.startNavigation(dest);
-      } catch (e) {
-        Alert.alert(t('tripDirectionsFailed'), formatApiError(e, t('tripArrivalUpdateFailedHint')));
-      }
-    },
-    [navigation, t],
+  const suggestionCenter = useMemo(
+    () => explore.checkpoint ?? explore.userCoords,
+    [explore.checkpoint, explore.userCoords],
+  );
+
+  const cityHighlightsQuery = useQuery({
+    queryKey: ['trip-suggest', 'city', suggestionCenter?.lat, suggestionCenter?.lng],
+    queryFn: () =>
+      locationsService.nearby({
+        lat: suggestionCenter!.lat,
+        lng: suggestionCenter!.lng,
+        sort: 'rating',
+        radiusKm: 12,
+        limit: 24,
+      }),
+    enabled: Boolean(suggestionCenter),
+  });
+  const nearProvinceQuery = useQuery({
+    queryKey: ['trip-suggest', 'near-province', suggestionCenter?.lat, suggestionCenter?.lng],
+    queryFn: () =>
+      locationsService.nearby({
+        lat: suggestionCenter!.lat,
+        lng: suggestionCenter!.lng,
+        sort: 'rating',
+        radiusKm: 80,
+        limit: 30,
+      }),
+    enabled: Boolean(suggestionCenter),
+  });
+  const globalQuery = useQuery({
+    queryKey: ['trip-suggest', 'global', suggestionCenter?.lat, suggestionCenter?.lng],
+    queryFn: () =>
+      locationsService.nearby({
+        lat: suggestionCenter!.lat,
+        lng: suggestionCenter!.lng,
+        sort: 'popularity',
+        radiusKm: 300,
+        limit: 40,
+      }),
+    enabled: Boolean(suggestionCenter),
+  });
+
+  const toPin = useCallback((item: any): MapExplorePin => ({
+    id: item.id,
+    name: item.name,
+    address: item.address ?? null,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    avgRating: item.avgRating ?? 0,
+    totalReview: item.totalReview ?? 0,
+    distanceKm: item.distanceKm,
+    locationType: item.locationType
+      ? { code: item.locationType.code, name: item.locationType.name, icon: item.locationType.icon }
+      : null,
+  }), []);
+
+  const pinnedLocation = useMemo(() => {
+    if (actionPin) return actionPin;
+    if (explore.checkpoint) return pinFromCheckpoint(explore.checkpoint, explore.checkpoint.locationId ?? 'checkpoint');
+    return null;
+  }, [actionPin, explore.checkpoint]);
+
+  const cityHighlights = useMemo(
+    () => (cityHighlightsQuery.data ?? []).filter((i) => (i.distanceKm ?? 0) <= 20).map(toPin),
+    [cityHighlightsQuery.data, toPin],
+  );
+  const nearbyProvinceHighlights = useMemo(
+    () => (nearProvinceQuery.data ?? []).filter((i) => (i.distanceKm ?? 0) > 20 && (i.distanceKm ?? 0) <= 120).map(toPin),
+    [nearProvinceQuery.data, toPin],
+  );
+  const globalHighlights = useMemo(
+    () => (globalQuery.data ?? []).filter((i) => (i.distanceKm ?? 0) > 120).map(toPin),
+    [globalQuery.data, toPin],
   );
 
   const activeCheckpoint = useMemo((): MapCheckpoint | null => {
     if (navigation.active) return null;
-    if (activeRoute.trip?.status === 'ACTIVE' && activeRoute.nextStop) {
-      return {
-        lat: activeRoute.nextStop.latitude,
-        lng: activeRoute.nextStop.longitude,
-        name: activeRoute.nextStop.name,
-        locationType: activeRoute.nextStop.locationType,
-      };
-    }
-    if (draftMode && planner.primary) return planner.primary;
     return explore.checkpoint;
-  }, [activeRoute.trip?.status, activeRoute.nextStop, explore.checkpoint, draftMode, planner.primary]);
-
-  useEffect(() => {
-    if (navigateNext !== '1' || didAutoNavigateRef.current) return;
-    if (activeRoute.isLoading || !activeRoute.trip || activeRoute.trip.status !== 'ACTIVE') return;
-    const stop = activeRoute.nextStop;
-    if (!stop) return;
-
-    didAutoNavigateRef.current = true;
-    router.setParams({ navigateNext: undefined } as never);
-
-    void explore.selectCheckpoint({
-      lat: stop.latitude,
-      lng: stop.longitude,
-      name: stop.name,
-      locationType: stop.locationType,
-    });
-
-    void beginNavigation({
-      lat: stop.latitude,
-      lng: stop.longitude,
-      name: stop.name,
-    });
-  }, [
-    navigateNext,
-    activeRoute.isLoading,
-    activeRoute.trip,
-    activeRoute.nextStop,
-    explore,
-    router,
-    beginNavigation,
-  ]);
-
-  useEffect(() => {
-    const trip = activeRoute.trip;
-    if (!trip || trip.status !== 'ACTIVE' || activeRoute.isLoading) return;
-    if (activeRoute.routeStops.length > 0) return;
-    if (bootstrappedTripRef.current === trip.id) return;
-    bootstrappedTripRef.current = trip.id;
-    void tripsService.bootstrapItinerary(trip.id).then(() => {
-      void qc.invalidateQueries({ queryKey: ['trips', 'in-progress'] });
-      void qc.invalidateQueries({ queryKey: ['trips', 'route', trip.id] });
-    });
-  }, [activeRoute.trip, activeRoute.routeStops.length, activeRoute.isLoading, qc]);
-
-  const openCreate = () => {
-    if (draftMode && planner.hasPrimary) {
-      router.push('/(tabs)/trips/create');
-      return;
-    }
-    const cp = draftMode && planner.primary ? planner.primary : explore.checkpoint;
-    if (cp) {
-      router.push({
-        pathname: '/(tabs)/trips/create',
-        params: {
-          lat: String(cp.lat),
-          lng: String(cp.lng),
-          name: cp.name,
-          ...(cp.locationId ? { locationId: cp.locationId } : {}),
-        },
-      });
-      return;
-    }
-    router.push('/(tabs)/trips/create');
-  };
+  }, [navigation.active, explore.checkpoint]);
 
   const openPinActions = (pin: MapExplorePin) => {
     setSelectedPinId(pin.id);
@@ -342,9 +257,7 @@ export function TripMapScreen() {
       locationType: { code: 'other', name: 'Tùy chọn' },
     });
 
-    if (isActiveTrip) return;
-
-    openCustomMarkerSheet(coords);
+    // Do not auto-open custom marker modal on plain map tap.
   };
 
   const handleSelectCheckpoint = (cp: MapCheckpoint) => {
@@ -352,94 +265,28 @@ export function TripMapScreen() {
     navigation.stopNavigation();
     setSelectedPinId(null);
     void explore.selectCheckpoint(cp);
-    if (draftMode) planner.setPrimary(cp);
   };
 
   const chainIndexForPin = (pin: MapExplorePin | null | undefined) => {
     if (!pin || !Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) return null;
     const latKey = pin.latitude.toFixed(5);
     const lngKey = pin.longitude.toFixed(5);
-    if (activeRoute.trip) {
-      const idx = activeRoute.routeStops.findIndex(
+    if (activePlan.plan) {
+      const idx = activePlan.routeStops.findIndex(
         (s) => s.latitude.toFixed(5) === latKey && s.longitude.toFixed(5) === lngKey,
       );
       if (idx >= 0) return idx;
     }
-    if (draftMode) {
-      const idx = planner.stops.findIndex(
-        (s) => s.lat.toFixed(5) === latKey && s.lng.toFixed(5) === lngKey,
-      );
-      return idx >= 0 ? idx : null;
-    }
     return null;
   };
 
-  const filterCount = countTripLocationFilters(exploreFilters);
-
-  const continuePlanning = () => {
-    router.push('/(tabs)/trips/create');
-  };
-
-  const addStopMutation = useMutation({
-    mutationFn: async (pin: MapExplorePin) => {
-      const trip = activeRoute.trip;
-      if (!trip) throw new Error('NO_TRIP');
-      const day = pickTripDayForNewStop(trip);
-      if (!day) throw new Error('NO_DAY');
-      return tripsService.addStop(trip.id, day.id, buildAddStopPayload(pin));
-    },
-    onSuccess: (_stop, pin) => {
-      const tripId = activeRoute.trip?.id;
-      if (tripId) {
-        void qc.invalidateQueries({ queryKey: ['trips', 'route', tripId] });
-        void qc.invalidateQueries({ queryKey: ['trips', tripId] });
-      }
-      closePinActions();
-      Alert.alert(t('tripAddedStop'), t('tripAddedStopBody', { name: pin.name }));
-    },
-    onError: (e) => {
-      if (e instanceof Error && e.message === 'NO_TRIP') {
-        const pin = actionPin;
-        closePinActions();
-        if (
-          pin &&
-          draftMode &&
-          Number.isFinite(pin.latitude) &&
-          Number.isFinite(pin.longitude)
-        ) {
-          if (!planner.hasPrimary) {
-            void handleSelectCheckpoint({
-              lat: pin.latitude,
-              lng: pin.longitude,
-              name: pin.name,
-              locationId: pin.id && UUID_RE.test(pin.id) ? pin.id : undefined,
-              locationType: pin.locationType,
-            });
-          } else {
-            planner.appendStop({
-              id:
-                pin.id ??
-                `custom:${pin.latitude.toFixed(5)},${pin.longitude.toFixed(5)}`,
-              name: pin.name,
-              latitude: pin.latitude,
-              longitude: pin.longitude,
-              locationId: pin.id && UUID_RE.test(pin.id) ? pin.id : undefined,
-              locationType: pin.locationType,
-            });
-          }
-          return;
-        }
-        Alert.alert(t('tripNoTripTitle'), t('tripNoTripBody'), [
-          { text: t('cancel'), style: 'cancel' },
-          { text: t('tripCreateTrip'), onPress: openCreate },
-        ]);
-        return;
-      }
-      Alert.alert('Không thêm được', formatApiError(e, 'Thử lại sau.'));
-    },
-  });
+  const filterCount = countTripLocationFilters(mapFilters);
 
   const handleAddToTrip = (pinOverride?: MapExplorePin) => {
+    if (!isMember) {
+      router.push('/login');
+      return;
+    }
     const pin =
       pinOverride &&
       Number.isFinite(pinOverride.latitude) &&
@@ -451,30 +298,8 @@ export function TripMapScreen() {
       Alert.alert(t('locationErrorTitle'), t('locationErrorGeneric'));
       return;
     }
-    if (draftMode && !activeRoute.trip) {
-      if (!planner.hasPrimary) {
-        void handleSelectCheckpoint({
-          lat: pin.latitude,
-          lng: pin.longitude,
-          name: pin.name,
-          locationId: pin.id && UUID_RE.test(pin.id) ? pin.id : undefined,
-          locationType: pin.locationType,
-        });
-      } else {
-        planner.appendStop({
-          id:
-            pin.id ?? `custom:${pin.latitude.toFixed(5)},${pin.longitude.toFixed(5)}`,
-          name: pin.name,
-          latitude: pin.latitude,
-          longitude: pin.longitude,
-          locationId: pin.id && UUID_RE.test(pin.id) ? pin.id : undefined,
-          locationType: pin.locationType,
-        });
-      }
-      closePinActions();
-      return;
-    }
-    addStopMutation.mutate(pin);
+    activePlan.addNode.mutate({ pin });
+    closePinActions();
   };
 
   const openDirections = (dest: { lat: number; lng: number; name?: string }) => {
@@ -491,18 +316,6 @@ export function TripMapScreen() {
     });
   };
 
-  if (!isMember) {
-    return (
-      <ThemedView style={styles.guest}>
-        <ThemedText type="subtitle">Chuyến đi</ThemedText>
-        <ThemedText style={{ color: muted }}>{t('tripMapGuestHint')}</ThemedText>
-        <Pressable style={[styles.loginBtn, { backgroundColor: tint }]} onPress={() => router.push('/login')}>
-          <ThemedText style={styles.loginText}>Đăng nhập</ThemedText>
-        </Pressable>
-      </ThemedView>
-    );
-  }
-
   return (
     <ThemedView style={styles.page}>
       {mapCenter ? (
@@ -510,22 +323,18 @@ export function TripMapScreen() {
           center={mapCenter}
           checkpoint={activeCheckpoint}
           navigationDestination={navigationDestination}
-          pins={navigation.active || isActiveTrip ? [] : explore.nearbyResults}
-          routeStops={navigation.active || draftMode ? [] : activeRoute.routeStops}
-          routeStopDisplayMode={isActiveTrip ? 'minimal' : 'default'}
-          completedPolyline={isActiveTrip && !navigation.active ? activeRoute.completedPolyline : []}
-          plannerStops={draftMode && !navigation.active ? draftPlannerMapStops : undefined}
-          legDirectionMarkers={
-            draftMode && !navigation.active ? draftPolylines.directionMarkers : undefined
-          }
-          polylineCoords={
-            navigation.active || isActiveTrip
-              ? []
-              : draftMode
-                ? draftPolylines.polylineCoords
-                : activeRoute.polylineCoords
-          }
-          upcomingPolyline={navigation.active ? [] : activeRoute.upcomingPolyline}
+          pins={navigation.active ? [] : explore.nearbyResults}
+          routeStops={navigation.active ? [] : activePlan.routeStops}
+          routeStopDisplayMode="default"
+          plannerStops={activePlan.routeStops.map((s, i) => ({
+            clientId: s.id,
+            lat: s.latitude,
+            lng: s.longitude,
+            name: s.name,
+            sequenceNumber: i + 1,
+            locationType: s.locationType,
+          }))}
+          polylineCoords={activePlan.routeStops.map((s) => ({ latitude: s.latitude, longitude: s.longitude }))}
           directionPolyline={navigation.displayPolyline}
           selectedPinId={selectedPinId}
           customMarkers={userMarkers}
@@ -541,14 +350,7 @@ export function TripMapScreen() {
           }
           onCheckpointPress={(cp) => openPinActions(pinFromCheckpoint(cp, cp.locationId ?? 'checkpoint'))}
           onRouteStopPress={(stop) => {
-            if (isActiveTrip) {
-              setSelectedRouteStop(stop);
-              setStopPostsVisible(true);
-              return;
-            }
-            if (activeRoute.trip) {
-              router.push({ pathname: '/(tabs)/trips/[id]', params: { id: activeRoute.trip.id } });
-            }
+            setSelectedRouteStop(stop);
           }}
         />
       ) : (
@@ -574,12 +376,11 @@ export function TripMapScreen() {
                 ref={searchBarRef}
                 userLat={explore.userCoords?.lat}
                 userLng={explore.userCoords?.lng}
-                checkpoint={draftMode && planner.primary ? planner.primary : explore.checkpoint}
+                checkpoint={explore.checkpoint}
                 onFocusChange={setSearchFocused}
                 onSelectCheckpoint={handleSelectCheckpoint}
                 onClearCheckpoint={() => {
                   setSelectedPinId(null);
-                  if (draftMode) planner.setPrimary(null);
                   void explore.clearCheckpoint();
                 }}
               />
@@ -587,7 +388,7 @@ export function TripMapScreen() {
             <Pressable
               style={[styles.mapActionBtn, { backgroundColor: card, borderColor: border }]}
               onPress={() => {
-                setFilterDraft(exploreFilters);
+                setFilterDraft(mapFilters);
                 setFilterVisible(true);
               }}
               accessibilityRole="button"
@@ -603,76 +404,62 @@ export function TripMapScreen() {
             </Pressable>
             <Pressable
               style={[styles.mapActionBtn, { backgroundColor: card, borderColor: border }]}
-              onPress={openCreate}
+              onPress={() => {
+                setSelectedPinId(null);
+                searchBarRef.current?.dismiss();
+              }}
               accessibilityRole="button"
               accessibilityLabel={t('tripCreateA11y')}>
-              <IconSymbol name="plus.circle.fill" size={24} color={tint} />
+              <IconSymbol name="scope" size={24} color={tint} />
             </Pressable>
           </View>
         ) : null}
         {explore.error ? (
           <ThemedText style={[styles.error, { color: muted }]}>{explore.error}</ThemedText>
         ) : null}
-        {!isActiveTrip && !searchFocused ? (
+        {!searchFocused ? (
           <ThemedText style={[styles.mapTapHint, { color: muted }]}>{t('tripMapTapHint')}</ThemedText>
         ) : null}
       </View>
 
-      {draftMode && planner.stopCount > 0 ? (
-        <Pressable
-          style={[styles.draftBanner, { backgroundColor: cta, borderColor: border }]}
-          onPress={continuePlanning}>
-          <ThemedText type="defaultSemiBold" style={{ color: onCta, flex: 1 }}>
-            {t('tripContinuePlanningCount', { count: planner.stopCount })}
-          </ThemedText>
-          <IconSymbol name="chevron.right" size={14} color={onCta} />
-        </Pressable>
-      ) : null}
-
-      {activeRoute.inProgress.showFab && !navigation.active ? (
-        <Pressable
-          style={[styles.tripFab, { backgroundColor: cta, borderColor: border }]}
-          onPress={() => setSwitcherVisible(true)}
-          accessibilityRole="button"
-          accessibilityLabel={t('tripSwitcherTitle')}>
-          <IconSymbol name="map.fill" size={22} color={onCta} />
-        </Pressable>
-      ) : null}
-
-      <TripExploreSheet
-        pins={isActiveTrip ? [] : explore.nearbyResults}
-        loading={explore.loading || activeRoute.isLoading}
-        minimalActive={isActiveTrip}
-        visitedCount={activeRoute.visitedCount}
-        bottomInset={draftMode && planner.stopCount > 0 ? 44 : 0}
-        checkpointLabel={
-          activeRoute.trip?.status === 'ACTIVE' && activeRoute.nextStop
-            ? activeRoute.nextStop.name
-            : (planner.primary?.name ?? explore.checkpoint?.name ?? null)
-        }
-        activeTrip={activeRoute.trip}
-        routeStops={activeRoute.routeStops}
-        nextStop={activeRoute.nextStop}
-        selectedPinId={selectedPinId}
-        navSummary={navigation.loading ? 'Đang tính tuyến…' : navigation.summary}
-        navigationActive={navigation.active}
-        navigationDestName={navigation.destination?.name}
-        onPinPress={openPinActions}
-        onNavigateNextStop={() => {
-          const stop = activeRoute.nextStop;
-          if (!stop) return;
-          openDirections({
-            lat: stop.latitude,
-            lng: stop.longitude,
-            name: stop.name,
-          });
+      <TripHubSheet
+        plans={activePlan.plans}
+        selectedTripId={activePlan.selectedTripId}
+        activePlan={activePlan.plan}
+        pinnedLocation={pinnedLocation}
+        cityHighlights={cityHighlights}
+        nearbyProvinceHighlights={nearbyProvinceHighlights}
+        globalHighlights={globalHighlights}
+        stops={activePlan.routeStops}
+        selectedStopId={selectedRouteStop?.id ?? null}
+        onSelectPlan={activePlan.setSelectedTripId}
+        onCreatePlan={() => setSelectedPinId(null)}
+        onSelectStop={(stop) => setSelectedRouteStop(stop)}
+        onRemoveStop={(stop) => activePlan.removeStop.mutate(stop.id)}
+        onMoveUp={(stop) => {
+          const idx = activePlan.routeStops.findIndex((s) => s.id === stop.id);
+          if (idx <= 0) return;
+          const next = activePlan.routeStops.map((s, i) => ({ id: s.id, orderIndex: i }));
+          const temp = next[idx].orderIndex;
+          next[idx].orderIndex = next[idx - 1].orderIndex;
+          next[idx - 1].orderIndex = temp;
+          activePlan.reorderStops.mutate(next);
         }}
-        onStopNavigation={navigation.stopNavigation}
-        onTripPress={() => {
-          if (activeRoute.trip) {
-            router.push({ pathname: '/(tabs)/trips/[id]', params: { id: activeRoute.trip.id } });
-          }
+        onMoveDown={(stop) => {
+          const idx = activePlan.routeStops.findIndex((s) => s.id === stop.id);
+          if (idx < 0 || idx >= activePlan.routeStops.length - 1) return;
+          const next = activePlan.routeStops.map((s, i) => ({ id: s.id, orderIndex: i }));
+          const temp = next[idx].orderIndex;
+          next[idx].orderIndex = next[idx + 1].orderIndex;
+          next[idx + 1].orderIndex = temp;
+          activePlan.reorderStops.mutate(next);
         }}
+        onRename={(title) => {
+          if (title.trim()) activePlan.renameTrip.mutate(title.trim());
+        }}
+        onChangeDates={(startDate, endDate) => activePlan.changeDates.mutate({ startDate, endDate })}
+        onStatus={(status) => activePlan.setStatus.mutate(status)}
+        onAddRecommendation={(pin) => handleAddToTrip(pin)}
       />
 
       <TripLocationFilterSheet
@@ -685,8 +472,7 @@ export function TripMapScreen() {
           setFilterDraft(reset);
         }}
         onApply={() => {
-          if (draftMode) planner.setFilters(filterDraft);
-          else setMapFilters(filterDraft);
+          setMapFilters(filterDraft);
           setFilterVisible(false);
         }}
       />
@@ -695,26 +481,15 @@ export function TripMapScreen() {
         visible={actionVisible}
         pin={actionPin}
         chainIndex={actionPin ? chainIndexForPin(actionPin) : null}
-        tripId={activeRoute.trip?.id ?? null}
-        tripDayLabel={activeRoute.trip ? t('locationDayDefault') : null}
-        hasAnchor={
-          draftMode
-            ? planner.hasPrimary
-            : activeRoute.trip
-              ? activeRoute.routeStops.length > 0
-              : false
-        }
+        tripId={activePlan.plan?.id ?? null}
+        tripDayLabel={activePlan.plan ? t('locationDayDefault') : null}
+        hasAnchor={activePlan.routeStops.length > 0}
+        isMember={isMember}
         onPinResolved={(p) => setActionPin(p)}
         onClose={closePinActions}
         onSetAnchor={() => {
           if (!actionPin) return;
-          void handleSelectCheckpoint({
-            lat: actionPin.latitude,
-            lng: actionPin.longitude,
-            name: actionPin.name,
-            locationId: actionPin.id && UUID_RE.test(actionPin.id) ? actionPin.id : undefined,
-            locationType: actionPin.locationType,
-          });
+          void handleSelectCheckpoint({ lat: actionPin.latitude, lng: actionPin.longitude, name: actionPin.name, locationType: actionPin.locationType });
           closePinActions();
         }}
         onAddToRoute={() => handleAddToTrip()}
@@ -722,17 +497,9 @@ export function TripMapScreen() {
           if (!actionPin) return;
           const idx = chainIndexForPin(actionPin);
           if (idx == null || idx < 0) return;
-          if (draftMode && !activeRoute.trip) {
-            planner.removeStop(planner.stops[idx].clientId);
-            closePinActions();
-            return;
-          }
-          if (!activeRoute.trip) return;
-          const stop = activeRoute.routeStops[idx];
-          void tripsService.deleteStop(activeRoute.trip.id, stop.id).then(() => {
-            void qc.invalidateQueries({ queryKey: ['trips', 'route', activeRoute.trip!.id] });
-            closePinActions();
-          });
+          const stop = activePlan.routeStops[idx];
+          activePlan.removeStop.mutate(stop.id);
+          closePinActions();
         }}
         onDirections={handleDirections}
       />
@@ -746,13 +513,7 @@ export function TripMapScreen() {
             : (pendingMarker?.name ?? t('tripCustomMapPoint'))
         }
         markerSaved={customMarkerSaved}
-        hasAnchor={
-          draftMode
-            ? planner.hasPrimary
-            : activeRoute.trip
-              ? activeRoute.routeStops.length > 0
-              : false
-        }
+        hasAnchor={activePlan.routeStops.length > 0}
         inRoute={(() => {
           const pin = activeCustomPin();
           if (!pin) return false;
@@ -769,12 +530,7 @@ export function TripMapScreen() {
         onSetAnchor={() => {
           const pin = activeCustomPin();
           if (!pin) return;
-          void handleSelectCheckpoint({
-            lat: pin.latitude,
-            lng: pin.longitude,
-            name: pin.name,
-            locationType: pin.locationType,
-          });
+          void handleSelectCheckpoint({ lat: pin.latitude, lng: pin.longitude, name: pin.name, locationType: pin.locationType });
           closeCustomMarkerSheet();
         }}
         onAddToRoute={() => {
@@ -798,17 +554,9 @@ export function TripMapScreen() {
           if (!pin) return;
           const idx = chainIndexForPin(pin);
           if (idx == null || idx < 0) return;
-          if (draftMode && !activeRoute.trip) {
-            planner.removeStop(planner.stops[idx].clientId);
-            closeCustomMarkerSheet();
-            return;
-          }
-          if (!activeRoute.trip) return;
-          const stop = activeRoute.routeStops[idx];
-          void tripsService.deleteStop(activeRoute.trip.id, stop.id).then(() => {
-            void qc.invalidateQueries({ queryKey: ['trips', 'route', activeRoute.trip!.id] });
-            closeCustomMarkerSheet();
-          });
+          const stop = activePlan.routeStops[idx];
+          activePlan.removeStop.mutate(stop.id);
+          closeCustomMarkerSheet();
         }}
       />
 
@@ -823,52 +571,12 @@ export function TripMapScreen() {
       />
       <DirectionsLoadingOverlay visible={directions.isRouting} />
 
-      <TripSwitcherSheet
-        visible={switcherVisible}
-        summaries={activeRoute.inProgress.summaries}
-        selectedTripId={selectedTripId ?? activeRoute.trip?.id ?? null}
-        onClose={() => setSwitcherVisible(false)}
-        onSelect={(id) => {
-          setSelectedTripId(id);
-          void qc.invalidateQueries({ queryKey: ['trips', 'route', id] });
-        }}
-      />
-
-      <TripStopPostsSheet
-        visible={stopPostsVisible}
-        tripId={activeRoute.trip?.id ?? null}
-        stop={selectedRouteStop}
-        onClose={() => {
-          setStopPostsVisible(false);
-          setSelectedRouteStop(null);
-        }}
-        onCheckinSuccess={() => {
-          const tripId = activeRoute.trip?.id;
-          if (tripId) {
-            void qc.invalidateQueries({ queryKey: ['trips', 'route', tripId] });
-          }
-        }}
-      />
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  guest: {
-    flex: 1,
-    padding: 24,
-    gap: 12,
-    justifyContent: 'center',
-  },
-  loginBtn: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    marginTop: 8,
-  },
-  loginText: { color: '#fff', fontWeight: '600' },
   loadingMap: {
     flex: 1,
     alignItems: 'center',
@@ -923,31 +631,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     paddingHorizontal: 8,
-  },
-  tripFab: {
-    position: 'absolute',
-    right: 16,
-    bottom: '28%',
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 11,
-    elevation: 4,
-  },
-  draftBanner: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: '36%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    zIndex: 9,
   },
 });

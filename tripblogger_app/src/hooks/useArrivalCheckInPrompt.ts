@@ -31,6 +31,8 @@ export function useArrivalCheckInPrompt(options: {
   const language = useSettingsStore((s) => s.language);
   const dismissedUntilRef = useRef<Record<string, number>>({});
   const promptingRef = useRef(false);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
 
   useEffect(() => {
     if (!enabled || !tripId || !nextStop || !userCoords || promptingRef.current) return;
@@ -67,7 +69,7 @@ export function useArrivalCheckInPrompt(options: {
                   await tripsService.completeStop(tripId, visiting.id);
                 }
                 await tripsService.checkinStop(tripId, nextStop.id);
-                onSuccess();
+                onSuccessRef.current();
               } catch {
                 Alert.alert(
                   translate(language, 'tripArrivalUpdateFailed'),
@@ -81,5 +83,5 @@ export function useArrivalCheckInPrompt(options: {
         },
       ],
     );
-  }, [enabled, tripId, nextStop, routeStops, userCoords, onSuccess, language]);
+  }, [enabled, tripId, nextStop, routeStops, userCoords, language]);
 }

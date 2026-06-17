@@ -34,7 +34,7 @@ export function useDirectionsLauncher(navigation: NavigationApi) {
     } finally {
       launchingRef.current = false;
     }
-  }, [navigation, pendingDest]);
+  }, [navigation.loading, navigation.startNavigation, pendingDest]);
 
   const launchExternal = useCallback(async () => {
     if (!pendingDest) return;

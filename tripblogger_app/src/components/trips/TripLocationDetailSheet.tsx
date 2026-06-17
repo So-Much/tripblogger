@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -42,6 +43,7 @@ import { isPersistedLocationId, parseExternalPinId } from '@/src/utils/location-
 type TripLocationDetailSheetProps = {
   visible: boolean;
   pin: MapExplorePin | null;
+  isMember?: boolean;
   chainIndex?: number | null;
   hasAnchor: boolean;
   tripId?: string | null;
@@ -59,6 +61,7 @@ type ActionKey = 'directions' | 'add' | 'anchor' | 'remove' | 'save' | 'checkin'
 export function TripLocationDetailSheet({
   visible,
   pin,
+  isMember = true,
   chainIndex,
   hasAnchor,
   tripId,
@@ -70,6 +73,7 @@ export function TripLocationDetailSheet({
   onDirections,
   onPinResolved,
 }: TripLocationDetailSheetProps) {
+  const router = useRouter();
   const { t } = useI18n();
   const qc = useQueryClient();
   const insets = useSafeAreaInsets();
@@ -323,21 +327,23 @@ export function TripLocationDetailSheet({
       icon: 'location.fill',
       onPress: onDirections,
     });
-    actions.push({
-      key: 'checkin',
-      label: t('locationCheckin'),
-      icon: 'checkmark.circle.fill',
-      onPress: () => checkinMutation.mutate(),
-      disabled: checkinMutation.isPending,
-    });
-    actions.push({
-      key: 'save',
-      label: detail?.savedByMe ? t('locationSaved') : t('locationSave'),
-      icon: 'bookmark.fill',
-      onPress: () => saveMutation.mutate(),
-      disabled: saveMutation.isPending,
-      active: detail?.savedByMe,
-    });
+    if (isMember) {
+      actions.push({
+        key: 'checkin',
+        label: t('locationCheckin'),
+        icon: 'checkmark.circle.fill',
+        onPress: () => checkinMutation.mutate(),
+        disabled: checkinMutation.isPending,
+      });
+      actions.push({
+        key: 'save',
+        label: detail?.savedByMe ? t('locationSaved') : t('locationSave'),
+        icon: 'bookmark.fill',
+        onPress: () => saveMutation.mutate(),
+        disabled: saveMutation.isPending,
+        active: detail?.savedByMe,
+      });
+    }
     actions.push({
       key: 'share',
       label: t('locationShare'),
@@ -355,6 +361,12 @@ export function TripLocationDetailSheet({
       });
     } else if (!inChain) {
       const addLabel = tripDayLabel ? t('locationAddToDay', { day: tripDayLabel }) : t('tripAddRoute');
+      actions.push({
+        key: 'add',
+        label: addLabel,
+        icon: 'plus.circle.fill',
+        onPress: onAddToRoute,
+      });
       if (!hasAnchor) {
         actions.push({
           key: 'anchor',
@@ -363,12 +375,6 @@ export function TripLocationDetailSheet({
           onPress: onSetAnchor,
         });
       } else {
-        actions.push({
-          key: 'add',
-          label: addLabel,
-          icon: 'plus.circle.fill',
-          onPress: onAddToRoute,
-        });
         if (!isStart) {
           actions.push({
             key: 'anchor',
@@ -523,7 +529,11 @@ export function TripLocationDetailSheet({
                 />
               ))}
             </View>
-            {myReviewQuery.data ? (
+            {!isMember ? (
+              <PressableScale style={[styles.outlineBtn, { borderColor: border }]} onPress={() => router.push('/login')}>
+                <ThemedText style={{ color: tint, fontWeight: '700' }}>{t('login')}</ThemedText>
+              </PressableScale>
+            ) : myReviewQuery.data ? (
               <View style={[styles.myReviewBox, { borderColor: border }]}>
                 <ThemedText style={{ fontWeight: '700' }}>{t('locationMyReview')}</ThemedText>
                 <ThemedText>★{myReviewQuery.data.rating}</ThemedText>
@@ -548,7 +558,7 @@ export function TripLocationDetailSheet({
               </PressableScale>
             )}
 
-            {reviewFormOpen ? (
+            {reviewFormOpen && isMember ? (
               <View style={[styles.reviewForm, { borderColor: border }]}>
                 <View style={styles.starRow}>
                   {[1, 2, 3, 4, 5].map((s) => (
@@ -642,7 +652,7 @@ const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'transparent',
   },
   sheet: {
     borderTopWidth: 1,

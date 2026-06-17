@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useMemo } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -20,11 +20,14 @@ export function TripListScreen() {
     queryKey: ['trips', 'mine'],
     queryFn: () => tripsService.listMine({ limit: 50 }),
   });
+  const plans = useMemo(() => query.data?.items ?? [], [query.data?.items]);
+  const planning = useMemo(() => plans.filter((t) => t.status === 'PLANNING' || t.status === 'ACTIVE'), [plans]);
+  const history = useMemo(() => plans.filter((t) => t.status === 'COMPLETED' || t.status === 'ARCHIVED' || t.status === 'CANCELLED'), [plans]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Pressable onPress={() => router.push('/(tabs)/trips/create')} hitSlop={12}>
+        <Pressable onPress={() => router.push('/(tabs)/trips')} hitSlop={12}>
           <IconSymbol name="plus.circle.fill" size={28} color={tint} />
         </Pressable>
       ),
@@ -49,15 +52,24 @@ export function TripListScreen() {
         {query.isLoading ? (
           <ActivityIndicator style={styles.loader} color={tint} />
         ) : (
-          <FlatList
-            data={query.data?.items ?? []}
-            keyExtractor={(t) => t.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.list}
-            ListEmptyComponent={
-              <ThemedText style={styles.empty}>Chưa có chuyến đi. Tạo chuyến đi mới!</ThemedText>
-            }
-          />
+          <>
+            <ThemedText type="defaultSemiBold">Plans đang hoạt động</ThemedText>
+            <FlatList
+              data={planning}
+              keyExtractor={(t) => t.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.list}
+              ListEmptyComponent={<ThemedText style={styles.empty}>Chưa có plan nào.</ThemedText>}
+            />
+            <ThemedText type="defaultSemiBold">Lịch sử</ThemedText>
+            <FlatList
+              data={history}
+              keyExtractor={(t) => t.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.list}
+              ListEmptyComponent={<ThemedText style={styles.empty}>Chưa có lịch sử.</ThemedText>}
+            />
+          </>
         )}
       </ThemedView>
     </SafeAreaView>

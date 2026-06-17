@@ -37,6 +37,33 @@ export const tripsService = {
     return res.data;
   },
 
+  async update(
+    tripId: string,
+    body: {
+      title?: string;
+      destinationName?: string | null;
+      startDate?: string;
+      endDate?: string;
+      totalBudget?: number | null;
+      description?: string | null;
+      isPublic?: boolean;
+    },
+  ): Promise<TripDto> {
+    const res = await apiClient.patch<TripDto>(`/trips/${tripId}`, body);
+    return res.data;
+  },
+
+  async changeDates(
+    tripId: string,
+    body: {
+      startDate: string;
+      endDate: string;
+    },
+  ): Promise<TripDto> {
+    const res = await apiClient.patch<TripDto>(`/trips/${tripId}/dates`, body);
+    return res.data;
+  },
+
   async updateStatus(tripId: string, status: TripStatus): Promise<TripDto> {
     const res = await apiClient.patch<TripDto>(`/trips/${tripId}/status`, { status });
     return res.data;
@@ -45,6 +72,15 @@ export const tripsService = {
   async bootstrapItinerary(tripId: string): Promise<TripDto> {
     const res = await apiClient.post<TripDto>(`/trips/${tripId}/bootstrap-itinerary`);
     return res.data;
+  },
+
+  async duplicate(tripId: string): Promise<TripDto> {
+    const res = await apiClient.post<TripDto>(`/trips/${tripId}/duplicate`);
+    return res.data;
+  },
+
+  async delete(tripId: string): Promise<void> {
+    await apiClient.delete(`/trips/${tripId}`);
   },
 
   async addAccommodation(
@@ -82,6 +118,23 @@ export const tripsService = {
     return res.data;
   },
 
+  async patchStop(
+    tripId: string,
+    stopId: string,
+    body: {
+      status?: 'PLANNED' | 'VISITING' | 'VISITED' | 'SKIPPED';
+      orderIndex?: number;
+      arrivalTime?: string | null;
+      durationMinutes?: number | null;
+      budgetEstimate?: number | null;
+      actualSpent?: number | null;
+      notes?: string | null;
+    },
+  ): Promise<TripStopDto> {
+    const res = await apiClient.patch<TripStopDto>(`/trips/${tripId}/stops/${stopId}`, body);
+    return res.data;
+  },
+
   async checkinStop(tripId: string, stopId: string): Promise<TripStopDto> {
     const res = await apiClient.post<TripStopDto>(`/trips/${tripId}/stops/${stopId}/checkin`);
     return res.data;
@@ -92,13 +145,18 @@ export const tripsService = {
     return res.data;
   },
 
+  async skipStop(tripId: string, stopId: string): Promise<TripStopDto> {
+    const res = await apiClient.post<TripStopDto>(`/trips/${tripId}/stops/${stopId}/skip`);
+    return res.data;
+  },
+
   async deleteStop(tripId: string, stopId: string): Promise<void> {
     await apiClient.delete(`/trips/${tripId}/stops/${stopId}`);
   },
 
   async reorderStops(
     tripId: string,
-    stops: Array<{ id: string; orderIndex: number }>,
+    stops: { id: string; orderIndex: number }[],
   ): Promise<void> {
     await apiClient.patch(`/trips/${tripId}/stops/reorder`, { stops });
   },
@@ -119,6 +177,20 @@ export const tripsService = {
 
   async getDay(tripId: string, dayId: string): Promise<TripDayDto> {
     const res = await apiClient.get<TripDayDto>(`/trips/${tripId}/days/${dayId}`);
+    return res.data;
+  },
+
+  async patchDay(
+    tripId: string,
+    dayId: string,
+    body: {
+      title?: string | null;
+      theme?: string | null;
+      notes?: string | null;
+      date?: string;
+    },
+  ): Promise<TripDayDto> {
+    const res = await apiClient.patch<TripDayDto>(`/trips/${tripId}/days/${dayId}`, body);
     return res.data;
   },
 };

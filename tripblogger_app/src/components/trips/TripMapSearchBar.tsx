@@ -78,10 +78,10 @@ export const TripMapSearchBar = forwardRef<TripMapSearchBarHandle, TripMapSearch
     useImperativeHandle(ref, () => ({ dismiss }), [dismiss]);
 
     useEffect(() => {
-      if (checkpoint) {
+      if (checkpoint?.name) {
         setQuery(checkpoint.name);
       }
-    }, [checkpoint]);
+    }, [checkpoint?.name, checkpoint?.lat, checkpoint?.lng]);
 
     const runSearch = useCallback(
       async (q: string) => {

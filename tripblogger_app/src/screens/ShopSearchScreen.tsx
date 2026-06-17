@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
@@ -88,6 +88,14 @@ export function ShopSearchScreen() {
         style={[styles.inp, { borderColor: border, color: text, backgroundColor: surface }]}
         autoFocus
       />
+      {!isMember ? (
+        <View style={[styles.loginPromptCard, { borderColor: border, backgroundColor: surface }]}>
+          <ThemedText style={styles.loginHint}>{t('shopMemberRequired')}</ThemedText>
+          <Pressable onPress={() => router.push('/login')} style={[styles.loginBtn, { borderColor: border }]}>
+            <ThemedText type="link">{t('login')}</ThemedText>
+          </Pressable>
+        </View>
+      ) : null}
       <FlatList
         data={items}
         keyExtractor={(i) => i.id}
@@ -130,6 +138,20 @@ export function ShopSearchScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, padding: 12 },
   inp: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12, fontSize: 16 },
+  loginPromptCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  loginHint: { opacity: 0.8 },
+  loginBtn: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
   list: { paddingBottom: 24 },
   col: { width: '50%' },
   hint: { textAlign: 'center', marginTop: 24, opacity: 0.6 },
