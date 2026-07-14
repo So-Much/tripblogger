@@ -1,10 +1,14 @@
 import { useMemo } from 'react';
+import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useI18n } from '@/src/i18n';
+import { formatApiError } from '@/src/utils/format-api-error';
 import { useTripMapStore } from '@/src/store/trip-map.store';
 import { tripsService } from '@/src/services/api/trips.service';
-import type { TripDayDto, TripDto, TripStopDto } from '@/src/types/trip';
+import type { TripDto, TripStopDto } from '@/src/types/trip';
 import type { MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
 import { useTripsInProgress } from '@/src/hooks/useTripsInProgress';
+import { pickTripDayForNewStop } from '@/src/utils/pick-trip-day';
 
 type AddNodeInput = {
   pin: MapExplorePin;
@@ -18,11 +22,6 @@ function isoToday(): string {
 function defaultTripTitle(name: string): string {
   const trimmed = name.trim();
   return trimmed ? `Chuyến đi ${trimmed}` : 'Chuyến đi mới';
-}
-
-function pickFirstDay(trip: TripDto): TripDayDto | null {
-  const days = [...(trip.days ?? [])].sort((a, b) => a.dayNumber - b.dayNumber);
-  return days[0] ?? null;
 }
 
 function flattenStops(trip: TripDto): MapRouteStop[] {
@@ -60,16 +59,15 @@ function pickNextStop(stops: MapRouteStop[]): MapRouteStop | null {
   return stops.find((s) => s.status === 'PLANNED') ?? null;
 }
 
-function addStopPayload(pin: MapExplorePin, orderIndex: number) {
+function addStopPayload(pin: MapExplorePin) {
   const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pin.id);
   return uuidLike
-    ? { locationId: pin.id, orderIndex }
+    ? { locationId: pin.id }
     : {
         customName: pin.name,
         customAddress: pin.address ?? undefined,
         lat: pin.latitude,
         lng: pin.longitude,
-        orderIndex,
       };
 }
 
@@ -82,6 +80,7 @@ function patchStopInTrip(trip: TripDto, updatedStop: TripStopDto): TripDto {
 }
 
 export function useActivePlan(enabled = true) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const selectedTripId = useTripMapStore((s) => s.selectedTripId);
   const setSelectedTripId = useTripMapStore((s) => s.setSelectedTripId);
@@ -116,10 +115,10 @@ export function useActivePlan(enabled = true) {
         currentTrip = await tripsService.getById(currentTrip.id);
         setSelectedTripId(currentTrip.id);
       }
-      const targetDay = dayId ? currentTrip.days?.find((d) => d.id === dayId) ?? null : pickFirstDay(currentTrip);
+      const targetDay =
+        dayId ? currentTrip.days?.find((d) => d.id === dayId) ?? null : pickTripDayForNewStop(currentTrip);
       if (!targetDay) throw new Error('NO_DAY');
-      const orderIndex = targetDay.stops.length;
-      await tripsService.addStop(currentTrip.id, targetDay.id, addStopPayload(pin, orderIndex));
+      await tripsService.addStop(currentTrip.id, targetDay.id, addStopPayload(pin));
       return currentTrip.id;
     },
     onSuccess: (newTripId) => {
@@ -127,6 +126,7 @@ export function useActivePlan(enabled = true) {
       void qc.invalidateQueries({ queryKey: ['trips', newTripId] });
       setSelectedTripId(newTripId);
     },
+    onError: (e) => Alert.alert(t('tripAddStopFailedTitle'), formatApiError(e, t('tripAddStopFailedMessage'))),
   });
 
   const removeStop = useMutation({
@@ -164,6 +164,7 @@ export function useActivePlan(enabled = true) {
         budgetEstimate?: number | null;
         actualSpent?: number | null;
         notes?: string | null;
+        tripDayId?: string;
       };
     }) => {
       if (!tripId) throw new Error('NO_TRIP');

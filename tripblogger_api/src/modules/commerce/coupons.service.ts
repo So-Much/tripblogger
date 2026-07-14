@@ -25,7 +25,13 @@ export class CouponsService {
     return Math.min(disc, subTotal);
   }
 
-  async validate(code: string, cartSubTotal: number, categoryIds: string[], productIds: string[]) {
+  async validate(
+    code: string,
+    cartSubTotal: number,
+    categoryIds: string[],
+    productIds: string[],
+    userId?: string,
+  ) {
     const c = await this.couponRepo.findOne({ where: { code: code.trim().toUpperCase() } });
     if (!c) return { valid: false as const, reason: 'Coupon not found' };
     if (c.status !== 'ACTIVE') return { valid: false as const, reason: 'Coupon inactive' };
@@ -33,6 +39,10 @@ export class CouponsService {
     if (now < new Date(c.activeAt)) return { valid: false as const, reason: 'Coupon not active yet' };
     if (now > new Date(c.expiresAt)) return { valid: false as const, reason: 'Coupon expired' };
     if (c.maxUses != null && c.usedCount >= c.maxUses) return { valid: false as const, reason: 'Coupon usage limit reached' };
+    if (userId) {
+      const perUserUses = await this.usageRepo.count({ where: { couponId: c.id, userId } });
+      if (perUserUses > 0) return { valid: false as const, reason: 'Coupon already used' };
+    }
     if (c.minOrderValue != null && cartSubTotal < Number(c.minOrderValue)) {
       return { valid: false as const, reason: 'Order below minimum value' };
     }

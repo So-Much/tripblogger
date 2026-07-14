@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useI18n } from '@/src/i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { MapRouteStop } from '@/src/types/trip-map';
 
@@ -9,6 +10,7 @@ type TripProgressTimelineProps = {
 };
 
 export function TripProgressTimeline({ stops }: TripProgressTimelineProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const muted = useThemeColor({}, 'textMuted');
   const tint = useThemeColor({}, 'tint');
@@ -22,7 +24,7 @@ export function TripProgressTimeline({ stops }: TripProgressTimelineProps) {
     <View style={styles.wrap}>
       {visiting ? (
         <ThemedText style={{ color: tint, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
-          Bạn đang ở: {visiting.name}
+          {t('tripVisitingNow', { name: visiting.name })}
         </ThemedText>
       ) : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>

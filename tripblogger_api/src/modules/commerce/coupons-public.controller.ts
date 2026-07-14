@@ -18,12 +18,13 @@ export class CouponsPublicController {
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
-  validate(@Body() dto: ValidateCouponDto) {
+  validate(@Req() req: AuthedRequest, @Body() dto: ValidateCouponDto) {
     return this.couponsService.validate(
       dto.code,
       dto.cartSubTotal,
       dto.categoryIds ?? [],
       dto.productIds ?? [],
+      req.user.sub,
     );
   }
 

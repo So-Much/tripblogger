@@ -200,7 +200,7 @@ export class OrdersService {
     const productIds = cart.items.map((l) => l.productId);
 
     if (dto.couponCode?.trim()) {
-      const v = await this.couponsService.validate(dto.couponCode.trim(), subTotal, categoryIds, productIds);
+      const v = await this.couponsService.validate(dto.couponCode.trim(), subTotal, categoryIds, productIds, buyerId);
       if (!v.valid || !('coupon' in v)) throw new BadRequestException(v.reason ?? 'Invalid coupon');
       discountAmount = v.discountAmount ?? 0;
       couponId = v.coupon.id;
@@ -218,6 +218,20 @@ export class OrdersService {
       const opRepo = em.getRepository(OrderProductEntity);
       const pRepo = em.getRepository(ProductEntity);
       const cRepo = em.getRepository(CartEntity);
+
+      const lockResult = await cRepo
+        .createQueryBuilder()
+        .update(CartEntity)
+        .set({ status: 'CHECKING_OUT' })
+        .where('id = :id AND user_id = :userId AND status = :status', {
+          id: cart.id,
+          userId: buyerId,
+          status: 'ACTIVE',
+        })
+        .execute();
+      if (!lockResult.affected) {
+        throw new BadRequestException('Checkout already in progress or cart is no longer active');
+      }
 
       const order = oRepo.create({
         orderCode,
@@ -304,12 +318,16 @@ export class OrdersService {
       const { createdAt, id } = decodeOrderCursor(query.cursor);
       qb.andWhere('(o.created_at < :ca OR (o.created_at = :ca AND o.id < :cid))', { ca: createdAt, cid: id });
     }
+    const countQb = this.orderRepo.createQueryBuilder('o').where('o.buyer_id = :bid', { bid: buyerId });
+    if (statusIn?.length) countQb.andWhere('o.status IN (:...sts)', { sts: statusIn });
+    else if (query.status) countQb.andWhere('o.status = :st', { st: query.status });
+    const total = await countQb.getCount();
     const rows = await qb.getMany();
     const hasMore = rows.length > limit;
     const slice = hasMore ? rows.slice(0, limit) : rows;
     const items = await Promise.all(slice.map((o) => this.serializeOrder(o, {})));
     const nextCursor = hasMore && slice.length ? orderCursorFrom(slice[slice.length - 1]) : null;
-    return { items, nextCursor, total: items.length };
+    return { items, nextCursor, total };
   }
 
   async listSellerOrders(sellerId: string, query: QueryOrdersDto) {

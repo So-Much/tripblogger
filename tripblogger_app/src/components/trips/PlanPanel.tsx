@@ -1,13 +1,15 @@
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import type { TripDto } from '@/src/types/trip';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { MapExplorePin } from '@/src/types/trip-map';
 import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { resolveLocationTypeVisual } from '@/src/utils/location-type-display';
+import { useI18n } from '@/src/i18n';
 
 type PlanPanelProps = {
   plan: TripDto | null;
+  stopCount: number;
   pinnedLocation: MapExplorePin | null;
   cityHighlights: MapExplorePin[];
   nearbyProvinceHighlights: MapExplorePin[];
@@ -20,6 +22,7 @@ type PlanPanelProps = {
 
 export function PlanPanel({
   plan,
+  stopCount,
   pinnedLocation,
   cityHighlights,
   nearbyProvinceHighlights,
@@ -29,56 +32,73 @@ export function PlanPanel({
   onChangeDates,
   onStatus,
 }: PlanPanelProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const muted = useThemeColor({}, 'textMuted');
   const card = useThemeColor({}, 'card');
   const tint = useThemeColor({}, 'tint');
 
+  const confirmStatusChange = (status: TripDto['status']) => {
+    if (stopCount > 0) {
+      onStatus(status);
+      return;
+    }
+    const isActive = status === 'ACTIVE';
+    Alert.alert(
+      t(isActive ? 'tripNoStopsActiveTitle' : 'tripNoStopsCompleteTitle'),
+      t(isActive ? 'tripNoStopsActiveBody' : 'tripNoStopsCompleteBody'),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t(isActive ? 'tripStartAnyway' : 'tripCompleteAnyway'), onPress: () => onStatus(status) },
+      ],
+    );
+  };
+
   return (
     <View style={[styles.wrap, { borderColor: border, backgroundColor: card }]}>
-      <ThemedText type="defaultSemiBold">{plan ? 'Thiết lập kế hoạch' : 'Bắt đầu kế hoạch'}</ThemedText>
+      <ThemedText type="defaultSemiBold">{plan ? t('tripPlanSetup') : t('tripPlanStart')}</ThemedText>
       {plan ? (
         <>
           <TextInput
             defaultValue={plan.title}
             onEndEditing={(e) => onRename(e.nativeEvent.text)}
-            placeholder="Tên kế hoạch"
+            placeholder={t('tripPlanNamePlaceholder')}
             style={[styles.input, { borderColor: border }]}
           />
           <View style={styles.row}>
             <TextInput
               defaultValue={plan.startDate}
               onEndEditing={(e) => onChangeDates(e.nativeEvent.text, plan.endDate)}
-              placeholder="YYYY-MM-DD"
+              placeholder={t('tripDatePlaceholder')}
               style={[styles.input, styles.dateInput, { borderColor: border }]}
             />
             <TextInput
               defaultValue={plan.endDate}
               onEndEditing={(e) => onChangeDates(plan.startDate, e.nativeEvent.text)}
-              placeholder="YYYY-MM-DD"
+              placeholder={t('tripDatePlaceholder')}
               style={[styles.input, styles.dateInput, { borderColor: border }]}
             />
           </View>
           <View style={styles.row}>
-            <Pressable onPress={() => onStatus('ACTIVE')} style={[styles.btn, { borderColor: tint }]}>
-              <ThemedText>Bắt đầu</ThemedText>
+            <Pressable onPress={() => confirmStatusChange('ACTIVE')} style={[styles.btn, { borderColor: tint }]}>
+              <ThemedText>{t('tripStartTrip')}</ThemedText>
             </Pressable>
-            <Pressable onPress={() => onStatus('COMPLETED')} style={[styles.btn, { borderColor: border }]}>
-              <ThemedText>Hoàn tất</ThemedText>
+            <Pressable onPress={() => confirmStatusChange('COMPLETED')} style={[styles.btn, { borderColor: border }]}>
+              <ThemedText>{t('tripCompleteTrip')}</ThemedText>
             </Pressable>
           </View>
         </>
       ) : (
         <View style={[styles.empty, { borderColor: border }]}>
           <ThemedText style={{ color: muted }}>
-            Chạm nút Thêm ở địa điểm bên dưới để tạo kế hoạch tự động.
+            {t('tripPlanEmptyHint')}
           </ThemedText>
         </View>
       )}
-      <ThemedText type="defaultSemiBold">Địa điểm lý tưởng</ThemedText>
+      <ThemedText type="defaultSemiBold">{t('tripIdealPlaces')}</ThemedText>
       {pinnedLocation ? (
         <View>
-          <ThemedText style={[styles.groupTitle, { color: muted }]}>Vị trí đang ghim</ThemedText>
+          <ThemedText style={[styles.groupTitle, { color: muted }]}>{t('tripPinnedLocation')}</ThemedText>
           <View style={styles.recoRow}>
             <LocationTypeIcon locationType={pinnedLocation.locationType ?? undefined} size="sm" />
             <View style={styles.recoText}>
@@ -89,7 +109,7 @@ export function PlanPanel({
               </ThemedText>
             </View>
             <Pressable onPress={() => onAddRecommendation(pinnedLocation)} style={[styles.btn, { borderColor: border }]}>
-              <ThemedText>Thêm</ThemedText>
+              <ThemedText>{t('tripAddRoute')}</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -104,17 +124,17 @@ export function PlanPanel({
               {pin.name}
             </ThemedText>
             <ThemedText numberOfLines={1} style={{ color: muted, fontSize: 12 }}>
-              {pin.locationType?.name ?? 'Địa điểm'}{pin.distanceKm != null ? ` · ${pin.distanceKm.toFixed(1)} km` : ''}
+              {pin.locationType?.name ?? t('tripPlaceFallback')}{pin.distanceKm != null ? ` · ${pin.distanceKm.toFixed(1)} km` : ''}
             </ThemedText>
           </View>
           <Pressable onPress={() => onAddRecommendation(pin)} style={[styles.btn, { borderColor: border }]}>
-            <ThemedText>Thêm</ThemedText>
+            <ThemedText>{t('tripAddRoute')}</ThemedText>
           </Pressable>
         </View>
       ))}
       {nearbyProvinceHighlights.length ? (
         <>
-          <ThemedText style={[styles.groupTitle, { color: muted }]}>Nổi bật tỉnh/thành lân cận</ThemedText>
+          <ThemedText style={[styles.groupTitle, { color: muted }]}>{t('tripNearbyProvinceHighlights')}</ThemedText>
           {nearbyProvinceHighlights.slice(0, 3).map((pin) => (
             <View key={`near-${pin.id}`} style={styles.recoRow}>
               <LocationTypeIcon locationType={pin.locationType ?? undefined} size="sm" />
@@ -124,7 +144,7 @@ export function PlanPanel({
                 </ThemedText>
               </View>
               <Pressable onPress={() => onAddRecommendation(pin)} style={[styles.btn, { borderColor: border }]}>
-                <ThemedText>Thêm</ThemedText>
+                <ThemedText>{t('tripAddRoute')}</ThemedText>
               </Pressable>
             </View>
           ))}
@@ -132,7 +152,7 @@ export function PlanPanel({
       ) : null}
       {globalHighlights.length ? (
         <>
-          <ThemedText style={[styles.groupTitle, { color: muted }]}>Nổi bật toàn cục</ThemedText>
+          <ThemedText style={[styles.groupTitle, { color: muted }]}>{t('tripGlobalHighlights')}</ThemedText>
           {globalHighlights.slice(0, 3).map((pin) => (
             <View key={`global-${pin.id}`} style={styles.recoRow}>
               <LocationTypeIcon locationType={pin.locationType ?? undefined} size="sm" />
@@ -142,7 +162,7 @@ export function PlanPanel({
                 </ThemedText>
               </View>
               <Pressable onPress={() => onAddRecommendation(pin)} style={[styles.btn, { borderColor: border }]}>
-                <ThemedText>Thêm</ThemedText>
+                <ThemedText>{t('tripAddRoute')}</ThemedText>
               </Pressable>
             </View>
           ))}

@@ -22,9 +22,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAndroidBack } from '@/src/hooks/useAndroidBack';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { safeRouterBack } from '@/src/utils/safe-router-back';
 import { uploadAllPendingMedia } from '@/src/utils/upload-editor-media';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 import { HashtagChipInput } from '@/src/components/posts/HashtagChipInput';
@@ -164,6 +166,45 @@ export function PostCreateScreen() {
     [contentHtml, tags],
   );
 
+  const hasUnsavedDraftContent = useMemo(() => {
+    if (postId) return false;
+    return Boolean(
+      title.trim() ||
+        contentHtml.trim() ||
+        category.trim() ||
+        tags.length ||
+        location ||
+        media.length,
+    );
+  }, [postId, title, contentHtml, category, tags.length, location, media.length]);
+
+  const leaveScreen = useCallback(() => {
+    safeRouterBack(router, '/(tabs)');
+  }, [router]);
+
+  const requestClose = useCallback(() => {
+    if (hasUnsavedDraftContent) {
+      Alert.alert(t('unsavedProfileTitle'), t('unsavedProfileMessage'), [
+        { text: t('continueEditingProfile'), style: 'cancel' },
+        {
+          text: t('discardProfileChanges'),
+          style: 'destructive',
+          onPress: leaveScreen,
+        },
+      ]);
+      return;
+    }
+    leaveScreen();
+  }, [hasUnsavedDraftContent, leaveScreen, t]);
+
+  useAndroidBack(() => {
+    if (hasUnsavedDraftContent) {
+      requestClose();
+      return true;
+    }
+    return false;
+  });
+
   useFocusEffect(
     useCallback(() => {
       usePostComposerHandoffStore.getState().setReturnPostId(postId ? String(postId) : null);
@@ -299,7 +340,7 @@ export function PostCreateScreen() {
         return;
       }
       if (!variables?.forPublish) {
-        router.back();
+        leaveScreen();
       }
     },
     onMutate: (variables) => {
@@ -347,7 +388,7 @@ export function PostCreateScreen() {
     mutationFn: () => postsService.deletePost(String(postId)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
-      router.back();
+      leaveScreen();
     },
     onError: (e: unknown) => setError(formatApiError(e, 'Không thể xóa bản nháp.')),
   });
@@ -412,10 +453,7 @@ export function PostCreateScreen() {
     navigation.setOptions({
       headerLeft: () => (
         <Pressable
-          onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace('/(tabs)');
-          }}
+          onPress={requestClose}
           hitSlop={12}
           style={{ marginLeft: 4 }}
           accessibilityRole="button"
@@ -443,6 +481,7 @@ export function PostCreateScreen() {
     saveDraftMutation.isPending,
     publishMutation.isPending,
     handlePublishPress,
+    requestClose,
     t,
   ]);
 

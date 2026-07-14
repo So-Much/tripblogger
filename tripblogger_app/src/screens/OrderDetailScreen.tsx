@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,15 +10,21 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAndroidBack } from '@/src/hooks/useAndroidBack';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { useSettingsStore } from '@/src/store/settings.store';
+import { formatOrderStatus, formatPaymentMethod, formatPaymentStatus, formatShipmentStatus } from '@/src/utils/format-order-status';
+import { formatLocalDateTime } from '@/src/utils/datetime';
+import { safeRouterBack } from '@/src/utils/safe-router-back';
 import { Image } from 'expo-image';
 import { PriceLabel } from '@/src/components/commerce/PriceLabel';
 import type { ShipmentCarrier, ShipmentDto, ShipmentStatus } from '@/src/types/commerce';
@@ -36,9 +42,11 @@ const NEXT_SHIPMENT: Record<ShipmentStatus, ShipmentStatus[]> = {
 export function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const { t } = useI18n();
   const qc = useQueryClient();
   const me = useMeQuery();
+  const language = useSettingsStore((s) => s.language);
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
   const text = useThemeColor({}, 'text');
@@ -58,10 +66,38 @@ export function OrderDetailScreen() {
   const [ratingScore, setRatingScore] = useState(5);
   const [ratingText, setRatingText] = useState('');
 
+  const leaveScreen = () => safeRouterBack(router, '/(tabs)/shop/orders');
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable onPress={leaveScreen} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('backHome')}>
+          <IconSymbol name="chevron.left" size={24} color={tint} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, tint, t]);
+
+  useAndroidBack(() => {
+    if (ratingModal) {
+      setRatingModal(null);
+      return true;
+    }
+    if (statusModal) {
+      setStatusModal(null);
+      return true;
+    }
+    if (shipModal) {
+      setShipModal(false);
+      return true;
+    }
+    return false;
+  });
+
   const q = useQuery({
     queryKey: ['commerce', 'order', id],
     queryFn: () => commerceService.getOrder(String(id)),
-    enabled: !!id && me.data?.role === 'MEMBER',
+    enabled: !!id && !!me.data,
   });
 
   const shipmentsQ = useQuery({
@@ -134,7 +170,7 @@ export function OrderDetailScreen() {
     return (shipmentsQ.data ?? []).filter((s) => s.sellerId === uid);
   }, [shipmentsQ.data, me.data?.id]);
 
-  if (!id || me.data?.role !== 'MEMBER') {
+  if (!id || !me.data) {
     return (
       <ThemedView style={styles.center}>
         <ThemedText>{t('shopMemberRequired')}</ThemedText>
@@ -172,22 +208,22 @@ export function OrderDetailScreen() {
       <ScrollView contentContainerStyle={styles.pad}>
         <ThemedText type="title">{o.orderCode}</ThemedText>
         <ThemedText>
-          {t('orderStatus')}: {o.status}
+          {t('orderStatus')}: {formatOrderStatus(o.status, language)}
         </ThemedText>
 
         {o.payment ? (
           <View style={[styles.card, { borderColor: border }]}>
             <ThemedText type="subtitle">{t('paymentSection')}</ThemedText>
             <ThemedText>
-              {t('paymentMethod')}: {o.payment.method}
+              {t('paymentMethod')}: {formatPaymentMethod(o.payment.method, language)}
             </ThemedText>
             <ThemedText>
-              {t('paymentStatus')}: {o.payment.status}
+              {t('paymentStatus')}: {formatPaymentStatus(o.payment.status, language)}
             </ThemedText>
             <PriceLabel amount={o.payment.amount} />
             {o.payment.paidAt ? (
               <ThemedText style={styles.small}>
-                {t('paymentPaidAt')}: {o.payment.paidAt}
+                {t('paymentPaidAt')}: {formatLocalDateTime(o.payment.paidAt)}
               </ThemedText>
             ) : null}
           </View>
@@ -217,7 +253,7 @@ export function OrderDetailScreen() {
             {(shipmentsQ.data ?? []).map((s) => (
               <View key={s.id} style={[styles.card, { borderColor: border }]}>
                 <ThemedText>
-                  {t('shipmentStatusLabel')}: {s.status}
+                  {t('shipmentStatusLabel')}: {formatShipmentStatus(s.status, language)}
                 </ThemedText>
                 <ThemedText>
                   {t('shipmentCarrier')}: {s.carrier}
@@ -278,12 +314,18 @@ export function OrderDetailScreen() {
         })}
 
         {isBuyer && o.status === 'PENDING' ? (
-          <Pressable style={[styles.btn, { borderColor: '#b91c1c' }]} onPress={() => cancel.mutate()}>
+          <Pressable
+            style={[styles.btn, { borderColor: '#b91c1c', opacity: cancel.isPending ? 0.6 : 1 }]}
+            disabled={cancel.isPending}
+            onPress={() => cancel.mutate()}>
             <ThemedText style={{ color: '#b91c1c' }}>{t('orderCancel')}</ThemedText>
           </Pressable>
         ) : null}
         {isSeller && o.status === 'PENDING' ? (
-          <Pressable style={[styles.btn, { backgroundColor: tint }]} onPress={() => confirm.mutate()}>
+          <Pressable
+            style={[styles.btn, { backgroundColor: tint, opacity: confirm.isPending ? 0.6 : 1 }]}
+            disabled={confirm.isPending}
+            onPress={() => confirm.mutate()}>
             <ThemedText style={[styles.btnW, { color: onCta }]}>{t('orderConfirm')}</ThemedText>
           </Pressable>
         ) : null}
@@ -292,8 +334,16 @@ export function OrderDetailScreen() {
             <ThemedText style={[styles.btnW, { color: onCta }]}>{t('orderShipmentCreate')}</ThemedText>
           </Pressable>
         ) : null}
-        {isBuyer && o.status === 'SHIPPING' ? (
-          <Pressable style={[styles.btn, { backgroundColor: tint }]} onPress={() => received.mutate()}>
+        {isBuyer && o.status === 'SHIPPING' && (shipmentsQ.data?.length ?? 0) > 0 ? (
+          <Pressable
+            style={[styles.btn, { backgroundColor: tint, opacity: received.isPending ? 0.6 : 1 }]}
+            disabled={received.isPending}
+            onPress={() =>
+              Alert.alert(t('orderReceivedConfirmTitle'), t('orderReceivedConfirmBody'), [
+                { text: t('cancel'), style: 'cancel' },
+                { text: t('orderReceived'), onPress: () => received.mutate() },
+              ])
+            }>
             <ThemedText style={[styles.btnW, { color: onCta }]}>{t('orderReceived')}</ThemedText>
           </Pressable>
         ) : null}

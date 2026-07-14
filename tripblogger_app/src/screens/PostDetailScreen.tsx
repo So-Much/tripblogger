@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -41,6 +41,7 @@ import {
 import { postsRealtimeClient } from '@/src/services/realtime/posts-realtime.client';
 import { applyCommentCreated, applyPostPatch, optimisticTogglePostReaction } from '@/src/services/realtime/posts-realtime.sync';
 import { useAuthStore } from '@/src/store/auth.store';
+import { safeRouterBack } from '@/src/utils/safe-router-back';
 
 const SINGLE_TAP_DELAY_MS = 240;
 
@@ -51,6 +52,7 @@ function postReactionTypes(types: ReactionTypeDto[]): ReactionTypeDto[] {
 export function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -91,6 +93,20 @@ export function PostDetailScreen() {
   });
 
   const post = postQuery.data;
+
+  const leaveScreen = useCallback(() => {
+    safeRouterBack(router, '/(tabs)/posts');
+  }, [router]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable onPress={leaveScreen} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('backHome')}>
+          <IconSymbol name="chevron.left" size={24} color={cta} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, leaveScreen, cta, t]);
 
   useEffect(() => {
     if (!id) return;
@@ -215,7 +231,7 @@ export function PostDetailScreen() {
     mutationFn: () => postsService.deletePost(String(id)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
-      router.back();
+      leaveScreen();
     },
     onError: (e) => setActionErr(formatApiError(e, 'Không thể xóa bài viết.')),
   });

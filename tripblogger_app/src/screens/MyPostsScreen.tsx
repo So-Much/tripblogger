@@ -178,7 +178,7 @@ export function MyPostsScreen() {
   if (query.isError) {
     return (
       <ThemedView style={styles.center}>
-        <ThemedText>{formatApiError(query.error, 'Không thể tải danh sách bài viết.')}</ThemedText>
+        <ThemedText>{formatApiError(query.error, t('postsLoadFailed'))}</ThemedText>
       </ThemedView>
     );
   }
@@ -198,7 +198,7 @@ export function MyPostsScreen() {
               },
             ]}>
             <ThemedText style={styles.filterTxt}>
-              {s === 'ALL' ? 'Tất cả' : s === 'DRAFT' ? 'Bản nháp' : 'Đã xuất bản'}
+              {s === 'ALL' ? t('ratingsTabAll') : s === 'DRAFT' ? t('postsSaveDraft') : t('postsFilterPublished')}
             </ThemedText>
           </Pressable>
         ))}

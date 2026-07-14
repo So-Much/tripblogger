@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
+import { translate } from '@/src/i18n';
 import { locationsService } from '@/src/services/api/locations.service';
+import { useSettingsStore } from '@/src/store/settings.store';
 import type { MapCheckpoint, MapExplorePin } from '@/src/types/trip-map';
 import type { TripPlannerFilters } from '@/src/types/trip-planner';
 import { formatApiError } from '@/src/utils/format-api-error';
@@ -14,9 +16,7 @@ export function useTripMapExplore(filters?: TripPlannerFilters, enabled = true) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const userCoordsRef = useRef<Coords | null>(null);
-  userCoordsRef.current = userCoords;
-
+  const requestIdRef = useRef(0);
   const typeCodesKey = filters?.typeCodes?.join(',') ?? '';
   const checkpointKey = checkpoint
     ? `${checkpoint.lat.toFixed(5)}:${checkpoint.lng.toFixed(5)}:${checkpoint.name}`
@@ -24,6 +24,7 @@ export function useTripMapExplore(filters?: TripPlannerFilters, enabled = true) 
 
   const loadNearby = useCallback(
     async (center: Coords) => {
+      const reqId = ++requestIdRef.current;
       setLoading(true);
       setError(null);
       try {
@@ -32,9 +33,12 @@ export function useTripMapExplore(filters?: TripPlannerFilters, enabled = true) 
           lng: center.lng,
           sort: filters?.sort ?? 'rating',
           typeCodes: filters?.typeCodes,
-          radiusKm: 10,
+          radiusKm: filters?.radiusKm ?? 10,
+          minRating: filters?.minRating,
+          q: filters?.keyword?.trim() || undefined,
           limit: 30,
         });
+        if (reqId !== requestIdRef.current) return;
         setNearbyResults(
           items.map((item) => ({
             id: item.id,
@@ -55,27 +59,32 @@ export function useTripMapExplore(filters?: TripPlannerFilters, enabled = true) 
           })),
         );
       } catch (e) {
-        setError(formatApiError(e, 'Không tải được địa điểm gần bạn'));
+        if (reqId !== requestIdRef.current) return;
+        const language = useSettingsStore.getState().language;
+        setError(formatApiError(e, translate(language, 'tripExploreNearbyFailed')));
         setNearbyResults([]);
       } finally {
-        setLoading(false);
+        if (reqId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
-    [filters?.sort, filters?.typeCodes],
+    [filters?.keyword, filters?.minRating, filters?.radiusKm, filters?.sort, filters?.typeCodes],
   );
-
-  const loadNearbyRef = useRef(loadNearby);
-  loadNearbyRef.current = loadNearby;
 
   useEffect(() => {
     if (!enabled) {
+      requestIdRef.current += 1;
       setLoading(false);
       setError(null);
       setNearbyResults([]);
       setCheckpoint(null);
+      setUserCoords(null);
       return;
     }
+
     let cancelled = false;
+
     void (async () => {
       setLoading(true);
       setError(null);
@@ -83,23 +92,25 @@ export function useTripMapExplore(filters?: TripPlannerFilters, enabled = true) 
         const perm = await Location.requestForegroundPermissionsAsync();
         if (perm.status !== Location.PermissionStatus.GRANTED) {
           if (!cancelled) {
-            setError('Cần quyền vị trí để gợi ý địa điểm xung quanh.');
+            const language = useSettingsStore.getState().language;
+            setError(translate(language, 'tripLocationPermissionExplore'));
             setLoading(false);
           }
           return;
         }
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         if (cancelled) return;
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserCoords(coords);
-        await loadNearbyRef.current(coords);
       } catch (e) {
         if (!cancelled) {
-          setError(formatApiError(e, 'Không lấy được vị trí hiện tại'));
+          const language = useSettingsStore.getState().language;
+          setError(formatApiError(e, translate(language, 'tripCurrentLocationFailed')));
           setLoading(false);
         }
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -107,32 +118,27 @@ export function useTripMapExplore(filters?: TripPlannerFilters, enabled = true) 
 
   useEffect(() => {
     if (!enabled) return;
-    const center = checkpoint ?? userCoordsRef.current;
+    const center = checkpoint ?? userCoords;
     if (!center) return;
-    void loadNearbyRef.current(center);
-  }, [enabled, filters?.sort, typeCodesKey, checkpointKey, checkpoint]);
+    void loadNearby(center);
+  }, [enabled, userCoords, filters?.sort, typeCodesKey, checkpointKey, checkpoint, loadNearby]);
 
-  const selectCheckpoint = useCallback(async (next: MapCheckpoint) => {
+  const selectCheckpoint = useCallback((next: MapCheckpoint) => {
     if (!enabled) return;
     setCheckpoint(next);
-    await loadNearbyRef.current({ lat: next.lat, lng: next.lng });
   }, [enabled]);
 
-  const clearCheckpoint = useCallback(async () => {
+  const clearCheckpoint = useCallback(() => {
     if (!enabled) return;
     setCheckpoint(null);
-    const coords = userCoordsRef.current;
-    if (coords) {
-      await loadNearbyRef.current(coords);
-    }
   }, [enabled]);
 
   const reloadNearby = useCallback(async () => {
     if (!enabled) return;
-    const center = checkpoint ?? userCoordsRef.current;
+    const center = checkpoint ?? userCoords;
     if (!center) return;
-    await loadNearbyRef.current(center);
-  }, [enabled, checkpoint]);
+    await loadNearby(center);
+  }, [enabled, checkpoint, userCoords, loadNearby]);
 
   const exploreCenter = checkpoint ?? userCoords;
 

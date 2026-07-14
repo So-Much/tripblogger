@@ -16,6 +16,7 @@ interface UserMapMarkersState {
   markers: UserMapMarker[];
   hydrated: boolean;
   hydrate: () => Promise<void>;
+  reset: () => Promise<void>;
   upsert: (input: { id?: string; lat: number; lng: number; name: string }) => UserMapMarker;
   remove: (id: string) => Promise<void>;
 }
@@ -40,6 +41,10 @@ export const useUserMapMarkersStore = create<UserMapMarkersState>((set, get) => 
     } catch {
       set({ hydrated: true });
     }
+  },
+  reset: async () => {
+    set({ markers: [], hydrated: true });
+    await SecureStore.deleteItemAsync(STORAGE_KEY);
   },
   upsert: (input) => {
     const trimmed = input.name.trim() || 'Điểm trên bản đồ';

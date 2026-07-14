@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { PasswordField } from '@/src/components/forms/PasswordField';
@@ -23,20 +23,14 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery, useRegisterMutation } from '@/src/hooks/useAuth';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
+import { clearSessionQueryCache } from '@/src/services/session/session-bootstrap.service';
 import { ensureDeviceId, persistAuthTokens } from '@/src/services/session/session.service';
 
-const registerSchema = z
-  .object({
-    username: z.string().min(3, 'Username must be at least 3 characters'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    confirmPassword: z.string().min(8, 'Password must be at least 8 characters'),
-  })
-  .refine((v) => v.password === v.confirmPassword, {
-    message: 'Passwords do not match',
-    path: ['confirmPassword'],
-  });
-
-type RegisterForm = z.infer<typeof registerSchema>;
+type RegisterForm = {
+  username: string;
+  password: string;
+  confirmPassword: string;
+};
 
 export function RegisterScreen() {
   const router = useRouter();
@@ -54,6 +48,21 @@ export function RegisterScreen() {
   const textColor = useThemeColor({}, 'text');
   const onCta = useThemeColor({}, 'onCta');
 
+  const registerSchema = useMemo(
+    () =>
+      z
+        .object({
+          username: z.string().min(3, t('authUsernameMin')),
+          password: z.string().min(8, t('authPasswordMin')),
+          confirmPassword: z.string().min(8, t('authPasswordMin')),
+        })
+        .refine((v) => v.password === v.confirmPassword, {
+          message: t('authPasswordMismatch'),
+          path: ['confirmPassword'],
+        }),
+    [t],
+  );
+
   const { control, handleSubmit } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -67,6 +76,7 @@ export function RegisterScreen() {
     setSubmitError(null);
     try {
       const deviceId = await ensureDeviceId();
+      clearSessionQueryCache();
       const tokens = await registerMutation.mutateAsync({ ...values, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
@@ -152,7 +162,10 @@ export function RegisterScreen() {
               {submitError ? <ThemedText style={styles.error}>{submitError}</ThemedText> : null}
 
               <ActionPulse pulseKey={successPulse}>
-                <PressableScale style={[styles.signUpButton, { backgroundColor: cta }]} onPress={onSubmit}>
+                <PressableScale
+                  style={[styles.signUpButton, { backgroundColor: cta }]}
+                  onPress={onSubmit}
+                  disabled={registerMutation.isPending}>
                   <ThemedText type="defaultSemiBold" style={[styles.signUpText, { color: onCta }]}>
                     {registerMutation.isPending ? t('creatingAccount') : t('createAccount')}
                   </ThemedText>

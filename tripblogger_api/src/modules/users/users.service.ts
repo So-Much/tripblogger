@@ -71,15 +71,20 @@ export class UsersService {
   async getMeProfile(userId: string) {
     const user = await this.usersRepo.findOne({
       where: { id: userId },
-      relations: ['role', 'memberProfile', 'statuses'],
+      relations: ['role', 'memberProfile', 'statuses', 'statuses.status'],
     });
     if (!user) throw new NotFoundException('User not found');
-    const statuses = user.statuses.filter((status) => status.isActive).map((status) => status.statusCode as UserStatusCode);
+    const activeStatuses = user.statuses.filter((status) => status.isActive);
+    const statuses = activeStatuses.map((status) => status.statusCode as UserStatusCode);
 
     return {
       id: user.id,
       role: user.role.code,
       statuses,
+      statusDetails: activeStatuses.map((status) => ({
+        code: status.statusCode as UserStatusCode,
+        displayName: status.status?.displayName ?? status.statusCode,
+      })),
       profile: user.memberProfile
         ? {
             username: user.memberProfile.username,

@@ -29,6 +29,7 @@ type ProductListProps = {
   wishlistedIds?: Set<string>;
   cartQtyByProductId?: Map<string, number>;
   actionsDisabled?: boolean;
+  wishlistDisabled?: boolean;
   pendingProductId?: string | null;
   pendingAction?: ProductQuickAction | null;
   ListHeaderComponent?: React.ReactElement | null;
@@ -52,6 +53,7 @@ function ProductListInner({
   wishlistedIds,
   cartQtyByProductId,
   actionsDisabled,
+  wishlistDisabled,
   pendingProductId,
   pendingAction,
   ListHeaderComponent,
@@ -77,6 +79,7 @@ function ProductListInner({
           isWishlisted={wishlistedIds?.has(item.id)}
           inCartQty={cartQtyByProductId?.get(item.id)}
           actionsDisabled={actionsDisabled}
+          wishlistDisabled={wishlistDisabled}
           pendingAction={pendingProductId === item.id ? pendingAction ?? null : null}
         />
       </View>
@@ -92,6 +95,7 @@ function ProductListInner({
       wishlistedIds,
       cartQtyByProductId,
       actionsDisabled,
+      wishlistDisabled,
       pendingProductId,
       pendingAction,
       currentUserId,

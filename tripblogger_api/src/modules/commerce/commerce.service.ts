@@ -340,6 +340,11 @@ export class CommerceService {
     if (!product) throw new NotFoundException('Product not found');
     if (product.sellerId !== sellerId) throw new ForbiddenException('Not owner');
 
+    const member = await this.memberRepo.findOne({ where: { userId: sellerId } });
+    if (!member?.isVerifiedSeller) {
+      throw new ForbiddenException('Seller verification required before publishing');
+    }
+
     const media = parseProductMediaJson(product.mediaJson);
     if (media.length === 0) throw new BadRequestException('At least one image is required');
     if (!product.title?.trim()) throw new BadRequestException('Title required');

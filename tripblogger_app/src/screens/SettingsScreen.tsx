@@ -15,7 +15,8 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { AppLanguage, ThemePreference, useSettingsStore } from '@/src/store/settings.store';
 import { useI18n } from '@/src/i18n';
 import { authService } from '@/src/services/api/auth.service';
-import { clearPersistedAuthTokens } from '@/src/services/session/session.service';
+import { logoutAndReGuest } from '@/src/services/session/session-bootstrap.service';
+import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import { SettingsHubSection } from '@/src/components/settings/SettingsHubSection';
 import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 
@@ -50,7 +51,6 @@ export function SettingsScreen() {
 
   const me = useAuthStore((s) => s.me);
   const setMe = useAuthStore((s) => s.setMe);
-  const logout = useAuthStore((s) => s.logout);
   const tokens = useAuthStore((s) => s.tokens);
   const deviceId = useAuthStore((s) => s.deviceId);
   const isMember = me?.role === 'MEMBER';
@@ -79,8 +79,12 @@ export function SettingsScreen() {
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const profileName = displayNameDraft || me?.profile?.username || '';
-  const avatarGlyph = (isMember ? profileName : 'G').trim().charAt(0).toUpperCase();
+  const profileName = resolvePublicDisplayName(
+    displayNameDraft || me?.profile?.displayName,
+    me?.profile?.username,
+    t('profileMemberBio'),
+  );
+  const avatarGlyph = profileName.trim().charAt(0).toUpperCase();
   const isProfileDirty =
     displayNameDraft.trim() !== initialDisplay.trim() ||
     emailDraft.trim() !== initialEmail.trim() ||
@@ -117,13 +121,14 @@ export function SettingsScreen() {
   const saveProfile = async () => {
     if (!me?.profile) return;
     try {
-      const updated = await authService.updateProfile({
+      await authService.updateProfile({
         displayName: displayNameDraft.trim() || me.profile.username,
         email: emailDraft.trim(),
         removeAvatar,
         avatarFile: selectedAvatarFile ?? undefined,
       });
-      setMe(updated);
+      const refreshedMe = await authService.me();
+      setMe(refreshedMe);
       setIsProfileModalOpen(false);
     } catch {
       Alert.alert(t('saveProfileFailedTitle'), t('saveProfileFailedMessage'));
@@ -261,9 +266,6 @@ export function SettingsScreen() {
               <View style={[styles.avatarCircle, { borderColor: border }]}>
                 <ThemedText type="title">{avatarGlyph}</ThemedText>
               </View>
-              <ThemedText type="subtitle" style={styles.profileNameCenter}>
-                {t('settingsGuestMode')}
-              </ThemedText>
               <ThemedText style={{ color: muted }}>{t('settingsGuestSyncHint')}</ThemedText>
               <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
                 <ThemedText type="defaultSemiBold" style={[styles.ctaText, { color: onCta }]}>
@@ -317,8 +319,7 @@ export function SettingsScreen() {
                         // Keep local logout resilient even if network/logout endpoint fails.
                       }
                     }
-                    await clearPersistedAuthTokens();
-                    logout();
+                    await logoutAndReGuest();
                     router.replace('/');
                   },
                 },

@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 import { TripLocationTypeFilterChip } from '@/src/components/trips/TripLocationTypeFilterChip';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { TRIP_LOCATION_TYPE_FILTERS } from '@/src/constants/trip-location-types';
@@ -14,6 +15,9 @@ export function countTripLocationFilters(f: TripPlannerFilters): number {
   let n = 0;
   if (f.typeCodes?.length) n += f.typeCodes.length;
   if (f.sort === 'popularity') n += 1;
+  if ((f.radiusKm ?? 10) !== 10) n += 1;
+  if ((f.minRating ?? 0) > 0) n += 1;
+  if (f.keyword?.trim()) n += 1;
   return n;
 }
 
@@ -47,7 +51,7 @@ export function TripLocationFilterSheet({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Đóng bộ lọc" />
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('tripFilterCloseA11y')} />
       <View
         style={[
           styles.sheet,
@@ -61,8 +65,8 @@ export function TripLocationFilterSheet({
         <ThemedText type="subtitle">{t('tripFilterTitle')}</ThemedText>
         <ThemedText style={[styles.hint, { color: muted }]}>
           {draft.typeCodes?.length
-            ? `${draft.typeCodes.length} loại đã chọn`
-            : 'Chọn một hoặc nhiều loại địa điểm'}
+            ? t('tripFilterTypesSelected', { count: draft.typeCodes.length })
+            : t('tripFilterTypesHint')}
         </ThemedText>
 
         <ThemedText style={[styles.sectionLabel, { color: muted }]}>{t('tripFilterLocationTypes')}</ThemedText>
@@ -104,7 +108,7 @@ export function TripLocationFilterSheet({
           })}
         </ScrollView>
 
-        <ThemedText style={[styles.sectionLabel, { color: muted }]}>Sắp xếp</ThemedText>
+        <ThemedText style={[styles.sectionLabel, { color: muted }]}>{t('shopFilterSort')}</ThemedText>
         <View style={styles.sortRow}>
           <PressableScale
             style={[
@@ -113,7 +117,7 @@ export function TripLocationFilterSheet({
             ]}
             onPress={() => onChange({ ...draft, sort: 'rating' })}>
             <IconSymbol name="star.fill" size={14} color={tint} />
-            <ThemedText style={{ fontWeight: '600', fontSize: 13 }}>Đánh giá cao</ThemedText>
+            <ThemedText style={{ fontWeight: '600', fontSize: 13 }}>{t('locationReviewSortRating')}</ThemedText>
           </PressableScale>
           <PressableScale
             style={[
@@ -127,14 +131,66 @@ export function TripLocationFilterSheet({
             <IconSymbol name="flame.fill" size={14} color={tint} />
             <ThemedText style={{ fontWeight: '600', fontSize: 13 }}>{t('tripFilterFeatured')}</ThemedText>
           </PressableScale>
+          <PressableScale
+            style={[
+              styles.sortBtn,
+              {
+                borderColor: border,
+                backgroundColor: draft.sort === 'distance' ? `${tint}18` : 'transparent',
+              },
+            ]}
+            onPress={() => onChange({ ...draft, sort: 'distance' })}>
+            <IconSymbol name="location.fill" size={14} color={tint} />
+            <ThemedText style={{ fontWeight: '600', fontSize: 13 }}>Gan nhat</ThemedText>
+          </PressableScale>
         </View>
+        <ThemedText style={[styles.sectionLabel, { color: muted }]}>Ban kinh (km)</ThemedText>
+        <View style={styles.radiusRow}>
+          {[5, 10, 20, 50].map((r) => (
+            <PressableScale
+              key={r}
+              style={[
+                styles.radiusChip,
+                {
+                  borderColor: border,
+                  backgroundColor: (draft.radiusKm ?? 10) === r ? `${tint}18` : 'transparent',
+                },
+              ]}
+              onPress={() => onChange({ ...draft, radiusKm: r })}>
+              <ThemedText style={{ fontSize: 12 }}>{r}km</ThemedText>
+            </PressableScale>
+          ))}
+        </View>
+        <ThemedText style={[styles.sectionLabel, { color: muted }]}>Danh gia toi thieu</ThemedText>
+        <View style={styles.radiusRow}>
+          {[0, 3, 4, 4.5].map((r) => (
+            <PressableScale
+              key={String(r)}
+              style={[
+                styles.radiusChip,
+                {
+                  borderColor: border,
+                  backgroundColor: (draft.minRating ?? 0) === r ? `${tint}18` : 'transparent',
+                },
+              ]}
+              onPress={() => onChange({ ...draft, minRating: r })}>
+              <ThemedText style={{ fontSize: 12 }}>{r === 0 ? 'Tat ca' : `${r}+`}</ThemedText>
+            </PressableScale>
+          ))}
+        </View>
+        <ThemedText style={[styles.sectionLabel, { color: muted }]}>Tu khoa</ThemedText>
+        <ThemedTextInput
+          placeholder="ca phe, hai san, bao tang..."
+          value={draft.keyword ?? ''}
+          onChangeText={(keyword) => onChange({ ...draft, keyword })}
+        />
 
         <View style={styles.actions}>
           <PressableScale style={[styles.resetBtn, { borderColor: border }]} onPress={onReset}>
-            <ThemedText style={{ fontWeight: '600' }}>Đặt lại</ThemedText>
+            <ThemedText style={{ fontWeight: '600' }}>{t('shopFilterReset')}</ThemedText>
           </PressableScale>
           <PressableScale style={[styles.applyBtn, { backgroundColor: cta }]} onPress={onApply}>
-            <ThemedText style={{ color: onCta, fontWeight: '700' }}>Áp dụng</ThemedText>
+            <ThemedText style={{ color: onCta, fontWeight: '700' }}>{t('shopFilterApply')}</ThemedText>
           </PressableScale>
         </View>
       </View>
@@ -188,6 +244,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sortRow: { flexDirection: 'row', gap: 10 },
+  radiusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  radiusChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   sortBtn: {
     flex: 1,
     flexDirection: 'row',

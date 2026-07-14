@@ -48,7 +48,7 @@ const HUB_GROUPS: HubGroup[] = [
   {
     sectionTitleKey: 'settingsHubGroupContent',
     items: [
-      { href: '/(tabs)/posts' as Href, titleKey: 'settingsHubMyPosts', icon: 'doc.text.fill' },
+      { href: `/(tabs)/posts${FROM_SETTINGS}` as Href, titleKey: 'settingsHubMyPosts', icon: 'doc.text.fill' },
       { href: `/(tabs)/trips/my${FROM_SETTINGS}` as Href, titleKey: 'settingsHubMyTrips', icon: 'location.fill' },
     ],
   },

@@ -100,6 +100,7 @@ function ProductCardInner({
   onToggleWishlist,
   isWishlisted,
   actionsDisabled,
+  wishlistDisabled,
   pendingAction,
   onRemoveFromWishlist,
   wishlistRemoveLabel,
@@ -114,6 +115,7 @@ function ProductCardInner({
   onToggleWishlist?: () => void;
   isWishlisted?: boolean;
   actionsDisabled?: boolean;
+  wishlistDisabled?: boolean;
   pendingAction?: ProductQuickAction | null;
   onRemoveFromWishlist?: () => void;
   wishlistRemoveLabel?: string;
@@ -131,8 +133,10 @@ function ProductCardInner({
   const showActions = Boolean(onBuyNow || onAddToCart) && !onRemoveFromWishlist && !isOwn;
   const onWishlistPress = onRemoveFromWishlist ?? onToggleWishlist;
   const wishlistFilled = onRemoveFromWishlist ? true : Boolean(isWishlisted);
-  const buyPending = pendingAction === 'buy';
+  const wishDisabled = wishlistDisabled ?? actionsDisabled;
+  const cartDisabled = actionsDisabled;
   const cartPending = pendingAction === 'cart';
+  const buyPending = pendingAction === 'buy';
   const cardBusy = pendingAction != null;
   const cartBadgeQty = typeof inCartQty === 'number' && inCartQty > 0 ? inCartQty : undefined;
   const cartA11yHint =
@@ -211,8 +215,8 @@ function ProductCardInner({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={wishlistRemoveLabel ?? t('wishlistToggleA11y')}
-            accessibilityState={{ disabled: actionsDisabled, selected: wishlistFilled }}
-            disabled={actionsDisabled}
+            accessibilityState={{ disabled: wishDisabled, selected: wishlistFilled }}
+            disabled={wishDisabled}
             onPress={() => onWishlistPress?.()}
             hitSlop={8}
             style={({ pressed }) => [
@@ -222,7 +226,7 @@ function ProductCardInner({
                 borderColor: wishlistFilled ? cta : border,
                 borderWidth: 1,
                 borderRadius: radius.pill,
-                opacity: actionsDisabled ? 0.5 : pressed ? 0.88 : 1,
+                opacity: wishDisabled ? 0.5 : pressed ? 0.88 : 1,
               },
             ]}>
             <IconSymbol name={wishlistFilled ? 'heart.fill' : 'heart'} size={18} color={cta} />
@@ -245,7 +249,7 @@ function ProductCardInner({
             label={t('addToCart')}
             icon="cart.fill"
             onPress={onAddToCart}
-            disabled={actionsDisabled || outOfStock || cardBusy}
+            disabled={cartDisabled || outOfStock || cardBusy}
             pending={cartPending}
             borderColor={border}
             cta={cta}
@@ -257,15 +261,15 @@ function ProductCardInner({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('buyNow')}
-            accessibilityState={{ disabled: actionsDisabled || outOfStock || cardBusy, busy: buyPending }}
-            disabled={actionsDisabled || outOfStock || (cardBusy && !buyPending)}
+            accessibilityState={{ disabled: cartDisabled || outOfStock || cardBusy, busy: buyPending }}
+            disabled={cartDisabled || outOfStock || (cardBusy && !buyPending)}
             onPress={onBuyNow}
             style={({ pressed }) => [
               styles.buyBtn,
               {
                 backgroundColor: cta,
                 borderRadius: radius.md,
-                opacity: actionsDisabled || outOfStock ? 0.5 : pressed ? 0.9 : 1,
+                opacity: cartDisabled || outOfStock ? 0.5 : pressed ? 0.9 : 1,
               },
             ]}>
             <View style={styles.buyBtnInner}>

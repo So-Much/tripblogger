@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '@/src/store/auth.store';
 import { resolveApiBaseUrl } from '@/src/services/api/resolve-api-base-url';
+import { bootstrapGuestSession } from '@/src/services/session/session-bootstrap.service';
 import { clearPersistedAuthTokens, persistAuthTokens } from '@/src/services/session/session.service';
 
 /** Effective base URL (dev rewrites localhost for real devices via Expo Metro host). */
@@ -40,6 +41,7 @@ apiClient.interceptors.response.use(
     if (!refreshToken) {
       useAuthStore.getState().logout();
       void clearPersistedAuthTokens();
+      void bootstrapGuestSession();
       return Promise.reject(error);
     }
     if (!deviceId) return Promise.reject(error);
@@ -68,6 +70,7 @@ apiClient.interceptors.response.use(
       pendingRequests = [];
       useAuthStore.getState().logout();
       await clearPersistedAuthTokens();
+      await bootstrapGuestSession();
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

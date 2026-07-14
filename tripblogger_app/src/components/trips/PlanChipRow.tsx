@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import type { TripDto } from '@/src/types/trip';
+import { useI18n } from '@/src/i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 
 type PlanChipRowProps = {
@@ -12,6 +13,7 @@ type PlanChipRowProps = {
 };
 
 export function PlanChipRow({ plans, selectedTripId, onSelect, onCreateNew }: PlanChipRowProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
 
@@ -31,7 +33,7 @@ export function PlanChipRow({ plans, selectedTripId, onSelect, onCreateNew }: Pl
         );
       })}
       <PressableScale style={[styles.chip, { borderColor: tint }]} onPress={onCreateNew}>
-        <ThemedText style={styles.chipText}>+ Plan mới</ThemedText>
+        <ThemedText style={styles.chipText}>{t('tripPlanNewChip')}</ThemedText>
       </PressableScale>
     </ScrollView>
   );

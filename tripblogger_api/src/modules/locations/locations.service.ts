@@ -151,10 +151,12 @@ export class LocationsService {
     lat: number,
     lng: number,
     radiusKm = 10,
-    sort: 'rating' | 'popularity' = 'rating',
+    sort: 'rating' | 'popularity' | 'distance' = 'rating',
     limit = 30,
     typeCode?: string,
     typeCodes?: string,
+    minRating = 0,
+    q?: string,
   ): Promise<NearbyLocationResponse[]> {
     const cap = Math.min(limit, 50);
     const codes = parseNearbyTypeCodes(typeCode, typeCodes);
@@ -175,15 +177,25 @@ export class LocationsService {
         return { loc, distanceKm };
       })
       .filter(({ distanceKm }) => distanceKm <= radiusKm);
+    const keyword = q?.trim().toLowerCase();
+    const filtered = within.filter(({ loc }) => {
+      if (Number(loc.avgRating) < minRating) return false;
+      if (!keyword) return true;
+      const name = (loc.name ?? '').toLowerCase();
+      const address = (loc.address ?? '').toLowerCase();
+      return name.includes(keyword) || address.includes(keyword);
+    });
 
     if (sort === 'popularity') {
-      within.sort(
+      filtered.sort(
         (a, b) =>
           Number(b.loc.popularityScore) - Number(a.loc.popularityScore) ||
           a.distanceKm - b.distanceKm,
       );
+    } else if (sort === 'distance') {
+      filtered.sort((a, b) => a.distanceKm - b.distanceKm);
     } else {
-      within.sort(
+      filtered.sort(
         (a, b) =>
           Number(b.loc.avgRating) - Number(a.loc.avgRating) ||
           b.loc.totalReview - a.loc.totalReview ||
@@ -191,7 +203,7 @@ export class LocationsService {
       );
     }
 
-    const results: NearbyLocationResponse[] = within.slice(0, cap).map(({ loc, distanceKm }) => ({
+    const results: NearbyLocationResponse[] = filtered.slice(0, cap).map(({ loc, distanceKm }) => ({
       ...this.toResponse(loc),
       distanceKm: Math.round(distanceKm * 100) / 100,
     }));

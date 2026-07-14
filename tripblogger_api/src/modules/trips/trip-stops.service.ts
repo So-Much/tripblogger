@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CheckinsService } from '../locations/checkins.service';
 import { CreateStopDto, ReorderStopsDto, UpdateStopDto } from './dto/trip.dto';
+import { LocationEntity } from '../locations/entities/location.entity';
 import { TripDayEntity } from './entities/trip-day.entity';
 import { TripStopEntity } from './entities/trip-stop.entity';
 import { TripPermissionsService } from './trip-permissions.service';
@@ -17,6 +18,8 @@ export class TripStopsService {
     private readonly stopsRepo: Repository<TripStopEntity>,
     @InjectRepository(TripDayEntity)
     private readonly daysRepo: Repository<TripDayEntity>,
+    @InjectRepository(LocationEntity)
+    private readonly locationsRepo: Repository<LocationEntity>,
     private readonly permissions: TripPermissionsService,
     private readonly tripsService: TripsService,
     private readonly checkinsService: CheckinsService,
@@ -73,16 +76,35 @@ export class TripStopsService {
   async updateStop(tripId: string, stopId: string, userId: string, dto: UpdateStopDto) {
     await this.permissions.assertCan(tripId, userId, 'edit_stops');
     const stop = await this.findStopInTrip(tripId, stopId);
+    const fromDayId = stop.tripDayId;
+    let toDayId = stop.tripDayId;
+    if (dto.tripDayId && dto.tripDayId !== stop.tripDayId) {
+      const targetDay = await this.daysRepo.findOne({ where: { id: dto.tripDayId, tripId } });
+      if (!targetDay) throw new BadRequestException('Target day not found in trip');
+      const maxRow = await this.stopsRepo
+        .createQueryBuilder('s')
+        .select('MAX(s.order_index)', 'max')
+        .where('s.trip_day_id = :dayId', { dayId: dto.tripDayId })
+        .getRawOne<{ max: number | null }>();
+      stop.tripDayId = dto.tripDayId;
+      stop.orderIndex = Number(maxRow?.max ?? 0) + 1000;
+      toDayId = dto.tripDayId;
+    }
     if (dto.status) {
       stop.status = dto.status;
       if (dto.status === 'VISITED') stop.visitedAt = new Date();
       if (dto.status === 'VISITING' && !stop.visitedAt) stop.visitedAt = new Date();
     }
     if (dto.actualSpent != null) stop.actualSpent = String(dto.actualSpent);
+    if (dto.budgetEstimate != null) stop.budgetEstimate = String(dto.budgetEstimate);
     if (dto.notes !== undefined) stop.notes = dto.notes;
     if (dto.arrivalTime !== undefined) stop.arrivalTime = dto.arrivalTime;
     if (dto.durationMinutes !== undefined) stop.durationMinutes = dto.durationMinutes;
     await this.stopsRepo.save(stop);
+    if (fromDayId !== toDayId) {
+      await this.recalcDayDistances(fromDayId);
+    }
+    await this.recalcDayDistances(toDayId);
     await this.tripsService.recalculateBudget(tripId);
     return this.getStop(stopId, userId);
   }
@@ -99,10 +121,15 @@ export class TripStopsService {
 
   async reorder(tripId: string, userId: string, dto: ReorderStopsDto) {
     await this.permissions.assertCan(tripId, userId, 'edit_stops');
+    const dayIds = new Set<string>();
     for (const item of dto.stops) {
       const stop = await this.findStopInTrip(tripId, item.id);
+      dayIds.add(stop.tripDayId);
       stop.orderIndex = item.orderIndex;
       await this.stopsRepo.save(stop);
+    }
+    for (const dayId of dayIds) {
+      await this.recalcDayDistances(dayId);
     }
     return { ok: true };
   }
@@ -111,24 +138,22 @@ export class TripStopsService {
     const stop = await this.findStopInTrip(tripId, stopId);
     const result = await this.updateStop(tripId, stopId, userId, { status: 'VISITING' });
 
-    if (stop.locationId) {
-      const lat = stop.location
-        ? Number(stop.location.latitude)
-        : stop.customLatitude
-          ? Number(stop.customLatitude)
-          : null;
-      const lng = stop.location
-        ? Number(stop.location.longitude)
-        : stop.customLongitude
-          ? Number(stop.customLongitude)
-          : null;
-      if (lat != null && lng != null) {
-        await this.checkinsService.recordFromTripStop(
-          userId,
-          stop.locationId,
-          lat,
-          lng,
-        );
+    const lat = stop.location
+      ? Number(stop.location.latitude)
+      : stop.customLatitude
+        ? Number(stop.customLatitude)
+        : null;
+    const lng = stop.location
+      ? Number(stop.location.longitude)
+      : stop.customLongitude
+        ? Number(stop.customLongitude)
+        : null;
+
+    if (lat != null && lng != null) {
+      const locationId =
+        stop.locationId ?? (await this.findNearestLocationId(lat, lng, 0.08));
+      if (locationId) {
+        await this.checkinsService.recordFromTripStop(userId, locationId, lat, lng);
       }
     }
 
@@ -160,6 +185,38 @@ export class TripStopsService {
     });
     if (!stop || stop.tripDay?.tripId !== tripId) throw new NotFoundException('Stop not found');
     return stop;
+  }
+
+  /** Nearest ACTIVE location within radiusKm (default ~80 m for check-in). */
+  private async findNearestLocationId(
+    lat: number,
+    lng: number,
+    radiusKm: number,
+  ): Promise<string | null> {
+    const delta = radiusKm / 111;
+    const rows = await this.locationsRepo
+      .createQueryBuilder('l')
+      .where('l.status = :status', { status: 'ACTIVE' })
+      .andWhere('l.latitude BETWEEN :minLat AND :maxLat', {
+        minLat: lat - delta,
+        maxLat: lat + delta,
+      })
+      .andWhere('l.longitude BETWEEN :minLng AND :maxLng', {
+        minLng: lng - delta,
+        maxLng: lng + delta,
+      })
+      .getMany();
+
+    let bestId: string | null = null;
+    let bestKm = radiusKm;
+    for (const loc of rows) {
+      const km = haversineKm(lat, lng, Number(loc.latitude), Number(loc.longitude));
+      if (km <= radiusKm && km < bestKm) {
+        bestKm = km;
+        bestId = loc.id;
+      }
+    }
+    return bestId;
   }
 
   private async recalcDayDistances(dayId: string) {

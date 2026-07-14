@@ -1,16 +1,20 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { LocationNameLabel } from '@/src/components/locations/LocationNameLabel';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useI18n } from '@/src/i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { TripRecommendationDto } from '@/src/types/trip';
 
 type TripRecommendationsPanelProps = {
   items: TripRecommendationDto[];
   loading: boolean;
+  onAdd?: (item: TripRecommendationDto) => void;
+  onDismiss?: (item: TripRecommendationDto) => void;
 };
 
-export function TripRecommendationsPanel({ items, loading }: TripRecommendationsPanelProps) {
+export function TripRecommendationsPanel({ items, loading, onAdd, onDismiss }: TripRecommendationsPanelProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
@@ -20,7 +24,7 @@ export function TripRecommendationsPanel({ items, loading }: TripRecommendations
     return (
       <View style={[styles.panel, { borderColor: border, backgroundColor: card }]}>
         <ActivityIndicator color={tint} />
-        <ThemedText style={{ color: muted, textAlign: 'center' }}>Đang tải gợi ý…</ThemedText>
+        <ThemedText style={{ color: muted, textAlign: 'center' }}>{t('tripRecsLoading')}</ThemedText>
       </View>
     );
   }
@@ -30,7 +34,7 @@ export function TripRecommendationsPanel({ items, loading }: TripRecommendations
       <View style={[styles.panel, { borderColor: border, backgroundColor: card }]}>
         <IconSymbol name="star.fill" size={22} color={muted} />
         <ThemedText style={{ color: muted, textAlign: 'center' }}>
-          Chưa có gợi ý. Nhấn Làm mới gợi ý để nhận địa điểm phù hợp.
+          {t('tripRecsEmpty')}
         </ThemedText>
       </View>
     );
@@ -47,12 +51,21 @@ export function TripRecommendationsPanel({ items, loading }: TripRecommendations
               name={r.location.name}
               locationType={r.location.locationType}
               variant="list"
-              subtitle={`${r.distanceKm != null ? `${r.distanceKm.toFixed(1)} km · ` : ''}Phù hợp ${(r.score * 100).toFixed(0)}%`}
+              subtitle={`${r.distanceKm != null ? `${r.distanceKm.toFixed(1)} km · ` : ''}${t('tripRecFitScore', { percent: (r.score * 100).toFixed(0) })}`}
             />
           </View>
           {r.isAdded ? (
-            <ThemedText style={{ color: tint, fontSize: 11, fontWeight: '700' }}>Đã thêm</ThemedText>
-          ) : null}
+            <ThemedText style={{ color: tint, fontSize: 11, fontWeight: '700' }}>{t('tripAddedStop')}</ThemedText>
+          ) : (
+            <View style={styles.actionRow}>
+              <Pressable onPress={() => onAdd?.(r)}>
+                <ThemedText style={{ color: tint, fontWeight: '700', fontSize: 12 }}>Them</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => onDismiss?.(r)}>
+                <ThemedText style={{ color: '#c62828', fontWeight: '700', fontSize: 12 }}>Bo qua</ThemedText>
+              </Pressable>
+            </View>
+          )}
         </View>
       ))}
     </View>
@@ -73,4 +86,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   itemBody: { flex: 1, minWidth: 0 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

@@ -82,6 +82,7 @@ export function useArrivalCheckInPrompt(options: {
           },
         },
       ],
+      { cancelable: true, onDismiss: () => { promptingRef.current = false; } },
     );
   }, [enabled, tripId, nextStop, routeStops, userCoords, language]);
 }

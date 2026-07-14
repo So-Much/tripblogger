@@ -59,7 +59,7 @@ export function CheckoutScreen() {
   const couponsAvailQ = useQuery({
     queryKey: ['commerce', 'coupons', 'available', sub],
     queryFn: () => commerceService.listAvailableCoupons(sub),
-    enabled: sub > 0,
+    enabled: isMember && sub > 0,
   });
 
   const ship = sub >= FREE_SHIP ? 0 : SHIP_FEE;
@@ -76,22 +76,25 @@ export function CheckoutScreen() {
   const productIds = useMemo(() => (cartQ.data?.items ?? []).map((i) => i.productId), [cartQ.data?.items]);
 
   const validateCoupon = useMutation({
-    mutationFn: () =>
+    mutationFn: (codeInput?: string) =>
       commerceService.validateCoupon({
-        code: coupon.trim(),
+        code: (codeInput ?? coupon).trim(),
         cartSubTotal: sub,
         categoryIds,
         productIds,
       }),
-    onSuccess: (r) => {
+    onSuccess: (r, codeInput) => {
+      const appliedCode = (codeInput ?? coupon).trim().toUpperCase();
+      if (codeInput) setCoupon(codeInput);
       if (r.valid && r.discountAmount != null) {
         setAppliedDiscount(r.discountAmount);
-        setHighlightCoupon(coupon.trim().toUpperCase());
+        setHighlightCoupon(appliedCode);
         return;
       }
       setAppliedDiscount(0);
-      Alert.alert('Coupon', r.reason ?? 'Invalid');
+      Alert.alert(t('couponCode'), r.reason ?? t('couponInvalid'));
     },
+    onError: (e) => Alert.alert(t('couponCode'), formatApiError(e, t('couponInvalid'))),
   });
 
   const checkout = useMutation({
@@ -169,6 +172,8 @@ export function CheckoutScreen() {
             </Pressable>
           </>
         )}
+        {!isGuest ? (
+          <>
         <ThemedText type="subtitle">{t('couponCode')}</ThemedText>
         <View style={styles.row}>
           <TextInput
@@ -179,7 +184,7 @@ export function CheckoutScreen() {
             }}
             style={[styles.inp, { borderColor: border, color: text, flex: 1 }]}
           />
-          <PressableScale onPress={() => validateCoupon.mutate()} style={[styles.apply, { borderColor: border }]}>
+          <PressableScale onPress={() => validateCoupon.mutate(undefined)} style={[styles.apply, { borderColor: border }]}>
             <ThemedText>{t('couponApply')}</ThemedText>
           </PressableScale>
         </View>
@@ -190,11 +195,7 @@ export function CheckoutScreen() {
               {couponsAvailQ.data.map((c) => (
                 <PressableScale
                   key={c.id}
-                  onPress={() => {
-                    setCoupon(c.code);
-                    setAppliedDiscount(0);
-                    setHighlightCoupon(c.code.toUpperCase());
-                  }}
+                  onPress={() => validateCoupon.mutate(c.code)}
                   style={[
                     styles.couponChip,
                     {
@@ -218,6 +219,8 @@ export function CheckoutScreen() {
             </ScrollView>
           </>
         ) : null}
+          </>
+        ) : null}
         <ThemedText type="subtitle">{t('noteOptional')}</ThemedText>
         <TextInput value={note} onChangeText={setNote} style={[styles.inp, { borderColor: border, color: text }]} />
         <ThemedText>
@@ -233,7 +236,9 @@ export function CheckoutScreen() {
         <ThemedText>
           {t('discountLabel')}: <PriceLabel amount={appliedDiscount} />
         </ThemedText>
-        <ThemedText type="title" style={{ marginTop: 8 }}>
+      </ScrollView>
+      <View style={[styles.footer, { borderColor: border }]}>
+        <ThemedText type="title">
           {t('totalLabel')}: <PriceLabel amount={totalPreview} />
         </ThemedText>
         <ActionPulse pulseKey={orderPulse}>
@@ -253,14 +258,15 @@ export function CheckoutScreen() {
             )}
           </PressableScale>
         </ActionPulse>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  pad: { padding: 16, gap: 10, paddingBottom: 40 },
+  pad: { padding: 16, gap: 10, paddingBottom: 16 },
+  footer: { padding: 16, paddingBottom: 20, borderTopWidth: StyleSheet.hairlineWidth, gap: 12 },
   buyNowBanner: { padding: 12, borderRadius: 12, borderWidth: 1, gap: 4, marginBottom: 4 },
   addr: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 8 },
   small: { fontSize: 12, opacity: 0.75, marginTop: 4 },

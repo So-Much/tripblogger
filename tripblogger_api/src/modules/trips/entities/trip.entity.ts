@@ -54,6 +54,9 @@ export class TripEntity {
   @Column({ name: 'is_public', default: false })
   isPublic!: boolean;
 
+  @Column({ name: 'is_favorite', default: false })
+  isFavorite!: boolean;
+
   @Column({ name: 'cover_media_id', type: 'uniqueidentifier', nullable: true })
   coverMediaId!: string | null;
 

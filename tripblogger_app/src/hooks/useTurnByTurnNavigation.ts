@@ -19,7 +19,7 @@ export type NavDestination = {
   name?: string;
 };
 
-const ARRIVE_RADIUS_M = 35;
+const ARRIVE_RADIUS_M = 80;
 const REROUTE_OFF_ROUTE_M = 70;
 const REROUTE_COOLDOWN_MS = 20_000;
 

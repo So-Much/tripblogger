@@ -45,6 +45,8 @@ export function ShopScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const isMember = meQuery.data?.role === 'MEMBER';
+  const hasSession = Boolean(meQuery.data);
+  const userRole = meQuery.data?.role;
   const currentUserId = meQuery.data?.id ?? null;
 
   useEffect(() => {
@@ -103,7 +105,7 @@ export function ShopScreen() {
   const cartCountQuery = useQuery({
     queryKey: ['commerce', 'cart'],
     queryFn: () => commerceService.getCart(),
-    enabled: isMember,
+    enabled: hasSession,
     staleTime: 30_000,
   });
 
@@ -137,14 +139,14 @@ export function ShopScreen() {
             hitSlop={headerHitSlop}
             accessibilityRole="button"
             accessibilityLabel={
-              isMember && (cartCountQuery.data?.itemCount ?? 0) > 0
+              hasSession && (cartCountQuery.data?.itemCount ?? 0) > 0
                 ? t('cartBadgeA11y', { count: cartCountQuery.data?.itemCount ?? 0 })
                 : t('cartTitle')
             }
             onPress={() => router.push('/(tabs)/shop/cart')}
             style={styles.cartWrap}>
             <IconSymbol name="cart.fill" size={22} color={tint} />
-            {isMember && (cartCountQuery.data?.itemCount ?? 0) > 0 ? (
+            {hasSession && (cartCountQuery.data?.itemCount ?? 0) > 0 ? (
               <View style={[styles.cartBadge, { backgroundColor: danger }]}>
                 <ThemedText style={styles.cartBadgeTxt}>
                   {(cartCountQuery.data?.itemCount ?? 0) > 99 ? '99+' : String(cartCountQuery.data?.itemCount)}
@@ -155,7 +157,7 @@ export function ShopScreen() {
         </View>
       ),
     });
-  }, [navigation, router, tint, danger, t, isMember, cartCountQuery.data?.itemCount]);
+  }, [navigation, router, tint, danger, t, hasSession, cartCountQuery.data?.itemCount]);
 
   const onEndReached = useCallback(() => {
     if (productsQuery.hasNextPage && !productsQuery.isFetchingNextPage) {
@@ -165,9 +167,9 @@ export function ShopScreen() {
 
   const onProductAction = useCallback(
     (action: 'cart' | 'buy' | 'wish', product: ProductDto) => {
-      quickActions.run(action, product.id, isMember);
+      quickActions.run(action, product.id, userRole);
     },
-    [isMember, quickActions],
+    [userRole, quickActions],
   );
 
   const listHeader = (
@@ -245,8 +247,8 @@ export function ShopScreen() {
           onAddToCart={(p) => onProductAction('cart', p)}
           onToggleWishlist={(p) => onProductAction('wish', p)}
           wishlistedIds={wishlistIdsQuery.data}
-          cartQtyByProductId={isMember ? cartQtyByProductId : undefined}
-          actionsDisabled={!isMember}
+          cartQtyByProductId={hasSession ? cartQtyByProductId : undefined}
+          wishlistDisabled={!isMember}
           pendingProductId={quickActions.pending?.productId ?? null}
           pendingAction={quickActions.pending?.action ?? null}
           currentUserId={currentUserId}

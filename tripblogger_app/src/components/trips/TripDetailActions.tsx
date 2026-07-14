@@ -2,6 +2,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { useI18n } from '@/src/i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { TripStatus } from '@/src/types/trip';
 
@@ -16,6 +17,8 @@ type TripDetailActionsProps = {
   onComplete: () => void;
   onToggleRecommendations: () => void;
   onRefreshRecommendations: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 };
 
 export function TripDetailActions({
@@ -29,7 +32,10 @@ export function TripDetailActions({
   onComplete,
   onToggleRecommendations,
   onRefreshRecommendations,
+  onDuplicate,
+  onDelete,
 }: TripDetailActionsProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const tint = useThemeColor({}, 'tint');
@@ -53,7 +59,7 @@ export function TripDetailActions({
             <>
               <IconSymbol name="location.fill" size={20} color={onCta} />
               <ThemedText type="defaultSemiBold" style={{ color: onCta }}>
-                Bắt đầu chuyến đi
+                {t('tripStartTripFull')}
               </ThemedText>
             </>
           )}
@@ -67,7 +73,7 @@ export function TripDetailActions({
             onPress={onNavigateNext}>
             <IconSymbol name="mappin.circle.fill" size={18} color={tint} />
             <ThemedText style={styles.secondaryLabel} numberOfLines={1}>
-              Chỉ đường tiếp theo
+              {t('tripDirectionsNext')}
             </ThemedText>
           </PressableScale>
         ) : null}
@@ -77,7 +83,7 @@ export function TripDetailActions({
             style={[styles.secondaryBtn, { borderColor: border, backgroundColor: card }]}
             onPress={onComplete}>
             <IconSymbol name="checkmark.circle.fill" size={18} color={tint} />
-            <ThemedText style={styles.secondaryLabel}>Kết thúc</ThemedText>
+            <ThemedText style={styles.secondaryLabel}>{t('tripEndTrip')}</ThemedText>
           </PressableScale>
         ) : null}
 
@@ -89,7 +95,7 @@ export function TripDetailActions({
           onPress={onToggleRecommendations}>
           <IconSymbol name="star.fill" size={18} color={showRecommendations ? tint : muted} />
           <ThemedText style={[styles.secondaryLabel, showRecommendations ? { color: tint } : undefined]}>
-            Gợi ý
+            {t('tripRecommendations')}
           </ThemedText>
         </PressableScale>
       </View>
@@ -103,11 +109,25 @@ export function TripDetailActions({
             <ActivityIndicator color={tint} size="small" />
           ) : (
             <ThemedText style={{ color: tint, fontWeight: '600', fontSize: 14 }}>
-              Làm mới gợi ý địa điểm
+              {t('tripRecsRefresh')}
             </ThemedText>
           )}
         </PressableScale>
       ) : null}
+      <View style={styles.secondaryRow}>
+        <PressableScale
+          style={[styles.secondaryBtn, { borderColor: border, backgroundColor: card }]}
+          onPress={onDuplicate}>
+          <IconSymbol name="plus.circle.fill" size={18} color={tint} />
+          <ThemedText style={styles.secondaryLabel}>Nhan ban</ThemedText>
+        </PressableScale>
+        <PressableScale
+          style={[styles.secondaryBtn, { borderColor: border, backgroundColor: card }]}
+          onPress={onDelete}>
+          <IconSymbol name="trash.fill" size={18} color="#c62828" />
+          <ThemedText style={[styles.secondaryLabel, { color: '#c62828' }]}>Xoa trip</ThemedText>
+        </PressableScale>
+      </View>
     </View>
   );
 }

@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAndroidBack } from '@/src/hooks/useAndroidBack';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { safeRouterBack } from '@/src/utils/safe-router-back';
 import type { CategoryDto } from '@/src/types/commerce';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 
@@ -30,6 +33,7 @@ export function ProductEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useI18n();
   const router = useRouter();
+  const navigation = useNavigation();
   const qc = useQueryClient();
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
@@ -44,6 +48,24 @@ export function ProductEditScreen() {
   });
 
   const cats = useQuery({ queryKey: ['commerce', 'categories'], queryFn: () => commerceService.listCategories() });
+  const verifyQ = useQuery({
+    queryKey: ['commerce', 'seller-verification'],
+    queryFn: () => commerceService.getVerificationStatus(),
+  });
+  const isVerified = verifyQ.data?.status === 'APPROVED';
+
+  const goVerify = () => router.push('/(tabs)/shop/seller-verify');
+
+  const tryPublish = () => {
+    if (!isVerified) {
+      Alert.alert(t('sellerVerifyRequiredTitle'), t('sellerVerifyRequiredBody'), [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('sellerVerifyCta'), onPress: goVerify },
+      ]);
+      return;
+    }
+    publish.mutate();
+  };
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -73,6 +95,70 @@ export function ProductEditScreen() {
     );
   }, [productQ.data]);
 
+  const initialSnapshot = useMemo(() => {
+    if (!productQ.data) return null;
+    const p = productQ.data;
+    return {
+      title: p.title,
+      description: stripHtml(p.description),
+      price: String(p.price),
+      stock: String(p.stock),
+      categoryId: p.categoryId,
+      productType: p.productType,
+      mediaUrl: p.media?.[0]?.url ?? '',
+    };
+  }, [productQ.data]);
+
+  const isDirty = useMemo(() => {
+    if (!initialSnapshot) return false;
+    return (
+      title.trim() !== initialSnapshot.title.trim() ||
+      description.trim() !== initialSnapshot.description.trim() ||
+      price.trim() !== initialSnapshot.price.trim() ||
+      stock.trim() !== initialSnapshot.stock.trim() ||
+      categoryId !== initialSnapshot.categoryId ||
+      productType !== initialSnapshot.productType ||
+      (media[0]?.url ?? '') !== initialSnapshot.mediaUrl
+    );
+  }, [initialSnapshot, title, description, price, stock, categoryId, productType, media]);
+
+  const leaveScreen = useCallback(() => {
+    safeRouterBack(router, '/(tabs)/shop/my-products');
+  }, [router]);
+
+  const requestClose = useCallback(() => {
+    if (!isDirty) {
+      leaveScreen();
+      return;
+    }
+    Alert.alert(t('unsavedProfileTitle'), t('unsavedProfileMessage'), [
+      { text: t('continueEditingProfile'), style: 'cancel' },
+      {
+        text: t('discardProfileChanges'),
+        style: 'destructive',
+        onPress: leaveScreen,
+      },
+    ]);
+  }, [isDirty, leaveScreen, t]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable onPress={requestClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('backHome')}>
+          <IconSymbol name="chevron.left" size={24} color={tint} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, requestClose, tint, t]);
+
+  useAndroidBack(() => {
+    if (isDirty) {
+      requestClose();
+      return true;
+    }
+    return false;
+  });
+
   const save = useMutation({
     mutationFn: () =>
       commerceService.updateProduct(String(id), {
@@ -86,9 +172,9 @@ export function ProductEditScreen() {
       }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['commerce'] });
-      router.back();
+      leaveScreen();
     },
-    onError: (e) => Alert.alert('Error', formatApiError(e, 'Failed')),
+    onError: (e) => Alert.alert(t('errorTitle'), formatApiError(e, t('locationErrorGeneric'))),
   });
 
   const publish = useMutation({
@@ -108,7 +194,7 @@ export function ProductEditScreen() {
       void qc.invalidateQueries({ queryKey: ['commerce'] });
       router.replace(`/(tabs)/shop/${p.id}` as Href);
     },
-    onError: (e) => Alert.alert('Error', formatApiError(e, 'Failed')),
+    onError: (e) => Alert.alert(t('errorTitle'), formatApiError(e, t('locationErrorGeneric'))),
   });
 
   const remove = useMutation({
@@ -117,7 +203,7 @@ export function ProductEditScreen() {
       void qc.invalidateQueries({ queryKey: ['commerce'] });
       router.replace('/(tabs)/shop/my-products' as Href);
     },
-    onError: (e) => Alert.alert('Error', formatApiError(e, 'Failed')),
+    onError: (e) => Alert.alert(t('errorTitle'), formatApiError(e, t('locationErrorGeneric'))),
   });
 
   const pick = async () => {
@@ -186,7 +272,7 @@ export function ProductEditScreen() {
         </View>
         <ThemedText type="subtitle">{t('productPrice')}</ThemedText>
         <TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" style={[styles.inp, { borderColor: border, color: text }]} />
-        <ThemedText type="subtitle">Stock</ThemedText>
+        <ThemedText type="subtitle">{t('productStock')}</ThemedText>
         <TextInput value={stock} onChangeText={setStock} keyboardType="number-pad" style={[styles.inp, { borderColor: border, color: text }]} />
         <View style={styles.row}>
           <Pressable onPress={() => setProductType('NEW')} style={[styles.chip, { borderColor: productType === 'NEW' ? tint : border }]}>
@@ -216,7 +302,7 @@ export function ProductEditScreen() {
           <PressableScale
             style={[styles.cta, { backgroundColor: success, marginTop: 10 }]}
             disabled={publish.isPending || !categoryId || !title.trim() || !media[0]}
-            onPress={() => publish.mutate()}>
+            onPress={tryPublish}>
             <ThemedText style={[styles.ctaTxt, { color: onCta }]}>{t('productPublish')}</ThemedText>
           </PressableScale>
         ) : null}

@@ -11,11 +11,13 @@ import { TripStatsRow } from '@/src/components/trips/TripStatsRow';
 import { TripStatusBadge } from '@/src/components/trips/TripStatusBadge';
 import { TripStopTimeline } from '@/src/components/trips/TripStopTimeline';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useI18n } from '@/src/i18n';
 import { tripsService } from '@/src/services/api/trips.service';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { formatTripDate } from '@/src/utils/trip-display';
 
 export function TripDayScreen() {
+  const { t } = useI18n();
   const { id, dayId } = useLocalSearchParams<{ id: string; dayId: string }>();
   const tripId = String(id);
   const dayIdStr = String(dayId);
@@ -54,7 +56,7 @@ export function TripDayScreen() {
       setCustomName('');
       invalidate();
     },
-    onError: (e) => Alert.alert('Lỗi', formatApiError(e, 'Không thêm được điểm dừng')),
+    onError: (e) => Alert.alert(t('errorTitle'), formatApiError(e, t('tripAddStopFailed'))),
   });
 
   const stopAction = useMutation({
@@ -63,7 +65,7 @@ export function TripDayScreen() {
         ? tripsService.checkinStop(tripId, stopId)
         : tripsService.completeStop(tripId, stopId),
     onSuccess: invalidate,
-    onError: (e) => Alert.alert('Lỗi', formatApiError(e, 'Không cập nhật điểm dừng')),
+    onError: (e) => Alert.alert(t('errorTitle'), formatApiError(e, t('tripStopUpdateFailed'))),
   });
 
   const day = dayQuery.data;
@@ -83,7 +85,7 @@ export function TripDayScreen() {
             </View>
             <View style={styles.dayHeroText}>
               <ThemedText type="subtitle" style={styles.dayTitle}>
-                {day.title ?? `Ngày ${day.dayNumber}`}
+                {day.title ?? t('tripDayLabel', { number: day.dayNumber })}
               </ThemedText>
               <ThemedText style={{ color: muted, fontSize: 14 }}>{formatTripDate(day.date)}</ThemedText>
               {day.theme ? (
@@ -96,7 +98,7 @@ export function TripDayScreen() {
           <TripStatsRow days={[day]} showProgress={isActive} />
 
           <ThemedText type="defaultSemiBold" style={styles.sectionLabel}>
-            Điểm dừng
+            {t('tripStopsSection')}
           </ThemedText>
 
           <TripStopTimeline
@@ -109,13 +111,13 @@ export function TripDayScreen() {
           <View style={[styles.addSection, { borderColor: border, backgroundColor: card }]}>
             <View style={styles.addHeader}>
               <IconSymbol name="plus.circle.fill" size={22} color={tint} />
-              <ThemedText type="defaultSemiBold">Thêm điểm dừng</ThemedText>
+              <ThemedText type="defaultSemiBold">{t('tripAddStopTitle')}</ThemedText>
             </View>
             <ThemedText style={{ color: muted, fontSize: 13, marginBottom: 4 }}>
-              Nhập tên địa điểm tùy chỉnh (có thể gắn bản đồ sau).
+              {t('tripAddStopHint')}
             </ThemedText>
             <ThemedTextInput
-              placeholder="VD: Quán cà phê view biển"
+              placeholder={t('tripAddStopPlaceholder')}
               value={customName}
               onChangeText={setCustomName}
               returnKeyType="done"
@@ -129,7 +131,7 @@ export function TripDayScreen() {
                 <ActivityIndicator color={onCta} />
               ) : (
                 <ThemedText type="defaultSemiBold" style={{ color: onCta }}>
-                  Thêm vào ngày này
+                  {t('tripAddStopToDay')}
                 </ThemedText>
               )}
             </PressableScale>

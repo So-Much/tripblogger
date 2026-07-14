@@ -3,7 +3,10 @@ import type { LocationTypeRef } from '@/src/utils/location-type-display';
 export type TripPlannerFilters = {
   /** Selected location type codes (multi-select). Empty/undefined = all types. */
   typeCodes?: string[];
-  sort: 'rating' | 'popularity';
+  sort: 'rating' | 'popularity' | 'distance';
+  radiusKm?: number;
+  minRating?: number;
+  keyword?: string;
 };
 
 export type PlannerStop = {

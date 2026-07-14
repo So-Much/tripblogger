@@ -68,7 +68,7 @@ export class TripsService {
         destinationName: dto.destinationName ?? null,
         startDate: dto.startDate,
         endDate: dto.endDate,
-        status: 'DRAFT',
+        status: 'PLANNING',
         isPublic: dto.isPublic ?? false,
         totalBudget: dto.totalBudget != null ? String(dto.totalBudget) : null,
       }),
@@ -100,6 +100,7 @@ export class TripsService {
       .skip((page - 1) * limit)
       .take(limit);
     if (query.status) qb.andWhere('t.status = :status', { status: query.status });
+    if (query.favorite === true) qb.andWhere('t.isFavorite = :favorite', { favorite: true });
     const [items, total] = await qb.getManyAndCount();
     return { items: items.map((t) => mapTrip(t, false)), total, page, limit };
   }
@@ -149,6 +150,7 @@ export class TripsService {
       endDate: dto.endDate ?? trip.endDate,
       totalBudget: dto.totalBudget != null ? String(dto.totalBudget) : trip.totalBudget,
       isPublic: dto.isPublic ?? trip.isPublic,
+      isFavorite: dto.isFavorite ?? trip.isFavorite,
       notes: dto.notes !== undefined ? dto.notes : trip.notes,
     });
     await this.tripsRepo.save(trip);
@@ -179,6 +181,29 @@ export class TripsService {
 
     if (hasStopsOnRemoved && dto.shrinkPolicy === 'delete_orphan_stops') {
       for (const day of removed) {
+        await this.daysRepo.remove(day);
+      }
+    }
+    if (hasStopsOnRemoved && dto.shrinkPolicy === 'move_to_previous_day') {
+      const kept = existingDays.filter((d) => newDates.includes(d.date)).sort((a, b) => a.dayNumber - b.dayNumber);
+      const fallbackDay = kept[kept.length - 1];
+      if (!fallbackDay) {
+        throw new BadRequestException('No remaining day to move stops into');
+      }
+      const maxRow = await this.stopsRepo
+        .createQueryBuilder('s')
+        .select('MAX(s.order_index)', 'max')
+        .where('s.trip_day_id = :dayId', { dayId: fallbackDay.id })
+        .getRawOne<{ max: number | null }>();
+      let nextOrder = Number(maxRow?.max ?? 0) + 1000;
+      for (const day of removed) {
+        const stops = (day.stops ?? []).sort((a, b) => a.orderIndex - b.orderIndex);
+        for (const stop of stops) {
+          stop.tripDayId = fallbackDay.id;
+          stop.orderIndex = nextOrder;
+          nextOrder += 1000;
+          await this.stopsRepo.save(stop);
+        }
         await this.daysRepo.remove(day);
       }
     }
@@ -251,6 +276,36 @@ export class TripsService {
     });
   }
 
+  async getTripJournal(tripId: string, userId: string) {
+    await this.permissions.assertCan(tripId, userId, 'view');
+    const trip = await this.loadTripFull(tripId);
+    if (!trip) throw new NotFoundException('Trip not found');
+    const linkedPosts = await this.tripsRepo.manager.query(
+      `SELECT tp.post_id AS postId, tp.linked_at AS linkedAt, p.title AS title
+       FROM trip_posts tp
+       INNER JOIN posts p ON p.id = tp.post_id
+       WHERE tp.trip_id = @0
+       ORDER BY tp.linked_at DESC`,
+      [tripId],
+    );
+    const days = (trip.days ?? []).sort((a, b) => a.dayNumber - b.dayNumber).map((day) => ({
+      id: day.id,
+      dayNumber: day.dayNumber,
+      date: day.date,
+      stops: (day.stops ?? [])
+        .filter((s) => s.status === 'VISITED' || s.status === 'VISITING')
+        .sort((a, b) => a.orderIndex - b.orderIndex)
+        .map((s) => ({
+          stopId: s.id,
+          name: s.location?.name ?? s.customName ?? 'Stop',
+          status: s.status,
+          visitedAt: s.visitedAt,
+        })),
+      posts: linkedPosts,
+    }));
+    return { tripId, days };
+  }
+
   async recalculateBudget(tripId: string) {
     const stops = await this.tripsRepo.manager.query(
       `SELECT COALESCE(SUM(actual_spent), 0) AS stopSpent,
@@ -295,15 +350,6 @@ export class TripsService {
       await this.bootstrapStopsFromRecommendationsOrAccommodation(tripId, days);
     }
 
-    const visiting = await this.stopsRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.tripDay', 'd')
-      .where('d.trip_id = :tripId', { tripId })
-      .andWhere('s.status = :status', { status: 'VISITING' })
-      .getCount();
-    if (visiting === 0) {
-      await this.checkinFirstPlannedStop(tripId);
-    }
   }
 
   private async bootstrapStopsFromRecommendationsOrAccommodation(
@@ -347,21 +393,6 @@ export class TripsService {
         }),
       );
     }
-  }
-
-  private async checkinFirstPlannedStop(tripId: string) {
-    const firstStop = await this.stopsRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.tripDay', 'd')
-      .where('d.trip_id = :tripId', { tripId })
-      .andWhere('s.status = :status', { status: 'PLANNED' })
-      .orderBy('d.day_number', 'ASC')
-      .addOrderBy('s.order_index', 'ASC')
-      .getOne();
-    if (!firstStop) return;
-    firstStop.status = 'VISITING';
-    firstStop.visitedAt = new Date();
-    await this.stopsRepo.save(firstStop);
   }
 
   private async generateDays(tripId: string, start: string, end: string) {

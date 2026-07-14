@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter, type Href } from 'expo-router';
 import { Alert } from 'react-native';
+import type { RoleCode } from '@/src/types/auth';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import { formatApiError } from '@/src/utils/format-api-error';
@@ -42,7 +43,21 @@ export function useProductQuickActions(opts?: { onRequireMember?: () => void }) 
   });
 
   const buyNow = useMutation({
-    mutationFn: (productId: string) => prepareSingleItemCart(productId),
+    mutationFn: async (productId: string) => {
+      const cart = await commerceService.getCart();
+      const hasOtherItems =
+        cart.items.length > 0 &&
+        !(cart.items.length === 1 && cart.items[0]?.productId === productId);
+      if (hasOtherItems) {
+        await new Promise<void>((resolve, reject) => {
+          Alert.alert(t('buyNowClearCartTitle'), t('buyNowClearCartBody'), [
+            { text: t('cancel'), style: 'cancel', onPress: () => reject(new Error('CANCELLED')) },
+            { text: t('continueAction'), onPress: () => resolve() },
+          ]);
+        });
+      }
+      await prepareSingleItemCart(productId);
+    },
     onSuccess: () => {
       invalidateCart();
       router.push('/(tabs)/shop/checkout?buyNow=1' as Href);
@@ -89,8 +104,12 @@ export function useProductQuickActions(opts?: { onRequireMember?: () => void }) 
     return null;
   }, [addToCart.isPending, addToCart.variables, buyNow.isPending, buyNow.variables]);
 
-  const run = (action: ProductQuickAction, productId: string, canTransact: boolean) => {
-    if (!canTransact) {
+  const run = (action: ProductQuickAction, productId: string, role?: RoleCode) => {
+    if (!role) {
+      opts?.onRequireMember?.();
+      return;
+    }
+    if (action === 'wish' && role !== 'MEMBER') {
       opts?.onRequireMember?.();
       return;
     }

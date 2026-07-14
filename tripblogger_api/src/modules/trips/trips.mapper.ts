@@ -100,6 +100,7 @@ export function mapTrip(
     endDate: trip.endDate,
     status: trip.status,
     isPublic: trip.isPublic,
+    isFavorite: trip.isFavorite,
     totalBudget: trip.totalBudget ? Number(trip.totalBudget) : null,
     actualBudget: trip.actualBudget ? Number(trip.actualBudget) : null,
     notes: trip.notes,

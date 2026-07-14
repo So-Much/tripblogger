@@ -131,6 +131,14 @@ export class TripsController {
     return this.tripsService.getTripDetail(tripId, req.user.sub);
   }
 
+  @Get(':tripId/journal')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  journal(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
+    return this.tripsService.getTripJournal(tripId, req.user.sub);
+  }
+
   @Patch(':tripId')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')

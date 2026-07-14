@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import type { NavDestination } from '@/src/hooks/useTurnByTurnNavigation';
 import type { useTurnByTurnNavigation } from '@/src/hooks/useTurnByTurnNavigation';
+import { translate } from '@/src/i18n';
+import { useSettingsStore } from '@/src/store/settings.store';
 import { openDirectionsTo, openGoogleMapsTo } from '@/src/utils/open-directions';
 
 type NavigationApi = Pick<
@@ -30,7 +32,11 @@ export function useDirectionsLauncher(navigation: NavigationApi) {
     try {
       await navigation.startNavigation(pendingDest);
     } catch {
-      Alert.alert('Không bắt đầu chỉ đường', 'Thử lại sau.');
+      const language = useSettingsStore.getState().language;
+      Alert.alert(
+        translate(language, 'tripDirectionsFailed'),
+        translate(language, 'locationErrorGeneric'),
+      );
     } finally {
       launchingRef.current = false;
     }
@@ -46,7 +52,8 @@ export function useDirectionsLauncher(navigation: NavigationApi) {
         origin ?? undefined,
       );
     } catch {
-      Alert.alert('Không mở được bản đồ', 'Thử lại sau.');
+      const language = useSettingsStore.getState().language;
+      Alert.alert(translate(language, 'tripMapOpenFailed'), translate(language, 'locationErrorGeneric'));
     }
   }, [navigation.livePosition, pendingDest]);
 
@@ -60,7 +67,11 @@ export function useDirectionsLauncher(navigation: NavigationApi) {
         origin ?? undefined,
       );
     } catch {
-      Alert.alert('Không mở được Google Maps', 'Thử lại sau.');
+      const language = useSettingsStore.getState().language;
+      Alert.alert(
+        translate(language, 'tripGoogleMapsOpenFailed'),
+        translate(language, 'locationErrorGeneric'),
+      );
     }
   }, [navigation.livePosition, pendingDest]);
 

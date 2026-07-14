@@ -21,6 +21,8 @@ export function ShopSearchScreen() {
   const surface = useThemeColor({}, 'surface');
   const me = useMeQuery();
   const isMember = me.data?.role === 'MEMBER';
+  const hasSession = Boolean(me.data);
+  const userRole = me.data?.role;
 
   const requireMember = useCallback(() => {
     Alert.alert(t('tabShop'), t('shopMemberRequired'), [
@@ -45,7 +47,7 @@ export function ShopSearchScreen() {
   const cartCountQuery = useQuery({
     queryKey: ['commerce', 'cart'],
     queryFn: () => commerceService.getCart(),
-    enabled: isMember,
+    enabled: hasSession,
     staleTime: 30_000,
   });
 
@@ -74,9 +76,9 @@ export function ShopSearchScreen() {
 
   const onAction = useCallback(
     (action: 'cart' | 'buy' | 'wish', product: ProductDto) => {
-      quickActions.run(action, product.id, isMember);
+      quickActions.run(action, product.id, userRole);
     },
-    [isMember, quickActions],
+    [userRole, quickActions],
   );
 
   return (
@@ -90,7 +92,7 @@ export function ShopSearchScreen() {
       />
       {!isMember ? (
         <View style={[styles.loginPromptCard, { borderColor: border, backgroundColor: surface }]}>
-          <ThemedText style={styles.loginHint}>{t('shopMemberRequired')}</ThemedText>
+          <ThemedText style={styles.loginHint}>{t('shopWishlistMemberHint')}</ThemedText>
           <Pressable onPress={() => router.push('/login')} style={[styles.loginBtn, { borderColor: border }]}>
             <ThemedText type="link">{t('login')}</ThemedText>
           </Pressable>
@@ -114,7 +116,7 @@ export function ShopSearchScreen() {
               onToggleWishlist={() => onAction('wish', item)}
               isWishlisted={wishlistIdsQuery.data?.has(item.id)}
               inCartQty={cartQtyByProductId.get(item.id)}
-              actionsDisabled={!isMember}
+              wishlistDisabled={!isMember}
               pendingAction={
                 quickActions.pending?.productId === item.id ? quickActions.pending.action : null
               }

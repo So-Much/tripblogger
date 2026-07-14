@@ -5,14 +5,21 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PlanChipRow } from '@/src/components/trips/PlanChipRow';
 import { PlanNodeList } from '@/src/components/trips/PlanNodeList';
 import { PlanPanel } from '@/src/components/trips/PlanPanel';
+import { TripProgressTimeline } from '@/src/components/trips/TripProgressTimeline';
+import { useI18n } from '@/src/i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { TripDto } from '@/src/types/trip';
 import type { MapExplorePin, MapRouteStop } from '@/src/types/trip-map';
+import type { RouteLegSummary } from '@/src/types/trip-planner';
+
+export type TripHubSheetMode = 'collapsed' | 'compact' | 'expanded';
 
 type TripHubSheetProps = {
   plans: TripDto[];
   selectedTripId: string | null;
   activePlan: TripDto | null;
+  mode?: TripHubSheetMode;
+  onModeChange?: (mode: TripHubSheetMode) => void;
   pinnedLocation: MapExplorePin | null;
   cityHighlights: MapExplorePin[];
   nearbyProvinceHighlights: MapExplorePin[];
@@ -23,8 +30,8 @@ type TripHubSheetProps = {
   onCreatePlan: () => void;
   onSelectStop: (stop: MapRouteStop) => void;
   onRemoveStop: (stop: MapRouteStop) => void;
-  onMoveUp: (stop: MapRouteStop) => void;
-  onMoveDown: (stop: MapRouteStop) => void;
+  onReorderStops: (stops: { id: string; orderIndex: number }[]) => void;
+  legSummaries?: RouteLegSummary[];
   onRename: (title: string) => void;
   onChangeDates: (startDate: string, endDate: string) => void;
   onStatus: (status: TripDto['status']) => void;
@@ -35,6 +42,8 @@ export function TripHubSheet({
   plans,
   selectedTripId,
   activePlan,
+  mode: controlledMode,
+  onModeChange,
   pinnedLocation,
   cityHighlights,
   nearbyProvinceHighlights,
@@ -45,18 +54,25 @@ export function TripHubSheet({
   onCreatePlan,
   onSelectStop,
   onRemoveStop,
-  onMoveUp,
-  onMoveDown,
+  onReorderStops,
+  legSummaries = [],
   onRename,
   onChangeDates,
   onStatus,
   onAddRecommendation,
 }: TripHubSheetProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
   const tint = useThemeColor({}, 'tint');
-  const [mode, setMode] = useState<'collapsed' | 'compact' | 'expanded'>('expanded');
+  const [internalMode, setInternalMode] = useState<TripHubSheetMode>('expanded');
+  const mode = controlledMode ?? internalMode;
+  const updateMode = (next: TripHubSheetMode | ((prev: TripHubSheetMode) => TripHubSheetMode)) => {
+    const resolved = typeof next === 'function' ? next(mode) : next;
+    if (onModeChange) onModeChange(resolved);
+    else setInternalMode(resolved);
+  };
   const maxHeight = useMemo(() => {
     if (mode === 'collapsed') return 76;
     if (mode === 'compact') return 260;
@@ -68,17 +84,17 @@ export function TripHubSheet({
       <View style={styles.headerRow}>
         <View style={[styles.handle, { backgroundColor: muted }]} />
         <View style={styles.headerActions}>
-          <Pressable onPress={() => setMode((m) => (m === 'collapsed' ? 'compact' : 'collapsed'))} style={styles.iconBtn}>
-            <IconSymbol name={mode === 'collapsed' ? 'chevron.up' : 'chevron.down'} size={16} color={tint} />
+          <Pressable onPress={() => updateMode((m) => (m === 'collapsed' ? 'compact' : 'collapsed'))} style={styles.iconBtn}>
+            <IconSymbol name={mode === 'collapsed' ? 'chevron.right' : 'chevron.left'} size={16} color={tint} />
           </Pressable>
           <Pressable
-            onPress={() => setMode((m) => (m === 'expanded' ? 'compact' : 'expanded'))}
+            onPress={() => updateMode((m) => (m === 'expanded' ? 'compact' : 'expanded'))}
             style={styles.iconBtn}>
-            <IconSymbol name={mode === 'expanded' ? 'arrow.down.right.and.arrow.up.left' : 'arrow.up.left.and.arrow.down.right'} size={16} color={tint} />
+            <IconSymbol name="plus.circle.fill" size={16} color={tint} />
           </Pressable>
         </View>
       </View>
-      <ThemedText type="defaultSemiBold">Kế hoạch chuyến đi</ThemedText>
+      <ThemedText type="defaultSemiBold">{t('tripPlanTitle')}</ThemedText>
       {mode !== 'collapsed' ? (
         <>
           <PlanChipRow plans={plans} selectedTripId={selectedTripId} onSelect={onSelectPlan} onCreateNew={onCreatePlan} />
@@ -87,12 +103,24 @@ export function TripHubSheet({
             selectedStopId={selectedStopId}
             onSelectStop={onSelectStop}
             onRemoveStop={onRemoveStop}
-            onMoveUp={onMoveUp}
-            onMoveDown={onMoveDown}
+            onReorder={onReorderStops}
           />
+          {legSummaries.length > 0 ? (
+            <View style={styles.legSummaryRow}>
+              {legSummaries.slice(0, 3).map((leg) => (
+                <View key={`${leg.fromClientId}:${leg.toClientId}`} style={[styles.legChip, { borderColor: border }]}>
+                  <ThemedText style={[styles.legChipText, { color: muted }]}>
+                    {Math.round(leg.durationMin)}p · {leg.distanceKm.toFixed(1)}km
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {activePlan?.status === 'ACTIVE' ? <TripProgressTimeline stops={stops} /> : null}
           {mode === 'expanded' ? (
             <PlanPanel
               plan={activePlan}
+              stopCount={stops.length}
               pinnedLocation={pinnedLocation}
               cityHighlights={cityHighlights}
               nearbyProvinceHighlights={nearbyProvinceHighlights}
@@ -130,4 +158,7 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', gap: 8 },
   iconBtn: { padding: 4 },
+  legSummaryRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  legChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  legChipText: { fontSize: 11, fontWeight: '600' },
 });

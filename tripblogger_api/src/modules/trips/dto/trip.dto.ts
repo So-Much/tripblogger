@@ -48,6 +48,11 @@ export class CreateTripDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+
+  @IsOptional()
+  @IsBoolean()
+  isFavorite?: boolean;
 }
 
 export class UpdateTripDto {
@@ -80,6 +85,10 @@ export class UpdateTripDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isFavorite?: boolean;
 
   @IsOptional()
   @IsString()
@@ -120,6 +129,11 @@ export class QueryTripsDto {
   @Min(1)
   @Max(50)
   limit?: number;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  favorite?: boolean;
 }
 
 export class InviteMemberDto {
@@ -255,6 +269,14 @@ export class UpdateStopDto {
   @IsOptional()
   @Type(() => Number)
   durationMinutes?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  budgetEstimate?: number;
+
+  @IsOptional()
+  @IsUUID()
+  tripDayId?: string;
 }
 
 export class ReorderStopsDto {

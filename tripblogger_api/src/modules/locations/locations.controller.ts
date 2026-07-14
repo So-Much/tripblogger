@@ -61,6 +61,8 @@ export class LocationsController {
       query.limit ?? 30,
       query.typeCode,
       query.typeCodes,
+      query.minRating,
+      query.q,
     );
   }
 

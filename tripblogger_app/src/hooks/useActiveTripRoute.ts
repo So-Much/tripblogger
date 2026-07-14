@@ -5,6 +5,7 @@ import { tripsService } from '@/src/services/api/trips.service';
 import type { TripDto } from '@/src/types/trip';
 import type { MapRouteStop } from '@/src/types/trip-map';
 import { useTripsInProgress } from '@/src/hooks/useTripsInProgress';
+import { useTripRoutePolylines } from '@/src/hooks/useTripRoutePolylines';
 
 function flattenStops(trip: TripDto): MapRouteStop[] {
   const days = [...(trip.days ?? [])].sort((a, b) => a.dayNumber - b.dayNumber);
@@ -80,6 +81,20 @@ export function useActiveTripRoute(enabled = true) {
     () => routeStops.map((s) => ({ latitude: s.latitude, longitude: s.longitude })),
     [routeStops],
   );
+  const plannerStops = useMemo(
+    () =>
+      routeStops.map((s, index) => ({
+        clientId: s.id,
+        locationId: s.locationId,
+        name: s.name,
+        lat: s.latitude,
+        lng: s.longitude,
+        locationType: s.locationType ?? null,
+        role: (index === 0 ? 'start' : 'stop') as 'start' | 'stop',
+      })),
+    [routeStops],
+  );
+  const routed = useTripRoutePolylines(plannerStops);
 
   const nextStop = useMemo(() => pickNextStop(routeStops), [routeStops]);
 
@@ -94,6 +109,26 @@ export function useActiveTripRoute(enabled = true) {
       .slice(0, visitingIndex + 1)
       .map((s) => ({ latitude: s.latitude, longitude: s.longitude }));
   }, [routeStops, visitingIndex]);
+  const stopCoords = useMemo(
+    () =>
+      routeStops.map((s) => ({
+        id: s.id,
+        latitude: s.latitude,
+        longitude: s.longitude,
+      })),
+    [routeStops],
+  );
+  const completedPolylineRoute = useMemo(() => {
+    if (visitingIndex <= 0 || routed.polylineCoords.length < 2) return completedPolyline;
+    const cutoff = stopCoords[Math.min(visitingIndex, stopCoords.length - 1)];
+    const idx = routed.polylineCoords.findIndex(
+      (p) =>
+        p.latitude.toFixed(5) === cutoff.latitude.toFixed(5) &&
+        p.longitude.toFixed(5) === cutoff.longitude.toFixed(5),
+    );
+    if (idx < 0) return completedPolyline;
+    return routed.polylineCoords.slice(0, idx + 1);
+  }, [completedPolyline, routed.polylineCoords, stopCoords, visitingIndex]);
 
   const upcomingPolyline = useMemo(() => {
     if (visitingIndex >= 0) {
@@ -105,6 +140,19 @@ export function useActiveTripRoute(enabled = true) {
     }
     return polylineCoords;
   }, [polylineCoords, routeStops, visitingIndex]);
+  const upcomingPolylineRoute = useMemo(() => {
+    if (routed.polylineCoords.length < 2) return upcomingPolyline;
+    if (visitingIndex >= 0) {
+      const from = stopCoords[Math.min(visitingIndex, stopCoords.length - 1)];
+      const startIdx = routed.polylineCoords.findIndex(
+        (p) =>
+          p.latitude.toFixed(5) === from.latitude.toFixed(5) &&
+          p.longitude.toFixed(5) === from.longitude.toFixed(5),
+      );
+      return startIdx >= 0 ? routed.polylineCoords.slice(startIdx) : upcomingPolyline;
+    }
+    return routed.polylineCoords;
+  }, [routed.polylineCoords, stopCoords, upcomingPolyline, visitingIndex]);
 
   const visitedCount = useMemo(
     () => routeStops.filter((s) => s.status === 'VISITED').length,
@@ -116,7 +164,9 @@ export function useActiveTripRoute(enabled = true) {
     routeStops,
     polylineCoords,
     completedPolyline,
+    completedPolylineRoute,
     upcomingPolyline,
+    upcomingPolylineRoute,
     nextStop,
     visitedCount,
     isLoading: inProgress.isLoading || detailQuery.isLoading,

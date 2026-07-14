@@ -62,9 +62,11 @@ export const locationsService = {
     lat: number;
     lng: number;
     radiusKm?: number;
-    sort?: 'rating' | 'popularity';
+    sort?: 'rating' | 'popularity' | 'distance';
     typeCode?: string;
     typeCodes?: string[];
+    minRating?: number;
+    q?: string;
     limit?: number;
   }): Promise<NearbyLocationDto[]> {
     const { typeCodes, ...rest } = params;

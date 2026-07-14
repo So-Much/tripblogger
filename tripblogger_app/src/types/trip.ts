@@ -74,6 +74,7 @@ export type TripDto = {
   endDate: string;
   status: TripStatus;
   isPublic: boolean;
+  isFavorite?: boolean;
   totalBudget: number | null;
   actualBudget: number | null;
   days?: TripDayDto[];

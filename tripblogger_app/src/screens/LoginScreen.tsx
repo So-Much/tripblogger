@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { PasswordField } from '@/src/components/forms/PasswordField';
@@ -25,14 +25,13 @@ import { apiBaseUrl } from '@/src/services/api/client';
 import { signInWithGoogleIdToken } from '@/src/services/auth/google-auth';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
+import { clearSessionQueryCache } from '@/src/services/session/session-bootstrap.service';
 import { ensureDeviceId, persistAuthTokens } from '@/src/services/session/session.service';
 
-const loginSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+type LoginForm = {
+  username: string;
+  password: string;
+};
 
 export function LoginScreen() {
   const router = useRouter();
@@ -50,11 +49,20 @@ export function LoginScreen() {
   const textColor = useThemeColor({}, 'text');
   const onCta = useThemeColor({}, 'onCta');
 
+  const loginSchema = useMemo(
+    () =>
+      z.object({
+        username: z.string().min(3, t('authUsernameMin')),
+        password: z.string().min(8, t('authPasswordMin')),
+      }),
+    [t],
+  );
+
   const { control, handleSubmit } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: 'much',
-      password: '12345678',
+      username: '',
+      password: '',
     },
   });
 
@@ -62,6 +70,7 @@ export function LoginScreen() {
     setSubmitError(null);
     try {
       const deviceId = await ensureDeviceId();
+      clearSessionQueryCache();
       const tokens = await loginMutation.mutateAsync({ ...values, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
@@ -77,6 +86,7 @@ export function LoginScreen() {
     try {
       const idToken = await signInWithGoogleIdToken();
       const deviceId = await ensureDeviceId();
+      clearSessionQueryCache();
       const tokens = await googleLoginMutation.mutateAsync({ idToken, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
@@ -146,7 +156,10 @@ export function LoginScreen() {
               ) : null}
 
               <ActionPulse pulseKey={successPulse}>
-                <PressableScale style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
+                <PressableScale
+                  style={[styles.signInButton, { backgroundColor: cta }]}
+                  onPress={onSubmit}
+                  disabled={loginMutation.isPending || googleLoginMutation.isPending}>
                   <ThemedText type="defaultSemiBold" style={[styles.signInText, { color: onCta }]}>
                     {loginMutation.isPending ? t('signingIn') : t('signIn')}
                   </ThemedText>
@@ -154,7 +167,7 @@ export function LoginScreen() {
               </ActionPulse>
 
               <PressableScale style={[styles.googleButton, { borderColor }]} onPress={onGoogle} disabled={googleLoginMutation.isPending}>
-                <ThemedText type="defaultSemiBold">{googleLoginMutation.isPending ? 'Connecting…' : t('loginWithGoogle')}</ThemedText>
+                <ThemedText type="defaultSemiBold">{googleLoginMutation.isPending ? t('authConnecting') : t('loginWithGoogle')}</ThemedText>
               </PressableScale>
 
               <Pressable onPress={() => router.push('/register')}>

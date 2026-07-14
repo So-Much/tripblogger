@@ -28,6 +28,7 @@ import { CompositionStrip } from '@/src/components/capture/CompositionStrip';
 import { CompositionToggleButton } from '@/src/components/capture/CompositionToggleButton';
 import { HorizonLevel } from '@/src/components/capture/HorizonLevel';
 import { useCompositionDetail, useCompositionsList } from '@/src/hooks/useCompositions';
+import { useAndroidBack } from '@/src/hooks/useAndroidBack';
 import { useGyroscopeStability } from '@/src/hooks/useGyroscopeStability';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
@@ -114,6 +115,15 @@ export function CompositionCameraExpoGoScreen() {
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
+
+  const exitCapture = useCallback(() => {
+    router.replace('/(tabs)');
+  }, [router]);
+
+  useAndroidBack(() => {
+    exitCapture();
+    return true;
+  });
 
   const selectByDelta = useCallback(
     (delta: number) => {
@@ -234,6 +244,9 @@ export function CompositionCameraExpoGoScreen() {
     return (
       <SafeAreaView style={styles.flex} edges={['bottom']}>
         <ThemedView style={styles.webWrap}>
+          <Pressable onPress={exitCapture} style={styles.closeBtn} accessibilityLabel={t('backHome')}>
+            <IconSymbol name="xmark.circle.fill" size={24} color={text} />
+          </Pressable>
           <ThemedText type="subtitle">{t('captureWebHint')}</ThemedText>
           <ThemedText style={[styles.webSub, { color: muted }]}>{t('captureWebSub')}</ThemedText>
           <Pressable
@@ -251,6 +264,9 @@ export function CompositionCameraExpoGoScreen() {
     return (
       <SafeAreaView style={styles.flex} edges={['bottom']}>
         <ThemedView style={styles.permWrap}>
+          <Pressable onPress={exitCapture} style={styles.closeBtn} accessibilityLabel={t('backHome')}>
+            <IconSymbol name="xmark.circle.fill" size={24} color={text} />
+          </Pressable>
           <ThemedText type="subtitle">{t('cameraPermissionTitle')}</ThemedText>
           <ThemedText style={[styles.permMsg, { color: muted }]}>{t('cameraPermissionMessage')}</ThemedText>
           <Pressable onPress={() => void requestPermission()} style={[styles.ctaSolid, { backgroundColor: cta }]}>
@@ -271,6 +287,9 @@ export function CompositionCameraExpoGoScreen() {
       <SafeAreaView style={[styles.stripSafe, styles.presetBar]} edges={['top']}>
         <ThemedText style={styles.expoGoBanner}>{t('compositionExpoGoHint')}</ThemedText>
         <View style={styles.topRow}>
+          <Pressable onPress={exitCapture} style={styles.closeBtn} accessibilityLabel={t('backHome')}>
+            <IconSymbol name="xmark.circle.fill" size={24} color="#fff" />
+          </Pressable>
           <CompositionToggleButton visible={overlayVisible} onToggle={() => setOverlayVisible((v) => !v)} />
           {items.length ? (
             <CompositionStrip
@@ -395,6 +414,13 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8 },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cameraShell: { flex: 1, position: 'relative', overflow: 'hidden' },
   pinchLayer: { ...StyleSheet.absoluteFillObject },
   controlsDock: {

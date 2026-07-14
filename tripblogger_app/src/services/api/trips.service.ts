@@ -10,7 +10,7 @@ import type {
 } from '@/src/types/trip';
 
 export const tripsService = {
-  async listMine(params?: { status?: TripStatus; page?: number; limit?: number }): Promise<PaginatedTrips> {
+  async listMine(params?: { status?: TripStatus; page?: number; limit?: number; favorite?: boolean }): Promise<PaginatedTrips> {
     const res = await apiClient.get<PaginatedTrips>('/trips', { params });
     return res.data;
   },
@@ -22,6 +22,20 @@ export const tripsService = {
 
   async getById(tripId: string): Promise<TripDto> {
     const res = await apiClient.get<TripDto>(`/trips/${tripId}`);
+    return res.data;
+  },
+
+  async getJournal(tripId: string): Promise<{
+    tripId: string;
+    days: {
+      id: string;
+      dayNumber: number;
+      date: string;
+      stops: { stopId: string; name: string; status: string; visitedAt: string | null }[];
+      posts: { postId: string; linkedAt: string; title: string }[];
+    }[];
+  }> {
+    const res = await apiClient.get(`/trips/${tripId}/journal`);
     return res.data;
   },
 
@@ -47,6 +61,7 @@ export const tripsService = {
       totalBudget?: number | null;
       description?: string | null;
       isPublic?: boolean;
+      isFavorite?: boolean;
     },
   ): Promise<TripDto> {
     const res = await apiClient.patch<TripDto>(`/trips/${tripId}`, body);
@@ -58,6 +73,7 @@ export const tripsService = {
     body: {
       startDate: string;
       endDate: string;
+      shrinkPolicy?: 'delete_orphan_stops' | 'move_to_previous_day' | 'cancel';
     },
   ): Promise<TripDto> {
     const res = await apiClient.patch<TripDto>(`/trips/${tripId}/dates`, body);
@@ -129,6 +145,7 @@ export const tripsService = {
       budgetEstimate?: number | null;
       actualSpent?: number | null;
       notes?: string | null;
+      tripDayId?: string;
     },
   ): Promise<TripStopDto> {
     const res = await apiClient.patch<TripStopDto>(`/trips/${tripId}/stops/${stopId}`, body);
@@ -174,6 +191,9 @@ export const tripsService = {
   async dismissRecommendation(tripId: string, id: string): Promise<void> {
     await apiClient.patch(`/trips/${tripId}/recommendations/${id}`, { isDismissed: true });
   },
+  async markRecommendationAdded(tripId: string, id: string): Promise<void> {
+    await apiClient.patch(`/trips/${tripId}/recommendations/${id}`, { isAdded: true });
+  },
 
   async getDay(tripId: string, dayId: string): Promise<TripDayDto> {
     const res = await apiClient.get<TripDayDto>(`/trips/${tripId}/days/${dayId}`);
@@ -192,5 +212,16 @@ export const tripsService = {
   ): Promise<TripDayDto> {
     const res = await apiClient.patch<TripDayDto>(`/trips/${tripId}/days/${dayId}`, body);
     return res.data;
+  },
+
+  async listTripPosts(tripId: string): Promise<{ postId: string; linkedAt: string; title: string; status: string }[]> {
+    const res = await apiClient.get(`/trips/${tripId}/posts`);
+    return res.data;
+  },
+  async linkTripPost(tripId: string, postId: string): Promise<void> {
+    await apiClient.post(`/trips/${tripId}/posts`, { postId });
+  },
+  async unlinkTripPost(tripId: string, postId: string): Promise<void> {
+    await apiClient.delete(`/trips/${tripId}/posts/${postId}`);
   },
 };

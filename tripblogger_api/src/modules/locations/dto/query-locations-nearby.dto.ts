@@ -33,8 +33,20 @@ export class QueryLocationsNearbyDto {
   typeCodes?: string;
 
   @IsOptional()
-  @IsIn(['rating', 'popularity'])
-  sort?: 'rating' | 'popularity';
+  @IsIn(['rating', 'popularity', 'distance'])
+  sort?: 'rating' | 'popularity' | 'distance';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  minRating?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  q?: string;
 
   @IsOptional()
   @Type(() => Number)

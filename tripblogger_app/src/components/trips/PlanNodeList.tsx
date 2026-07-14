@@ -1,5 +1,8 @@
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/themed-text';
+import { useI18n } from '@/src/i18n';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import type { MapRouteStop } from '@/src/types/trip-map';
 import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
@@ -9,8 +12,7 @@ type PlanNodeListProps = {
   selectedStopId?: string | null;
   onSelectStop: (stop: MapRouteStop) => void;
   onRemoveStop: (stop: MapRouteStop) => void;
-  onMoveUp: (stop: MapRouteStop) => void;
-  onMoveDown: (stop: MapRouteStop) => void;
+  onReorder: (stops: { id: string; orderIndex: number }[]) => void;
 };
 
 export function PlanNodeList({
@@ -18,53 +20,65 @@ export function PlanNodeList({
   selectedStopId,
   onSelectStop,
   onRemoveStop,
-  onMoveUp,
-  onMoveDown,
+  onReorder,
 }: PlanNodeListProps) {
+  const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
   const muted = useThemeColor({}, 'textMuted');
 
   return (
-    <FlatList
+    <DraggableFlatList
       data={stops}
       keyExtractor={(item) => item.id}
       style={{ maxHeight: 220 }}
       contentContainerStyle={{ gap: 8 }}
-      renderItem={({ item, index }) => {
+      onDragBegin={() => {
+        void Haptics.selectionAsync();
+      }}
+      onDragEnd={({ data }) => {
+        const ordered = data.map((item, index) => ({ id: item.id, orderIndex: index }));
+        onReorder(ordered);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }}
+      renderItem={({ item, drag, isActive, getIndex }) => {
+        const index = getIndex() ?? 0;
         const selected = selectedStopId === item.id;
         return (
-          <Pressable
-            onPress={() => onSelectStop(item)}
-            style={[
-              styles.row,
-              { borderColor: selected ? tint : border, backgroundColor: selected ? `${tint}10` : 'transparent' },
-            ]}>
-            <View style={styles.head}>
-              <View style={styles.titleWrap}>
-                <ThemedText style={[styles.seq, { color: muted }]}>#{index + 1}</ThemedText>
-                <LocationTypeIcon locationType={item.locationType ?? undefined} size="sm" selected={selected} />
-                <ThemedText numberOfLines={1} style={styles.name}>
-                  {item.name}
-                </ThemedText>
+          <ScaleDecorator>
+            <Pressable
+              onPress={() => onSelectStop(item)}
+              onLongPress={drag}
+              delayLongPress={150}
+              style={[
+                styles.row,
+                {
+                  borderColor: selected ? tint : border,
+                  backgroundColor: selected ? `${tint}10` : 'transparent',
+                  opacity: isActive ? 0.9 : 1,
+                },
+              ]}>
+              <View style={styles.head}>
+                <View style={styles.titleWrap}>
+                  <ThemedText style={[styles.seq, { color: muted }]}>#{index + 1}</ThemedText>
+                  <LocationTypeIcon locationType={item.locationType ?? undefined} size="sm" selected={selected} />
+                  <ThemedText numberOfLines={1} style={styles.name}>
+                    {item.name}
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.status, { color: muted }]}>{item.status}</ThemedText>
               </View>
-              <ThemedText style={[styles.status, { color: muted }]}>{item.status}</ThemedText>
-            </View>
-            <View style={styles.actions}>
-              <Pressable onPress={() => onMoveUp(item)} disabled={index === 0}>
-                <ThemedText style={{ opacity: index === 0 ? 0.4 : 1 }}>↑</ThemedText>
-              </Pressable>
-              <Pressable onPress={() => onMoveDown(item)} disabled={index === stops.length - 1}>
-                <ThemedText style={{ opacity: index === stops.length - 1 ? 0.4 : 1 }}>↓</ThemedText>
-              </Pressable>
-              <Pressable onPress={() => onRemoveStop(item)}>
-                <ThemedText style={{ color: '#c0392b', fontWeight: '700' }}>Xóa</ThemedText>
-              </Pressable>
-            </View>
-          </Pressable>
+              <View style={styles.actions}>
+                <ThemedText style={{ color: muted, fontSize: 12 }}>Kéo để sắp xếp</ThemedText>
+                <Pressable onPress={() => onRemoveStop(item)}>
+                  <ThemedText style={{ color: '#c0392b', fontWeight: '700' }}>{t('tripRemoveRoute')}</ThemedText>
+                </Pressable>
+              </View>
+            </Pressable>
+          </ScaleDecorator>
         );
       }}
-      ListEmptyComponent={<ThemedText style={{ color: muted }}>Chưa có địa điểm nào trong kế hoạch.</ThemedText>}
+      ListEmptyComponent={<ThemedText style={{ color: muted }}>{t('tripPlanStopsEmpty')}</ThemedText>}
     />
   );
 }
