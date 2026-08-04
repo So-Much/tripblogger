@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigation, useRouter } from 'expo-router';
+import { useNavigation, useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -44,7 +44,7 @@ export function TripListScreen() {
         <Pressable
           onPress={() => {
             useTripMapStore.getState().setSelectedTripId(null);
-            router.push('/(tabs)/trips');
+            router.push('/(tabs)/trips/create/frame' as Href);
           }}
           hitSlop={12}
           accessibilityRole="button"

@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -40,6 +41,22 @@ import { TripPostsService } from './trip-posts.service';
 import { TripStopsService } from './trip-stops.service';
 import { RecommendationService } from './recommendation.service';
 import { TripsService } from './trips.service';
+import { TemplateCookTripsService } from './template-cook-trips.service';
+import { CookService } from './cook/cook.service';
+import { EventBlocksService } from './event-blocks.service';
+import { TripCheckInsService } from './trip-check-ins.service';
+import { TripAssembleService } from './trip-assemble.service';
+import {
+  AttachCheckInMediaDto,
+  CreateEventBlockDto,
+  CreateFrameTripDto,
+  CreateTripCheckInDto,
+  PatchEventBlockDto,
+  ReorderBlocksDto,
+  SetAccommodationDto,
+  SetPicksDto,
+  SwapBlockDto,
+} from './dto/template-cook.dto';
 
 type AuthRequest = Request & { user: { sub: string } };
 
@@ -53,6 +70,11 @@ export class TripsController {
     private readonly accomService: TripAccommodationsService,
     private readonly tripPostsService: TripPostsService,
     private readonly recommendationService: RecommendationService,
+    private readonly templateCookTrips: TemplateCookTripsService,
+    private readonly cookService: CookService,
+    private readonly eventBlocksService: EventBlocksService,
+    private readonly tripCheckInsService: TripCheckInsService,
+    private readonly tripAssembleService: TripAssembleService,
   ) {}
 
   @Get(':tripId/recommendations')
@@ -107,6 +129,14 @@ export class TripsController {
     return this.tripsService.createTrip(req.user.sub, dto);
   }
 
+  @Post('frame')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  createFrame(@Req() req: AuthRequest, @Body() dto: CreateFrameTripDto) {
+    return this.templateCookTrips.createFromFrame(req.user.sub, dto);
+  }
+
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')
@@ -128,7 +158,163 @@ export class TripsController {
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
   detail(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
-    return this.tripsService.getTripDetail(tripId, req.user.sub);
+    return this.templateCookTrips.getEnrichedDetail(tripId, req.user.sub);
+  }
+
+  @Put(':tripId/picks')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  setPicks(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: SetPicksDto,
+  ) {
+    return this.templateCookTrips.setPicks(tripId, req.user.sub, dto);
+  }
+
+  @Post(':tripId/cook')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  async cook(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
+    await this.cookService.cook(tripId, req.user.sub);
+    return this.templateCookTrips.getEnrichedDetail(tripId, req.user.sub);
+  }
+
+  @Put(':tripId/accommodation')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  setAccommodation(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: SetAccommodationDto,
+  ) {
+    return this.templateCookTrips.setAccommodation(tripId, req.user.sub, dto);
+  }
+
+  @Post(':tripId/blocks/reorder')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  reorderBlocks(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: ReorderBlocksDto,
+  ) {
+    return this.eventBlocksService.reorder(
+      tripId,
+      req.user.sub,
+      dto.items.map((i) => ({
+        blockId: i.blockId,
+        tripDayId: i.tripDayId ?? null,
+        orderIndex: i.orderIndex,
+      })),
+    );
+  }
+
+  @Post(':tripId/blocks')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  addBlock(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: CreateEventBlockDto,
+  ) {
+    return this.eventBlocksService.addBlock(tripId, req.user.sub, dto);
+  }
+
+  @Patch(':tripId/blocks/:blockId')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  patchBlock(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+    @Body() dto: PatchEventBlockDto,
+  ) {
+    return this.eventBlocksService.patchBlock(tripId, req.user.sub, blockId, dto);
+  }
+
+  @Delete(':tripId/blocks/:blockId')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  deleteBlock(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+  ) {
+    return this.eventBlocksService.deleteBlock(tripId, req.user.sub, blockId);
+  }
+
+  @Get(':tripId/blocks/:blockId/swap-candidates')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  swapCandidates(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+  ) {
+    return this.eventBlocksService.swapCandidates(tripId, req.user.sub, blockId);
+  }
+
+  @Post(':tripId/blocks/:blockId/swap')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  swapBlock(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('blockId', ParseUUIDPipe) blockId: string,
+    @Body() dto: SwapBlockDto,
+  ) {
+    return this.eventBlocksService.swap(tripId, req.user.sub, blockId, dto);
+  }
+
+  @Post(':tripId/check-ins')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  createCheckIn(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: CreateTripCheckInDto,
+  ) {
+    return this.tripCheckInsService.create(tripId, req.user.sub, dto);
+  }
+
+  @Post(':tripId/check-ins/:id/media')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  attachCheckInMedia(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AttachCheckInMediaDto,
+  ) {
+    return this.tripCheckInsService.attachMedia(tripId, req.user.sub, id, dto.mediaId);
+  }
+
+  @Get(':tripId/check-ins')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  listCheckIns(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
+    return this.tripCheckInsService.list(tripId, req.user.sub);
+  }
+
+  @Post(':tripId/assemble-draft-post')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  assembleDraft(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
+    return this.tripAssembleService.assembleDraftPost(tripId, req.user.sub);
   }
 
   @Get(':tripId/journal')

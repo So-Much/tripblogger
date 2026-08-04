@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ThemedText } from '@/components/themed-text';
@@ -533,7 +533,10 @@ export function TripMapScreen() {
         stops={displayRouteStops}
         selectedStopId={selectedRouteStop?.id ?? null}
         onSelectPlan={activePlan.setSelectedTripId}
-        onCreatePlan={() => setSelectedPinId(null)}
+        onCreatePlan={() => {
+          setSelectedPinId(null);
+          router.push('/(tabs)/trips/create/frame' as Href);
+        }}
         onSelectStop={(stop) => setSelectedRouteStop(stop)}
         onRemoveStop={(stop) => activePlan.removeStop.mutate(stop.id)}
         onReorderStops={(stops) => activePlan.reorderStops.mutate(stops)}

@@ -1,4 +1,6 @@
 import { apiClient } from '@/src/services/api/client';
+import { templateCookService } from '@/src/services/api/template-cook.service';
+import type { EnrichedTripDto } from '@/src/types/template-cook';
 import type {
   PaginatedTrips,
   TripAccommodationDto,
@@ -10,6 +12,23 @@ import type {
 } from '@/src/types/trip';
 
 export const tripsService = {
+  // Template-Cook MVP (frame / pick / cook / live / assemble)
+  listDestinations: templateCookService.listDestinations,
+  featuredLocations: templateCookService.featuredLocations,
+  listTemplates: templateCookService.listTemplates,
+  getTemplate: templateCookService.getTemplate,
+  createFrame: templateCookService.createFrame,
+  setPicks: templateCookService.setPicks,
+  cook: templateCookService.cook,
+  setAccommodation: templateCookService.setAccommodation,
+  reorderBlocks: templateCookService.reorderBlocks,
+  swapCandidates: templateCookService.swapCandidates,
+  swapBlock: templateCookService.swapBlock,
+  createCheckIn: templateCookService.createCheckIn,
+  attachCheckInMedia: templateCookService.attachCheckInMedia,
+  listCheckIns: templateCookService.listCheckIns,
+  assembleDraftPost: templateCookService.assembleDraftPost,
+
   async listMine(params?: { status?: TripStatus; page?: number; limit?: number; favorite?: boolean }): Promise<PaginatedTrips> {
     const res = await apiClient.get<PaginatedTrips>('/trips', { params });
     return res.data;
@@ -20,9 +39,8 @@ export const tripsService = {
     return res.data;
   },
 
-  async getById(tripId: string): Promise<TripDto> {
-    const res = await apiClient.get<TripDto>(`/trips/${tripId}`);
-    return res.data;
+  async getById(tripId: string): Promise<EnrichedTripDto> {
+    return templateCookService.getEnrichedTrip(tripId);
   },
 
   async getJournal(tripId: string): Promise<{

@@ -11,6 +11,7 @@ import { LocationTypeEntity } from './location-type.entity';
 
 export type LocationStatus = 'ACTIVE' | 'PENDING_VERIFICATION' | 'INACTIVE';
 export type LocationSourceType = 'MANUAL' | 'PHOTON' | 'NOMINATIM' | 'GOOGLE';
+export type LocationSlotType = 'POI' | 'FOOD' | 'STAY';
 
 @Entity('locations')
 export class LocationEntity {
@@ -71,6 +72,22 @@ export class LocationEntity {
 
   @Column({ name: 'open_hours_json', type: 'nvarchar', length: 'max', nullable: true })
   openHoursJson!: string | null;
+
+  @Column({ name: 'destination_id', type: 'uniqueidentifier', nullable: true })
+  destinationId!: string | null;
+
+  @Column({ name: 'featured_rank', type: 'int', nullable: true })
+  featuredRank!: number | null;
+
+  @Column({ name: 'default_duration_min', type: 'int', nullable: true })
+  defaultDurationMin!: number | null;
+
+  @Column({ name: 'slot_type', type: 'nvarchar', length: 20, nullable: true })
+  slotType!: LocationSlotType | null;
+
+  /** JSON string array, e.g. ["GLAMPING","CENTRAL"] */
+  @Column({ name: 'vibe_tags', type: 'nvarchar', length: 'max', nullable: true })
+  vibeTags!: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

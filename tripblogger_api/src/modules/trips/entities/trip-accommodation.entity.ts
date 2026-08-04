@@ -2,6 +2,9 @@ import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGenerat
 import { LocationEntity } from '../../locations/entities/location.entity';
 import { TripEntity } from './trip.entity';
 
+export type AccommodationMode = 'VIBE' | 'CUSTOM';
+export type AccommodationVibe = 'GLAMPING' | 'CENTRAL' | 'HOMESTAY';
+
 @Entity('trip_accommodations')
 export class TripAccommodationEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -53,6 +56,15 @@ export class TripAccommodationEntity {
 
   @Column({ name: 'is_primary', default: true })
   isPrimary!: boolean;
+
+  @Column({ type: 'nvarchar', length: 20, default: 'CUSTOM' })
+  mode!: AccommodationMode;
+
+  @Column({ type: 'nvarchar', length: 20, nullable: true })
+  vibe!: AccommodationVibe | null;
+
+  @Column({ name: 'is_placeholder', default: false })
+  isPlaceholder!: boolean;
 
   @Column({ type: 'nvarchar', length: 'max', nullable: true })
   notes!: string | null;

@@ -213,7 +213,11 @@ export class PostsController {
     }),
   )
   async uploadMedia(
-    @Req() req: { protocol: string; headers: { host?: string; 'x-forwarded-proto'?: string } },
+    @Req() req: {
+      user: { sub: string };
+      protocol: string;
+      headers: { host?: string; 'x-forwarded-proto'?: string };
+    },
     @UploadedFile() file?: Express.Multer.File,
     @Body() dto?: UploadPostMediaDto,
   ) {
@@ -264,7 +268,7 @@ export class PostsController {
     const previewUrl = previewRelative ? this.mediaResolver.toPublicUrl(previewRelative, reqMeta) : undefined;
     const thumbnailUrl = thumbnailRelative ? this.mediaResolver.toPublicUrl(thumbnailRelative, reqMeta) : undefined;
 
-    return {
+    const registered = await this.postsService.registerUploadedMedia(req.user.sub, {
       kind,
       url: previewUrl ?? originalUrl,
       thumbnailUrl,
@@ -275,9 +279,13 @@ export class PostsController {
       width,
       height,
       placeholder,
-      caption: dto?.caption ?? null,
-      storage: 'local' as const,
+      storage: 'local',
       sourcePath: relativeOriginal,
+    });
+
+    return {
+      ...registered,
+      caption: dto?.caption ?? null,
     };
   }
 

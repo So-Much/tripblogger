@@ -44,6 +44,12 @@ import { TripAccommodationEntity } from '../../modules/trips/entities/trip-accom
 import { SavedLocationEntity } from '../../modules/trips/entities/saved-location.entity';
 import { TripPostEntity } from '../../modules/trips/entities/trip-post.entity';
 import { TripRecommendationEntity } from '../../modules/trips/entities/trip-recommendation.entity';
+import { DestinationEntity } from '../../modules/trips/entities/destination.entity';
+import { TripTemplateEntity } from '../../modules/trips/entities/trip-template.entity';
+import { TemplateBlockEntity } from '../../modules/trips/entities/template-block.entity';
+import { EventBlockEntity } from '../../modules/trips/entities/event-block.entity';
+import { TripCheckInEntity } from '../../modules/trips/entities/trip-check-in.entity';
+import { TripCheckInMediaEntity } from '../../modules/trips/entities/trip-check-in-media.entity';
 
 export default new DataSource({
   type: 'mssql',
@@ -103,6 +109,12 @@ export default new DataSource({
     SavedLocationEntity,
     TripPostEntity,
     TripRecommendationEntity,
+    DestinationEntity,
+    TripTemplateEntity,
+    TemplateBlockEntity,
+    EventBlockEntity,
+    TripCheckInEntity,
+    TripCheckInMediaEntity,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

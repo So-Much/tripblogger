@@ -20,4 +20,7 @@ export class TripPostEntity {
 
   @CreateDateColumn({ name: 'linked_at' })
   linkedAt!: Date;
+
+  @Column({ name: 'assemble_kind', type: 'nvarchar', length: 32, nullable: true })
+  assembleKind!: 'BLOG_DRAFT' | null;
 }

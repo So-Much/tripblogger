@@ -150,6 +150,59 @@ export class PostsService {
     private readonly mediaMigrationWorker: MediaMigrationWorker,
   ) {}
 
+  /** Persist a freshly uploaded file as a shared MediaEntity (for check-ins, etc.). */
+  async registerUploadedMedia(
+    userId: string,
+    input: {
+      kind: 'image' | 'video';
+      url: string;
+      thumbnailUrl?: string;
+      previewUrl?: string;
+      originalUrl?: string;
+      mimeType?: string;
+      width?: number;
+      height?: number;
+      placeholder?: string;
+      storage?: 'local' | 'cloud';
+      sourcePath?: string;
+      size?: number;
+    },
+  ) {
+    const media = await this.mediaRepo.save(
+      this.mediaRepo.create({
+        userId,
+        type: input.kind,
+        url: input.url,
+        thumbnailUrl: input.thumbnailUrl ?? null,
+        previewUrl: input.previewUrl ?? null,
+        originalUrl: input.originalUrl ?? input.url,
+        mimeType: input.mimeType ?? null,
+        width: input.width ?? null,
+        height: input.height ?? null,
+        placeholder: input.placeholder ?? null,
+        storage: input.storage ?? 'local',
+        sourcePath: input.sourcePath ?? null,
+        size: input.size != null ? String(input.size) : null,
+      }),
+    );
+    return {
+      id: media.id,
+      mediaId: media.id,
+      kind: input.kind,
+      url: input.url,
+      thumbnailUrl: input.thumbnailUrl,
+      previewUrl: input.previewUrl,
+      originalUrl: input.originalUrl,
+      mimeType: input.mimeType,
+      width: input.width,
+      height: input.height,
+      placeholder: input.placeholder,
+      storage: input.storage ?? ('local' as const),
+      sourcePath: input.sourcePath,
+      size: input.size,
+    };
+  }
+
   private async loadPostWithMedia(postId: string): Promise<PostEntity | null> {
     return this.postsRepo.findOne({
       where: { id: postId },

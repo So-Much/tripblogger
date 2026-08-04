@@ -34,7 +34,8 @@ export function TripDetailActions({
   onRefreshRecommendations,
   onDuplicate,
   onDelete,
-}: TripDetailActionsProps) {
+  hideRecommendations = true,
+}: TripDetailActionsProps & { hideRecommendations?: boolean }) {
   const { t } = useI18n();
   const border = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
@@ -87,20 +88,22 @@ export function TripDetailActions({
           </PressableScale>
         ) : null}
 
-        <PressableScale
-          style={[
-            styles.secondaryBtn,
-            showRecommendations ? { borderColor: tint, backgroundColor: `${tint}12` } : { borderColor: border, backgroundColor: card },
-          ]}
-          onPress={onToggleRecommendations}>
-          <IconSymbol name="star.fill" size={18} color={showRecommendations ? tint : muted} />
-          <ThemedText style={[styles.secondaryLabel, showRecommendations ? { color: tint } : undefined]}>
-            {t('tripRecommendations')}
-          </ThemedText>
-        </PressableScale>
+        {!hideRecommendations ? (
+          <PressableScale
+            style={[
+              styles.secondaryBtn,
+              showRecommendations ? { borderColor: tint, backgroundColor: `${tint}12` } : { borderColor: border, backgroundColor: card },
+            ]}
+            onPress={onToggleRecommendations}>
+            <IconSymbol name="star.fill" size={18} color={showRecommendations ? tint : muted} />
+            <ThemedText style={[styles.secondaryLabel, showRecommendations ? { color: tint } : undefined]}>
+              {t('tripRecommendations')}
+            </ThemedText>
+          </PressableScale>
+        ) : null}
       </View>
 
-      {showRecommendations ? (
+      {!hideRecommendations && showRecommendations ? (
         <PressableScale
           style={[styles.refreshLink, { borderColor: border }]}
           onPress={onRefreshRecommendations}
