@@ -36,20 +36,7 @@ import { ProductRatingEntity } from '../../modules/commerce/entities/product-rat
 import { LocationEntity } from '../../modules/locations/entities/location.entity';
 import { LocationTypeEntity } from '../../modules/locations/entities/location-type.entity';
 import { LocationReviewEntity } from '../../modules/locations/entities/location-review.entity';
-import { TripEntity } from '../../modules/trips/entities/trip.entity';
-import { TripMemberEntity } from '../../modules/trips/entities/trip-member.entity';
-import { TripDayEntity } from '../../modules/trips/entities/trip-day.entity';
-import { TripStopEntity } from '../../modules/trips/entities/trip-stop.entity';
-import { TripAccommodationEntity } from '../../modules/trips/entities/trip-accommodation.entity';
-import { SavedLocationEntity } from '../../modules/trips/entities/saved-location.entity';
-import { TripPostEntity } from '../../modules/trips/entities/trip-post.entity';
-import { TripRecommendationEntity } from '../../modules/trips/entities/trip-recommendation.entity';
-import { DestinationEntity } from '../../modules/trips/entities/destination.entity';
-import { TripTemplateEntity } from '../../modules/trips/entities/trip-template.entity';
-import { TemplateBlockEntity } from '../../modules/trips/entities/template-block.entity';
-import { EventBlockEntity } from '../../modules/trips/entities/event-block.entity';
-import { TripCheckInEntity } from '../../modules/trips/entities/trip-check-in.entity';
-import { TripCheckInMediaEntity } from '../../modules/trips/entities/trip-check-in-media.entity';
+import { SavedLocationEntity } from '../../modules/locations/entities/saved-location.entity';
 
 export default new DataSource({
   type: 'mssql',
@@ -101,20 +88,7 @@ export default new DataSource({
     LocationEntity,
     LocationTypeEntity,
     LocationReviewEntity,
-    TripEntity,
-    TripMemberEntity,
-    TripDayEntity,
-    TripStopEntity,
-    TripAccommodationEntity,
     SavedLocationEntity,
-    TripPostEntity,
-    TripRecommendationEntity,
-    DestinationEntity,
-    TripTemplateEntity,
-    TemplateBlockEntity,
-    EventBlockEntity,
-    TripCheckInEntity,
-    TripCheckInMediaEntity,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

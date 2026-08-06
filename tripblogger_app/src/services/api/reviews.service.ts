@@ -7,8 +7,6 @@ export type LocationReviewDto = {
   rating: number;
   content: string | null;
   tags: string[];
-  tripId: string | null;
-  tripStopId: string | null;
   createdAt: string;
   updatedAt: string;
   author: { displayName: string; avatarUrl: string | null };
@@ -64,8 +62,6 @@ export const reviewsService = {
       rating: number;
       content?: string;
       tags?: string[];
-      tripId?: string;
-      tripStopId?: string;
     },
   ): Promise<LocationReviewDto> {
     const res = await apiClient.post<LocationReviewDto>(`/locations/${locationId}/reviews`, body);

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlaceResultDto } from '../places/dto/place.dto';
 import { PlacesService } from '../places/places.service';
-import { SavedLocationEntity } from '../trips/entities/saved-location.entity';
+import { SavedLocationEntity } from './entities/saved-location.entity';
 import { CreateLocationDto, UpsertFromPlaceDto } from './dto/create-location.dto';
 import { LocationEntity } from './entities/location.entity';
 import { LocationMediaEntity } from './entities/location-media.entity';

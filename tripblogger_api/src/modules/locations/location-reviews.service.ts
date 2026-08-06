@@ -18,8 +18,6 @@ export type LocationReviewItem = {
   rating: number;
   content: string | null;
   tags: string[];
-  tripId: string | null;
-  tripStopId: string | null;
   createdAt: string;
   updatedAt: string;
   author: { displayName: string; avatarUrl: string | null };
@@ -156,8 +154,6 @@ export class LocationReviewsService {
           rating: dto.rating,
           content: dto.content?.trim() || null,
           tagsJson: dto.tags?.length ? JSON.stringify(dto.tags) : null,
-          tripId: dto.tripId ?? null,
-          tripStopId: dto.tripStopId ?? null,
         }),
       );
       await this.recomputeAggregates(manager.getRepository(LocationEntity), locationId);
@@ -234,8 +230,6 @@ export class LocationReviewsService {
       rating: r.rating,
       content: r.content,
       tags: this.parseTags(r.tagsJson),
-      tripId: r.tripId,
-      tripStopId: r.tripStopId,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
       author: {

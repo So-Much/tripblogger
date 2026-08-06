@@ -48,6 +48,7 @@ export default function TabLayout() {
         options={{
           title: t('tabTrips'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="location.fill" color={color} />,
+          tabBarStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen

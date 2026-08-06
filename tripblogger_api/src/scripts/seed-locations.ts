@@ -2,22 +2,16 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { randomUUID } from 'crypto';
 import dataSource from '../config/db/typeorm.datasource';
-import { haversineKm } from '../common/utils/haversine';
-import { computeRecommendationScore } from '../modules/trips/utils/trip-scoring';
 
 /**
- * Seeds ACTIVE locations (POIs) and an optional demo trip with recommendations.
+ * Seeds ACTIVE locations (POIs).
  *
  * Prerequisites: `npm run seed:user`
  *
  * Env:
- * - LOCATIONS_SEED_RESET=1 — remove tb-loc-* locations and demo trip, then re-seed
- * - LOCATIONS_SEED_SKIP_TRIP=1 — only seed locations (no demo trip / recommendations)
- * - LOCATIONS_SEED_EMAIL (default: minhnhieu50@gmail.com) — owner of demo trip
+ * - LOCATIONS_SEED_RESET=1 — remove tb-loc-* locations, then re-seed
  */
-const DEFAULT_USER_EMAIL = 'minhnhieu50@gmail.com';
 const EXTERNAL_SOURCE = 'tripblogger';
-const DEMO_TRIP_TITLE = 'Khám phá Đà Nẵng (demo)';
 
 const TYPE = {
   food: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaa001',
@@ -418,27 +412,11 @@ function formatDate(d: Date): string {
 }
 
 async function resetSeedData() {
-  const demoTrips = (await dataSource.query(
-    `SELECT id FROM trips WHERE title = @0`,
-    [DEMO_TRIP_TITLE],
-  )) as Array<{ id: string }>;
-
-  for (const row of demoTrips) {
-    await dataSource.query(`DELETE FROM trip_recommendations WHERE trip_id = @0`, [row.id]);
-    await dataSource.query(`DELETE FROM trip_stops WHERE trip_day_id IN (SELECT id FROM trip_days WHERE trip_id = @0)`, [
-      row.id,
-    ]);
-    await dataSource.query(`DELETE FROM trip_days WHERE trip_id = @0`, [row.id]);
-    await dataSource.query(`DELETE FROM trip_accommodations WHERE trip_id = @0`, [row.id]);
-    await dataSource.query(`DELETE FROM trip_members WHERE trip_id = @0`, [row.id]);
-    await dataSource.query(`DELETE FROM trips WHERE id = @0`, [row.id]);
-  }
-
   await dataSource.query(
     `DELETE FROM locations WHERE external_source = @0 AND external_id LIKE N'tb-loc-%'`,
     [EXTERNAL_SOURCE],
   );
-  console.log('Reset: removed demo trip(s) and tb-loc-* locations');
+  console.log('Reset: removed tb-loc-* locations');
 }
 
 async function upsertLocation(poi: PoiSeed): Promise<string> {
@@ -501,123 +479,8 @@ async function upsertLocation(poi: PoiSeed): Promise<string> {
   return id;
 }
 
-async function seedDemoTrip(userId: string, hotelLocationId: string, hotelLat: number, hotelLng: number) {
-  const existing = (await dataSource.query(`SELECT id FROM trips WHERE title = @0`, [DEMO_TRIP_TITLE])) as Array<{
-    id: string;
-  }>;
-  if (existing[0]?.id) {
-    console.log(`Demo trip already exists: ${DEMO_TRIP_TITLE}`);
-    return existing[0].id;
-  }
-
-  const start = new Date();
-  start.setDate(start.getDate() + 1);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 4);
-
-  const tripId = randomUUID();
-  const accomId = randomUUID();
-  const memberId = randomUUID();
-
-  await dataSource.query(
-    `INSERT INTO trips (
-      id, user_id, title, description, destination_name,
-      start_date, end_date, status, is_public, total_budget
-    ) VALUES (
-      @0, @1, @2, N'Chuyến đi demo để thử gợi ý địa điểm quanh khách sạn Furama.',
-      N'Đà Nẵng', @3, @4, N'PLANNING', 0, 8000000
-    )`,
-    [tripId, userId, DEMO_TRIP_TITLE, formatDate(start), formatDate(end)],
-  );
-
-  await dataSource.query(
-    `INSERT INTO trip_members (id, trip_id, user_id, role, status, joined_at)
-     VALUES (@0, @1, @2, N'OWNER', N'ACCEPTED', GETUTCDATE())`,
-    [memberId, tripId, userId],
-  );
-
-  await dataSource.query(
-    `INSERT INTO trip_accommodations (
-      id, trip_id, location_id, check_in, check_out,
-      room_type, price_per_night, is_primary
-    ) VALUES (
-      @0, @1, @2, @3, @4, N'Deluxe Ocean View', 3200000, 1
-    )`,
-    [accomId, tripId, hotelLocationId, formatDate(start), formatDate(end)],
-  );
-
-  const locRows = (await dataSource.query(
-    `SELECT l.id, l.latitude, l.longitude, l.avg_rating, l.total_review, l.popularity_score, l.price_level, lt.code AS type_code
-     FROM locations l
-     LEFT JOIN location_types lt ON lt.id = l.location_type_id
-     WHERE l.status = N'ACTIVE' AND l.external_source = @0`,
-    [EXTERNAL_SOURCE],
-  )) as Array<{
-    id: string;
-    latitude: string;
-    longitude: string;
-    avg_rating: string;
-    total_review: number;
-    popularity_score: string;
-    price_level: number | null;
-    type_code: string | null;
-  }>;
-
-  const days = Math.max(1, (end.getTime() - start.getTime()) / 86400000 + 1);
-  const tripDailyBudget = 8000000 / days;
-
-  const scored: { id: string; score: number; distanceKm: number }[] = [];
-  for (const loc of locRows) {
-    if (loc.id === hotelLocationId) continue;
-    const lat2 = Number(loc.latitude);
-    const lng2 = Number(loc.longitude);
-    const distanceKm = haversineKm(hotelLat, hotelLng, lat2, lng2);
-    if (distanceKm > 10) continue;
-    const score = computeRecommendationScore({
-      distanceKm,
-      avgRating: Number(loc.avg_rating),
-      totalReview: loc.total_review,
-      popularityScore: Number(loc.popularity_score),
-      categoryAlreadyInTrip: 0,
-      priceLevel: loc.price_level,
-      tripDailyBudget,
-      lastReviewMonthsAgo: null,
-    });
-    scored.push({ id: loc.id, score, distanceKm });
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  const top = scored.slice(0, 50);
-  const now = new Date();
-
-  for (const item of top) {
-    await dataSource.query(
-      `INSERT INTO trip_recommendations (
-        id, trip_id, location_id, based_on_accommodation_id,
-        score, distance_km, generated_at
-      ) VALUES (
-        @0, @1, @2, @3, @4, @5, @6
-      )`,
-      [
-        randomUUID(),
-        tripId,
-        item.id,
-        accomId,
-        item.score.toFixed(4),
-        item.distanceKm.toFixed(2),
-        now,
-      ],
-    );
-  }
-
-  console.log(`Created demo trip "${DEMO_TRIP_TITLE}" with ${top.length} recommendations`);
-  return tripId;
-}
-
 async function main() {
   const reset = process.env.LOCATIONS_SEED_RESET === '1' || process.env.LOCATIONS_SEED_RESET === 'true';
-  const skipTrip = process.env.LOCATIONS_SEED_SKIP_TRIP === '1' || process.env.LOCATIONS_SEED_SKIP_TRIP === 'true';
-  const userEmail = process.env.LOCATIONS_SEED_EMAIL ?? DEFAULT_USER_EMAIL;
 
   await dataSource.initialize();
 
@@ -627,9 +490,6 @@ async function main() {
 
   let inserted = 0;
   let updated = 0;
-  let hotelId = '';
-  let hotelLat = 0;
-  let hotelLng = 0;
 
   for (const poi of POIS) {
     const existing = (await dataSource.query(
@@ -641,26 +501,10 @@ async function main() {
     if (existing[0]?.id) updated += 1;
     else inserted += 1;
 
-    if (poi.externalId === 'tb-loc-dn-hotel-furama') {
-      hotelId = id;
-      hotelLat = poi.lat;
-      hotelLng = poi.lng;
-    }
   }
 
   console.log(`Locations: ${inserted} inserted, ${updated} updated (${POIS.length} total POIs)`);
 
-  if (!skipTrip && hotelId) {
-    const userRows = (await dataSource.query(
-      `SELECT u.id FROM users u INNER JOIN member_profiles mp ON mp.user_id = u.id WHERE mp.email = @0`,
-      [userEmail],
-    )) as Array<{ id: string }>;
-    const userId = userRows[0]?.id;
-    if (!userId) {
-      throw new Error(`No user for ${userEmail}. Run npm run seed:user first.`);
-    }
-    await seedDemoTrip(userId, hotelId, hotelLat, hotelLng);
-  }
 
   await dataSource.destroy();
 }

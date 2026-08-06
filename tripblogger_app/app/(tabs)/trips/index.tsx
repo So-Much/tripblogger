@@ -1,3 +1,5 @@
-import { TripMapScreen } from '@/src/screens/TripMapScreen';
+import { TripHomeScreen } from '@/src/features/trip/screens/TripHomeScreen';
 
-export default TripMapScreen;
+export default function TripsTabRoute() {
+  return <TripHomeScreen />;
+}

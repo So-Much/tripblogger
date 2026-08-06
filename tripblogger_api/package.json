@@ -21,10 +21,7 @@
     "seed:coupons": "ts-node src/scripts/seed-coupons.ts",
     "seed:all": "ts-node src/scripts/seed-all.ts",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "jest",
-    "test:cook": "jest --testPathPattern=cook-itinerary|build-trip-blog",
-    "seed:dalat-template-cook": "ts-node src/scripts/seed-dalat-template-cook.ts",
-    "cleanup:partial-template-cook": "ts-node src/scripts/cleanup-partial-template-cook.ts"
+    "test": "jest"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.19",

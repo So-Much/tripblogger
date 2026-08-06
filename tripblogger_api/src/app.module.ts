@@ -12,7 +12,7 @@ import { CompositionsModule } from './modules/compositions/compositions.module';
 import { CommerceModule } from './modules/commerce/commerce.module';
 import { PlacesModule } from './modules/places/places.module';
 import { LocationsModule } from './modules/locations/locations.module';
-import { TripsModule } from './modules/trips/trips.module';
+import { MapModule } from './modules/map/map.module';
 import { RedisModule } from './config/redis/redis.module';
 import { QueueModule } from './config/queue/queue.module';
 import { OtelModule } from './config/otel/otel.module';
@@ -37,7 +37,7 @@ import { OtelModule } from './config/otel/otel.module';
     CommerceModule,
     PlacesModule,
     LocationsModule,
-    TripsModule,
+    MapModule,
   ],
 })
 export class AppModule {}

@@ -37,20 +37,7 @@ import { LocationTypeEntity } from '../../modules/locations/entities/location-ty
 import { LocationReviewEntity } from '../../modules/locations/entities/location-review.entity';
 import { LocationMediaEntity } from '../../modules/locations/entities/location-media.entity';
 import { UserCheckinEntity } from '../../modules/locations/entities/user-checkin.entity';
-import { TripEntity } from '../../modules/trips/entities/trip.entity';
-import { TripMemberEntity } from '../../modules/trips/entities/trip-member.entity';
-import { TripDayEntity } from '../../modules/trips/entities/trip-day.entity';
-import { TripStopEntity } from '../../modules/trips/entities/trip-stop.entity';
-import { TripAccommodationEntity } from '../../modules/trips/entities/trip-accommodation.entity';
-import { SavedLocationEntity } from '../../modules/trips/entities/saved-location.entity';
-import { TripPostEntity } from '../../modules/trips/entities/trip-post.entity';
-import { TripRecommendationEntity } from '../../modules/trips/entities/trip-recommendation.entity';
-import { DestinationEntity } from '../../modules/trips/entities/destination.entity';
-import { TripTemplateEntity } from '../../modules/trips/entities/trip-template.entity';
-import { TemplateBlockEntity } from '../../modules/trips/entities/template-block.entity';
-import { EventBlockEntity } from '../../modules/trips/entities/event-block.entity';
-import { TripCheckInEntity } from '../../modules/trips/entities/trip-check-in.entity';
-import { TripCheckInMediaEntity } from '../../modules/trips/entities/trip-check-in-media.entity';
+import { SavedLocationEntity } from '../../modules/locations/entities/saved-location.entity';
 
 export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOptions {
   const instanceName = configService.get<string>('DB_INSTANCE');
@@ -107,20 +94,7 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       LocationReviewEntity,
       LocationMediaEntity,
       UserCheckinEntity,
-      TripEntity,
-      TripMemberEntity,
-      TripDayEntity,
-      TripStopEntity,
-      TripAccommodationEntity,
       SavedLocationEntity,
-      TripPostEntity,
-      TripRecommendationEntity,
-      DestinationEntity,
-      TripTemplateEntity,
-      TemplateBlockEntity,
-      EventBlockEntity,
-      TripCheckInEntity,
-      TripCheckInMediaEntity,
     ],
     migrations: ['src/migrations/*.ts'],
     synchronize: false,

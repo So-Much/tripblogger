@@ -67,28 +67,6 @@ export class CheckinsService {
     return this.mapCheckin(full!);
   }
 
-  /** Ghi check-in khi user check-in stop trên trip (dùng tọa độ stop/location). */
-  async recordFromTripStop(
-    userId: string,
-    locationId: string,
-    latitude: number,
-    longitude: number,
-  ): Promise<void> {
-    const loc = await this.locationsRepo.exist({ where: { id: locationId } });
-    if (!loc) return;
-
-    await this.checkinsRepo.save(
-      this.checkinsRepo.create({
-        userId,
-        locationId,
-        latitude: String(latitude),
-        longitude: String(longitude),
-        privacyLevel: 'PUBLIC',
-        checkinTime: new Date(),
-      }),
-    );
-  }
-
   private mapCheckin(c: UserCheckinEntity): CheckinItem {
     return {
       id: c.id,

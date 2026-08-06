@@ -4,7 +4,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -26,14 +25,6 @@ export class CreateLocationReviewDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
-
-  @IsOptional()
-  @IsUUID()
-  tripId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  tripStopId?: string;
 }
 
 export class UpdateLocationReviewDto {

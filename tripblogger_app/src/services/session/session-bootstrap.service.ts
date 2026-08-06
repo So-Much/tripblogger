@@ -2,8 +2,6 @@ import { authService } from '@/src/services/api/auth.service';
 import { queryClient } from '@/src/services/query-client';
 import { useAuthStore } from '@/src/store/auth.store';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
-import { useTripMapStore } from '@/src/store/trip-map.store';
-import { useUserMapMarkersStore } from '@/src/store/user-map-markers.store';
 import {
   clearPersistedAuthTokens,
   ensureDeviceId,
@@ -14,10 +12,8 @@ import {
 /** Clear TanStack Query cache and non-auth Zustand slices tied to the previous session. */
 export function resetAppSessionStores() {
   queryClient.clear();
-  useTripMapStore.getState().setSelectedTripId(null);
   usePostComposerHandoffStore.getState().setPending([]);
   usePostComposerHandoffStore.getState().setReturnPostId(null);
-  void useUserMapMarkersStore.getState().reset();
 }
 
 /** Issue a fresh guest token pair and hydrate `/auth/me` (mirrors app boot in `_layout.tsx`). */

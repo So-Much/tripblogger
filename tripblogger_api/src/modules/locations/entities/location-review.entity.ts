@@ -35,12 +35,6 @@ export class LocationReviewEntity {
   @Column({ type: 'nvarchar', length: 'max', nullable: true })
   content!: string | null;
 
-  @Column({ name: 'trip_id', type: 'uniqueidentifier', nullable: true })
-  tripId!: string | null;
-
-  @Column({ name: 'trip_stop_id', type: 'uniqueidentifier', nullable: true })
-  tripStopId!: string | null;
-
   @Column({ name: 'tags_json', type: 'nvarchar', length: 'max', nullable: true })
   tagsJson!: string | null;
 

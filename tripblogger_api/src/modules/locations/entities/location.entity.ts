@@ -73,9 +73,6 @@ export class LocationEntity {
   @Column({ name: 'open_hours_json', type: 'nvarchar', length: 'max', nullable: true })
   openHoursJson!: string | null;
 
-  @Column({ name: 'destination_id', type: 'uniqueidentifier', nullable: true })
-  destinationId!: string | null;
-
   @Column({ name: 'featured_rank', type: 'int', nullable: true })
   featuredRank!: number | null;
 
