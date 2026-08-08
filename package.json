@@ -1,0 +1,12 @@
+{
+  "name": "tripblogger",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "tripblogger_api",
+    "tripblogger_app"
+  ],
+  "scripts": {
+    "test:engine": "npm test -w @tripblogger/itinerary-engine"
+  }
+}
