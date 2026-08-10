@@ -13,13 +13,12 @@ import { useI18n } from '@/src/i18n';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useTrips } from '../hooks/useTrips';
 import type { TripDetailDto, TripSummaryDto } from '../types/plan';
-import { PlanDragPrototype } from './PlanDragPrototype';
 import { PlanEmptyCreate } from './PlanEmptyCreate';
 import { PlanGuestGate } from './PlanGuestGate';
+import { PlanTimeline } from './PlanTimeline';
 
 /**
- * Plan tab orchestrator: guest gate → empty create → trip picker + prototype sheet.
- * Full timeline UI is Task 14; here we only establish activeTripId.
+ * Plan tab orchestrator: guest gate → empty create → trip picker + day timeline.
  */
 export function PlanTab() {
   const me = useAuthStore((s) => s.me);
@@ -96,7 +95,7 @@ function PlanMemberFlow() {
         activeTripId={active.id}
         onSelect={setActiveTripId}
       />
-      <PlanDragPrototype tripTitle={active.title} />
+      <PlanTimeline key={active.id} tripId={active.id} tripTitle={active.title} />
     </>
   );
 }
