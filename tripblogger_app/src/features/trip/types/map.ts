@@ -23,6 +23,8 @@ export type MapPlace = {
   rating: number | null;
   /** TripBlogger review count; null when unknown or zero. */
   reviewCount: number | null;
+  /** Raw OSM opening_hours; null when unknown. */
+  openingHours: string | null;
 };
 
 export type TravelMode = 'car' | 'bike' | 'foot';

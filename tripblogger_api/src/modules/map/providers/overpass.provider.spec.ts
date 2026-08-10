@@ -38,4 +38,28 @@ describe('OverpassProvider.nearby', () => {
     expect(places[0].name).toBe('Bệnh viện Test');
     expect(places[0].source).toBe('overpass');
   });
+
+  it('keeps OSM opening_hours as openingHours', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        elements: [
+          {
+            type: 'node',
+            id: 2,
+            lat: 10.75,
+            lon: 106.72,
+            tags: {
+              name: 'Cafe Hours',
+              opening_hours: 'Mo-Fr 08:00-17:00',
+            },
+          },
+        ],
+      }),
+    });
+    const provider = new OverpassProvider();
+    const places = await provider.nearby(10.75, 106.72, 2000, POI_CATEGORIES.cafe, 10);
+    expect(places).toHaveLength(1);
+    expect(places[0].openingHours).toBe('Mo-Fr 08:00-17:00');
+  });
 });

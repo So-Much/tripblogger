@@ -20,6 +20,7 @@ const samplePlace = (id: string): MapPlace => ({
   distanceM: 10,
   rating: null,
   reviewCount: null,
+  openingHours: null,
 });
 
 function assert(cond: unknown, msg: string): asserts cond {

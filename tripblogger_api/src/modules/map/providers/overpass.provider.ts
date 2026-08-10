@@ -18,6 +18,8 @@ export type OverpassPoi = {
   lat: number;
   lng: number;
   categoryHint?: string;
+  /** Raw OSM `opening_hours` tag; null when absent. */
+  openingHours?: string | null;
   source: 'overpass';
 };
 
@@ -122,6 +124,7 @@ out center tags ${Math.min(60, filters.length * 20)};
         lat,
         lng,
         categoryHint: categoryId,
+        openingHours: el.tags?.opening_hours ?? null,
         source: 'overpass',
       });
     }

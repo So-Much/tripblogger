@@ -40,6 +40,7 @@ function buildUserOrigin(lat: number, lng: number, name: string): MapPlace {
     distanceM: 0,
     rating: null,
     reviewCount: null,
+    openingHours: null,
   };
 }
 

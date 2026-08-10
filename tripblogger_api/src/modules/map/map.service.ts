@@ -29,6 +29,8 @@ export type MapPlaceDto = {
   rating: number | null;
   /** TripBlogger review count; null when unknown or zero. */
   reviewCount: number | null;
+  /** Raw OSM opening_hours; null for db/photon/nominatim in v1. */
+  openingHours: string | null;
 };
 
 const NEARBY_TTL_S = 7 * 24 * 60 * 60;
@@ -58,8 +60,8 @@ export class MapService {
     if (!isPoiCategoryId(categoryId)) return [];
     const category = POI_CATEGORIES[categoryId];
     const hash = encodeGeohash(lat, lng, 6);
-    // v4: do not cache Overpass soft-fail empties (v3 poisoned some keys)
-    const cacheKey = `map:nearby:v4:${categoryId}:${hash}:${Math.round(radiusM / 100)}`;
+    // v5: includes openingHours from Overpass (v4 cached payloads omit the field)
+    const cacheKey = `map:nearby:v5:${categoryId}:${hash}:${Math.round(radiusM / 100)}`;
 
     const cached = await this.cacheGet<MapPlaceDto[]>(cacheKey);
     if (cached) return cached.slice(0, limit);
@@ -105,6 +107,7 @@ export class MapService {
         distanceM: Math.round(haversineKm(lat, lng, p.lat, p.lng) * 1000),
         rating: null,
         reviewCount: null,
+        openingHours: p.openingHours ?? null,
       })),
     ]);
 
@@ -139,8 +142,8 @@ export class MapService {
           ? { lat, lng }
           : null;
 
-    // v4: composite ranking (text + bias distance + source + rating); bias in key.
-    const cacheKey = `map:search:v4:${trimmed.toLowerCase()}:${lat?.toFixed(2) ?? ''}:${lng?.toFixed(2) ?? ''}:${bias ? `${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : ''}:${limit}`;
+    // v5: includes openingHours; composite ranking + bias in key.
+    const cacheKey = `map:search:v5:${trimmed.toLowerCase()}:${lat?.toFixed(2) ?? ''}:${lng?.toFixed(2) ?? ''}:${bias ? `${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : ''}:${limit}`;
     const cached = await this.cacheGet<MapPlaceDto[]>(cacheKey);
     if (cached) return cached;
 
@@ -171,6 +174,7 @@ export class MapService {
           lat != null && lng != null ? Math.round(haversineKm(lat, lng, plat, plng) * 1000) : null,
         rating,
         reviewCount,
+        openingHours: null,
       };
     });
 
@@ -198,6 +202,7 @@ export class MapService {
             : null,
         rating: null,
         reviewCount: null,
+        openingHours: null,
       }));
     } catch (err) {
       externalOk = false;
@@ -251,6 +256,7 @@ export class MapService {
         distanceM,
         rating: null,
         reviewCount: null,
+        openingHours: null,
       };
     } catch (err) {
       this.logger.warn(`Reverse failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -317,6 +323,7 @@ export class MapService {
           distanceM,
           rating,
           reviewCount,
+          openingHours: null,
         };
       })
       .filter((p) => (p.distanceM ?? Infinity) <= radiusKm * 1000)

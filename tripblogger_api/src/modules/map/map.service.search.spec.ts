@@ -40,10 +40,10 @@ describe('MapService.search ranking', () => {
     expect(res[0].id).toBe('db-pho');
   });
 
-  it('caches results under a v4 bias-aware key', async () => {
+  it('caches results under a v5 bias-aware key', async () => {
     const { svc, redis } = makeService([], []);
     await svc.search('pho', undefined, undefined, 15, 21, 105);
     const key = (redis.set as jest.Mock).mock.calls[0][0] as string;
-    expect(key).toContain('map:search:v4:');
+    expect(key).toContain('map:search:v5:');
   });
 });

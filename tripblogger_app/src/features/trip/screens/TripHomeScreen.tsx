@@ -166,6 +166,7 @@ export function TripHomeScreen() {
           distanceM,
           rating: null,
           reviewCount: null,
+          openingHours: null,
         });
       } catch (err) {
         if (isAbortedError(err) || ac.signal.aborted) return;
@@ -180,6 +181,7 @@ export function TripHomeScreen() {
           distanceM: null,
           rating: null,
           reviewCount: null,
+          openingHours: null,
         });
       } finally {
         if (reverseAbortRef.current === ac) {
@@ -223,6 +225,7 @@ export function TripHomeScreen() {
               distanceM: 0,
               rating: null,
               reviewCount: null,
+              openingHours: null,
             }
           : null;
       useMapStore.getState().openDirectionsTo(place, origin);
