@@ -38,6 +38,10 @@ import { LocationReviewEntity } from '../../modules/locations/entities/location-
 import { LocationMediaEntity } from '../../modules/locations/entities/location-media.entity';
 import { UserCheckinEntity } from '../../modules/locations/entities/user-checkin.entity';
 import { SavedLocationEntity } from '../../modules/locations/entities/saved-location.entity';
+import { TripEntity } from '../../modules/trips/entities/trip.entity';
+import { TripDayEntity } from '../../modules/trips/entities/trip-day.entity';
+import { TripStopEntity } from '../../modules/trips/entities/trip-stop.entity';
+import { TripStopTagEntity } from '../../modules/trips/entities/trip-stop-tag.entity';
 
 export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOptions {
   const instanceName = configService.get<string>('DB_INSTANCE');
@@ -95,6 +99,10 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       LocationMediaEntity,
       UserCheckinEntity,
       SavedLocationEntity,
+      TripEntity,
+      TripDayEntity,
+      TripStopEntity,
+      TripStopTagEntity,
     ],
     migrations: ['src/migrations/*.ts'],
     synchronize: false,
