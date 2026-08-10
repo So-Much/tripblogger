@@ -202,6 +202,74 @@ export class OsrmProvider {
     return out;
   }
 
+  /**
+   * Consecutive-pair travel legs via OSRM Table API.
+   * Returns duration/distance for each (i → i+1); length === max(0, points.length - 1).
+   */
+  async tableLegs(
+    points: Array<{ lat: number; lng: number }>,
+    mode: TravelMode,
+  ): Promise<Array<{ durationS: number | null; distanceM: number | null }>> {
+    if (points.length < 2) return [];
+
+    const profile = PROFILE[mode];
+    const out: Array<{ durationS: number | null; distanceM: number | null }> = [];
+    const nullLeg = () => ({ durationS: null, distanceM: null });
+
+    // Keep requests modest for the public FOSSGIS demo (coords + latency).
+    // Overlap by 1 so the boundary pair between chunks is not skipped.
+    const CHUNK = 40;
+    for (let offset = 0; offset < points.length - 1; ) {
+      const chunk = points.slice(offset, offset + CHUNK);
+      const legCount = chunk.length - 1;
+      const coords = chunk.map((p) => `${p.lng},${p.lat}`).join(';');
+      const params = new URLSearchParams({
+        annotations: 'duration,distance',
+      });
+      const url = `${OSRM_BASE}/${profile}/table/v1/driving/${coords}?${params.toString()}`;
+
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': USER_AGENT },
+        });
+        if (!res.ok) {
+          this.logger.warn(`OSRM tableLegs HTTP ${res.status}`);
+          out.push(...Array.from({ length: legCount }, nullLeg));
+        } else {
+          const body = (await res.json()) as {
+            code?: string;
+            durations?: Array<Array<number | null>>;
+            distances?: Array<Array<number | null>>;
+          };
+          if (body.code !== 'Ok' || !body.durations || !body.distances) {
+            out.push(...Array.from({ length: legCount }, nullLeg));
+          } else {
+            for (let i = 0; i < legCount; i++) {
+              const duration = body.durations[i]?.[i + 1];
+              const distance = body.distances[i]?.[i + 1];
+              out.push({
+                durationS:
+                  duration == null || Number.isNaN(duration) ? null : Math.round(duration),
+                distanceM:
+                  distance == null || Number.isNaN(distance) ? null : Math.round(distance),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.warn(
+          `OSRM tableLegs failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        out.push(...Array.from({ length: legCount }, nullLeg));
+      }
+
+      if (chunk.length < CHUNK) break;
+      offset += CHUNK - 1;
+    }
+
+    return out;
+  }
+
   private viInstruction(type: string, modifier?: string, roadName?: string): string {
     const base = MANEUVER_VI[type] ?? type;
     const mod = modifier ? MODIFIER_VI[modifier] ?? modifier : '';
