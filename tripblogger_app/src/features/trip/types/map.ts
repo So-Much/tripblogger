@@ -53,7 +53,7 @@ export type MapRouteResponse = {
 
 export type CameraFollowMode = 'free' | 'follow' | 'follow-heading';
 
-export type TripBottomTab = 'explore' | 'you' | 'contribute';
+export type TripBottomTab = 'explore' | 'plan' | 'contribute';
 
 export const POI_CATEGORIES: {
   id: PoiCategoryId;

@@ -16,6 +16,7 @@ import { MapSearchBar } from '../search/MapSearchBar';
 import { SearchFocusView } from '../search/SearchFocusView';
 import { useRecentSearchesStore } from '../search/recent-searches.store';
 import { TripBottomNav } from '../nav/TripBottomNav';
+import { PlanDragPrototype } from '../plan/PlanDragPrototype';
 import { DirectionsSheet } from '../sheets/DirectionsSheet';
 import { ExploreSheet } from '../sheets/ExploreSheet';
 import { PlaceDetailSheet } from '../sheets/PlaceDetailSheet';
@@ -39,6 +40,7 @@ export function TripHomeScreen() {
   const [reverseLoading, setReverseLoading] = useState(false);
 
   const { coords, granted } = useUserLocation(true);
+  const bottomTab = useMapStore((s) => s.bottomTab);
   const followMode = useMapStore((s) => s.followMode);
   const selectedCategory = useMapStore((s) => s.selectedCategory);
   const searchCenter = useMapStore((s) => s.searchCenter);
@@ -325,6 +327,7 @@ export function TripHomeScreen() {
         userLng={coords?.lng}
         onFitRoute={onFitRoute}
       />
+      {bottomTab === 'plan' ? <PlanDragPrototype /> : null}
       <TripBottomNav
         onExplorePress={() => {
           useMapStore.setState((s) => ({

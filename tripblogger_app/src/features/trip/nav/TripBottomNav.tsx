@@ -17,7 +17,7 @@ const TABS: {
   placeholder?: boolean;
 }[] = [
   { id: 'explore', icon: 'explore', labelKey: 'mapTabExplore' },
-  { id: 'you', icon: 'person', labelKey: 'mapTabYou', placeholder: true },
+  { id: 'plan', icon: 'event-note', labelKey: 'mapTabPlan' },
   { id: 'contribute', icon: 'add-location-alt', labelKey: 'mapTabContribute', placeholder: true },
 ];
 
@@ -54,11 +54,13 @@ export function TripBottomNav({ onExplorePress }: Props) {
               if (tab.id === 'explore') {
                 setActiveSheet('explore');
                 onExplorePress();
+              } else if (tab.id === 'plan') {
+                setActiveSheet('none');
               }
             }}>
             <MaterialIcons name={tab.icon} size={24} color={active ? tint : muted} />
             <Text style={[styles.label, { color: active ? tint : muted }]}>
-              {t(tab.labelKey as 'mapTabExplore')}
+              {t(tab.labelKey as 'mapTabExplore' | 'mapTabPlan' | 'mapTabContribute')}
             </Text>
             {tab.placeholder && active ? (
               <Text style={[styles.soon, { color: text }]}>{t('mapComingSoon')}</Text>
