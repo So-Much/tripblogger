@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { TripsService } from './trips.service';
 import type { CreateTripDto } from './dto/create-trip.dto';
+import type { AddStopDto } from './dto/add-stop.dto';
 import { TripDayEntity } from './entities/trip-day.entity';
 import { TripStopEntity } from './entities/trip-stop.entity';
 import { TripEntity } from './entities/trip.entity';
@@ -27,16 +28,33 @@ function makeRepo(): MockRepo {
   };
 }
 
+function makeTravelLegs() {
+  return {
+    recomputeDayLegs: jest.fn(async (stops: any[]) => {
+      if (!stops.length) return;
+      stops[0].travelFromPrevSeconds = 0;
+      stops[0].travelFromPrevDistanceM = 0;
+      for (let i = 1; i < stops.length; i++) {
+        stops[i].travelFromPrevSeconds = 120;
+        stops[i].travelFromPrevDistanceM = 500;
+        stops[i].travelModeUsed = 'motorbike';
+      }
+    }),
+  };
+}
+
 function makeService(repos?: {
   trips?: MockRepo;
   days?: MockRepo;
   stops?: MockRepo;
   tags?: MockRepo;
+  travelLegs?: ReturnType<typeof makeTravelLegs>;
 }) {
   const trips = repos?.trips ?? makeRepo();
   const days = repos?.days ?? makeRepo();
   const stops = repos?.stops ?? makeRepo();
   const tags = repos?.tags ?? makeRepo();
+  const travelLegs = repos?.travelLegs ?? makeTravelLegs();
   const sharedManager = trips.manager;
   days.manager = sharedManager;
   stops.manager = sharedManager;
@@ -52,8 +70,14 @@ function makeService(repos?: {
     };
     return cb(em);
   });
-  const svc = new TripsService(trips as any, days as any, stops as any, tags as any);
-  return { svc, trips, days, stops, tags };
+  const svc = new TripsService(
+    trips as any,
+    days as any,
+    stops as any,
+    tags as any,
+    travelLegs as any,
+  );
+  return { svc, trips, days, stops, tags, travelLegs };
 }
 
 function baseTrip(overrides: Record<string, unknown> = {}) {
@@ -358,6 +382,262 @@ describe('TripsService.remove', () => {
     trips.findOne.mockResolvedValue(baseTrip({ userId: 'other-user' }));
 
     await expect(svc.remove('user-1', 'trip-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+const placeDb = {
+  id: '11111111-1111-4111-8111-111111111111',
+  name: 'Cafe A',
+  address: '1 Hoa Binh',
+  lat: 11.9412,
+  lng: 108.4589,
+  category: 'cafe',
+  openingHours: 'Mo-Su 08:00-22:00',
+  source: 'db',
+};
+
+const placeOsm = {
+  id: 'node/123',
+  name: 'Viewpoint',
+  address: null,
+  lat: 11.95,
+  lng: 108.46,
+  category: 'viewpoint',
+  openingHours: null as string | null,
+  source: 'overpass',
+};
+
+describe('TripsService.addStop', () => {
+  it('snapshots place fields including openingHours and locationId only for db source', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    days.findOne.mockResolvedValue({
+      id: 'day-0',
+      tripId: 'trip-1',
+      date: '2026-08-10',
+      dayIndex: 0,
+      startTime: null,
+    });
+
+    let savedStop: any;
+    stops.save.mockImplementation(async (x: any) => {
+      if (Array.isArray(x)) return x;
+      savedStop = { ...x, id: 'stop-new' };
+      return savedStop;
+    });
+
+    stops.find
+      .mockResolvedValueOnce([]) // siblings before insert
+      .mockImplementation(async () => [
+        {
+          ...savedStop,
+          id: 'stop-new',
+          travelFromPrevSeconds: 0,
+          travelFromPrevDistanceM: 0,
+        },
+      ]);
+
+    tags.find.mockResolvedValue([]);
+    trips.findOne
+      .mockResolvedValueOnce(baseTrip())
+      .mockResolvedValue(baseTrip({ version: 2 }));
+    days.find.mockResolvedValue([
+      { id: 'day-0', tripId: 'trip-1', date: '2026-08-10', dayIndex: 0, startTime: null },
+    ]);
+
+    const dto: AddStopDto = {
+      place: placeDb,
+      tripDayId: 'day-0',
+      tags: ['entry_point', 'custom'],
+      priority: 'must',
+    };
+
+    const result = await svc.addStop('user-1', 'trip-1', dto);
+
+    expect(stops.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Cafe A',
+        address: '1 Hoa Binh',
+        lat: String(placeDb.lat),
+        lng: String(placeDb.lng),
+        category: 'cafe',
+        externalPlaceId: placeDb.id,
+        openingHoursRaw: 'Mo-Su 08:00-22:00',
+        locationId: placeDb.id,
+        durationMinutes: 60,
+        priority: 'must',
+        bufferAfterMinutes: null,
+      }),
+    );
+    expect(tags.create).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: 'entry_point', isSystem: true }),
+    );
+    expect(tags.create).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: 'custom', isSystem: false }),
+    );
+    expect(travelLegs.recomputeDayLegs).toHaveBeenCalled();
+    expect(result.trip).toBeDefined();
+    expect(result.trip.version).toBe(2);
+    expect(result.trip.days[0].stops[0].schedule).toBeTruthy();
+  });
+
+  it('does not set locationId for non-db source', async () => {
+    const { svc, trips, days, stops, tags } = makeService();
+    trips.findOne.mockResolvedValueOnce(baseTrip()).mockResolvedValue(baseTrip({ version: 2 }));
+    days.findOne.mockResolvedValue({
+      id: 'day-0',
+      tripId: 'trip-1',
+      date: '2026-08-10',
+      dayIndex: 0,
+      startTime: null,
+    });
+    stops.find.mockResolvedValue([]);
+    tags.find.mockResolvedValue([]);
+    days.find.mockResolvedValue([
+      { id: 'day-0', tripId: 'trip-1', date: '2026-08-10', dayIndex: 0, startTime: null },
+    ]);
+    stops.save.mockImplementation(async (x: any) =>
+      Array.isArray(x) ? x : { ...x, id: 'stop-osm' },
+    );
+
+    await svc.addStop('user-1', 'trip-1', {
+      place: placeOsm,
+      tripDayId: 'day-0',
+    });
+
+    expect(stops.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalPlaceId: 'node/123',
+        locationId: null,
+        openingHoursRaw: null,
+      }),
+    );
+  });
+
+  it('rejects addStop for another users trip', async () => {
+    const { svc, trips } = makeService();
+    trips.findOne.mockResolvedValue(baseTrip({ userId: 'other-user' }));
+
+    await expect(
+      svc.addStop('user-1', 'trip-1', { place: placeOsm, tripDayId: null }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('TripsService.patchStop', () => {
+  it('patches duration and returns schedule without recomputing legs', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const existing = {
+      id: 'stop-1',
+      tripId: 'trip-1',
+      tripDayId: 'day-0',
+      position: 0,
+      name: 'Cafe',
+      address: null,
+      lat: '11.94',
+      lng: '108.45',
+      category: null,
+      externalPlaceId: 'node/1',
+      openingHoursRaw: null,
+      locationId: null,
+      durationMinutes: 60,
+      bufferAfterMinutes: null,
+      travelModeOverride: null,
+      anchorTime: null,
+      priority: 'nice',
+      status: 'todo',
+      travelFromPrevSeconds: 0,
+      travelFromPrevDistanceM: 0,
+      travelModeUsed: null,
+    };
+
+    trips.findOne
+      .mockResolvedValueOnce(baseTrip())
+      .mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue({ ...existing });
+    stops.save.mockImplementation(async (x: any) => x);
+    days.find.mockResolvedValue([
+      { id: 'day-0', tripId: 'trip-1', date: '2026-08-10', dayIndex: 0, startTime: null },
+    ]);
+    stops.find.mockResolvedValue([
+      { ...existing, durationMinutes: 90, travelFromPrevSeconds: 0, travelFromPrevDistanceM: 0 },
+    ]);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.patchStop('user-1', 'trip-1', 'stop-1', {
+      durationMinutes: 90,
+    });
+
+    expect(stops.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'stop-1', durationMinutes: 90 }),
+    );
+    expect(travelLegs.recomputeDayLegs).not.toHaveBeenCalled();
+    expect(result.trip.days[0].stops[0].durationMinutes).toBe(90);
+    expect(result.trip.days[0].stops[0].schedule).toBeTruthy();
+  });
+
+  it('rejects patchStop for another users trip', async () => {
+    const { svc, trips } = makeService();
+    trips.findOne.mockResolvedValue(baseTrip({ userId: 'other-user' }));
+
+    await expect(
+      svc.patchStop('user-1', 'trip-1', 'stop-1', { durationMinutes: 30 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('TripsService.deleteStop', () => {
+  it('deletes stop, renumbers siblings, recomputes legs', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const stopA = {
+      id: 'stop-a',
+      tripId: 'trip-1',
+      tripDayId: 'day-0',
+      position: 0,
+      name: 'A',
+      address: null,
+      lat: '11.94',
+      lng: '108.45',
+      category: null,
+      externalPlaceId: null,
+      openingHoursRaw: null,
+      locationId: null,
+      durationMinutes: 60,
+      bufferAfterMinutes: null,
+      travelModeOverride: null,
+      anchorTime: null,
+      priority: 'nice',
+      status: 'todo',
+      travelFromPrevSeconds: 0,
+      travelFromPrevDistanceM: 0,
+      travelModeUsed: null,
+    };
+    const stopB = { ...stopA, id: 'stop-b', position: 1, name: 'B', lat: '11.95', lng: '108.46' };
+
+    trips.findOne.mockResolvedValueOnce(baseTrip()).mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue({ ...stopA });
+    stops.find
+      .mockResolvedValueOnce([stopB]) // siblings after delete
+      .mockResolvedValueOnce([{ ...stopB, position: 0 }]) // recompute
+      .mockResolvedValueOnce([{ ...stopB, position: 0, travelFromPrevSeconds: 0 }]); // findOne
+    days.find.mockResolvedValue([
+      { id: 'day-0', tripId: 'trip-1', date: '2026-08-10', dayIndex: 0, startTime: null },
+    ]);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.deleteStop('user-1', 'trip-1', 'stop-a');
+
+    expect(stops.remove).toHaveBeenCalledWith(expect.objectContaining({ id: 'stop-a' }));
+    expect(travelLegs.recomputeDayLegs).toHaveBeenCalled();
+    expect(result.trip.days[0].stops.map((s) => s.id)).toEqual(['stop-b']);
+  });
+
+  it('rejects deleteStop for another users trip', async () => {
+    const { svc, trips } = makeService();
+    trips.findOne.mockResolvedValue(baseTrip({ userId: 'other-user' }));
+
+    await expect(svc.deleteStop('user-1', 'trip-1', 'stop-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 

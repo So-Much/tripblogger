@@ -62,3 +62,8 @@ export type TripDetailDto = TripSummaryDto & {
   days: TripDayDto[];
   ideaStops: TripStopDto[];
 };
+
+/** Spec §15.5 — preferred response wrapper for stop mutations. */
+export type TripMutationResult = {
+  trip: TripDetailDto;
+};

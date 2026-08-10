@@ -3,12 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { computeDaySchedule } from '@tripblogger/itinerary-engine';
 import type { ScheduleConflict, ScheduledStop } from '@tripblogger/itinerary-engine';
 import { In, Repository } from 'typeorm';
+import { AddStopDto } from './dto/add-stop.dto';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { PatchDayDto } from './dto/patch-day.dto';
+import { PatchStopDto } from './dto/patch-stop.dto';
 import { PatchTripDto } from './dto/patch-trip.dto';
 import type {
   TripDayDto,
   TripDetailDto,
+  TripMutationResult,
   TripStopDto,
   TripSummaryDto,
 } from './dto/trip-response.dto';
@@ -16,6 +19,11 @@ import { TripDayEntity } from './entities/trip-day.entity';
 import { TripStopTagEntity } from './entities/trip-stop-tag.entity';
 import { TripStopEntity } from './entities/trip-stop.entity';
 import { TripEntity } from './entities/trip.entity';
+import { TravelLegsService } from './travel-legs.service';
+
+const SYSTEM_TAGS = new Set(['entry_point', 'accommodation']);
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -60,6 +68,7 @@ export class TripsService {
     private readonly stopsRepo: Repository<TripStopEntity>,
     @InjectRepository(TripStopTagEntity)
     private readonly tagsRepo: Repository<TripStopTagEntity>,
+    private readonly travelLegs: TravelLegsService,
   ) {}
 
   async create(userId: string, dto: CreateTripDto): Promise<TripDetailDto> {
@@ -259,6 +268,198 @@ export class TripsService {
   async remove(userId: string, tripId: string): Promise<void> {
     const trip = await this.requireOwnedTrip(userId, tripId);
     await this.tripsRepo.remove(trip);
+  }
+
+  async addStop(
+    userId: string,
+    tripId: string,
+    dto: AddStopDto,
+  ): Promise<TripMutationResult> {
+    const trip = await this.requireOwnedTrip(userId, tripId);
+
+    if (dto.tripDayId) {
+      const day = await this.daysRepo.findOne({
+        where: { id: dto.tripDayId, tripId },
+      });
+      if (!day) {
+        throw new NotFoundException('Trip day not found');
+      }
+    }
+
+    const siblings = (
+      await this.stopsRepo.find({
+        where: { tripId },
+        order: { position: 'ASC' },
+      })
+    ).filter((s) =>
+      dto.tripDayId == null ? s.tripDayId == null : s.tripDayId === dto.tripDayId,
+    );
+
+    const insertAt =
+      dto.position !== undefined
+        ? Math.min(Math.max(0, dto.position), siblings.length)
+        : siblings.length;
+
+    for (const s of siblings) {
+      if (s.position >= insertAt) {
+        s.position += 1;
+      }
+    }
+    if (siblings.length) {
+      await this.stopsRepo.save(siblings);
+    }
+
+    const locationId =
+      dto.place.source === 'db' && UUID_RE.test(dto.place.id) ? dto.place.id : null;
+
+    const stop = this.stopsRepo.create({
+      tripId,
+      tripDayId: dto.tripDayId ?? null,
+      position: insertAt,
+      name: dto.place.name,
+      address: dto.place.address ?? null,
+      lat: String(dto.place.lat),
+      lng: String(dto.place.lng),
+      category: dto.place.category ?? null,
+      externalPlaceId: dto.place.id,
+      openingHoursRaw: dto.place.openingHours ?? null,
+      locationId,
+      durationMinutes: dto.durationMinutes ?? 60,
+      bufferAfterMinutes: null,
+      travelModeOverride: dto.travelModeOverride ?? null,
+      anchorTime: dto.anchorTime ?? null,
+      priority: dto.priority ?? 'nice',
+      status: 'todo',
+      travelFromPrevSeconds: null,
+      travelFromPrevDistanceM: null,
+      travelModeUsed: null,
+    });
+    const saved = await this.stopsRepo.save(stop);
+
+    if (dto.tags?.length) {
+      await this.syncTags(saved.id, dto.tags);
+    }
+
+    trip.version = trip.version + 1;
+    await this.tripsRepo.save(trip);
+
+    if (saved.tripDayId) {
+      await this.recomputeLegsForDay(trip, saved.tripDayId);
+    }
+
+    const detail = await this.findOne(userId, tripId);
+    return { trip: detail };
+  }
+
+  async patchStop(
+    userId: string,
+    tripId: string,
+    stopId: string,
+    dto: PatchStopDto,
+  ): Promise<TripMutationResult> {
+    const trip = await this.requireOwnedTrip(userId, tripId);
+    const stop = await this.stopsRepo.findOne({ where: { id: stopId, tripId } });
+    if (!stop) {
+      throw new NotFoundException('Stop not found');
+    }
+
+    const modeChanged =
+      dto.travelModeOverride !== undefined &&
+      dto.travelModeOverride !== stop.travelModeOverride;
+
+    if (dto.durationMinutes !== undefined) stop.durationMinutes = dto.durationMinutes;
+    if (dto.bufferAfterMinutes !== undefined) {
+      stop.bufferAfterMinutes = dto.bufferAfterMinutes;
+    }
+    if (dto.travelModeOverride !== undefined) {
+      stop.travelModeOverride = dto.travelModeOverride;
+    }
+    if (dto.anchorTime !== undefined) stop.anchorTime = dto.anchorTime;
+    if (dto.priority !== undefined) stop.priority = dto.priority;
+    if (dto.status !== undefined) stop.status = dto.status;
+
+    await this.stopsRepo.save(stop);
+
+    if (dto.tags !== undefined) {
+      await this.syncTags(stop.id, dto.tags);
+    }
+
+    trip.version = trip.version + 1;
+    await this.tripsRepo.save(trip);
+
+    if (modeChanged && stop.tripDayId) {
+      await this.recomputeLegsForDay(trip, stop.tripDayId);
+    }
+
+    const detail = await this.findOne(userId, tripId);
+    return { trip: detail };
+  }
+
+  async deleteStop(
+    userId: string,
+    tripId: string,
+    stopId: string,
+  ): Promise<TripMutationResult> {
+    const trip = await this.requireOwnedTrip(userId, tripId);
+    const stop = await this.stopsRepo.findOne({ where: { id: stopId, tripId } });
+    if (!stop) {
+      throw new NotFoundException('Stop not found');
+    }
+
+    const dayId = stop.tripDayId;
+    await this.stopsRepo.remove(stop);
+
+    const siblings = (
+      await this.stopsRepo.find({
+        where: { tripId },
+        order: { position: 'ASC' },
+      })
+    ).filter((s) => (dayId == null ? s.tripDayId == null : s.tripDayId === dayId));
+
+    siblings.forEach((s, i) => {
+      s.position = i;
+    });
+    if (siblings.length) {
+      await this.stopsRepo.save(siblings);
+    }
+
+    trip.version = trip.version + 1;
+    await this.tripsRepo.save(trip);
+
+    if (dayId) {
+      await this.recomputeLegsForDay(trip, dayId);
+    }
+
+    const detail = await this.findOne(userId, tripId);
+    return { trip: detail };
+  }
+
+  private async recomputeLegsForDay(trip: TripEntity, dayId: string): Promise<void> {
+    const dayStops = (
+      await this.stopsRepo.find({
+        where: { tripId: trip.id, tripDayId: dayId },
+        order: { position: 'ASC' },
+      })
+    ).sort((a, b) => a.position - b.position);
+
+    await this.travelLegs.recomputeDayLegs(dayStops, trip.defaultTravelMode);
+    if (dayStops.length) {
+      await this.stopsRepo.save(dayStops);
+    }
+  }
+
+  private async syncTags(stopId: string, tags: string[]): Promise<void> {
+    await this.tagsRepo.delete({ tripStopId: stopId });
+    const unique = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
+    if (!unique.length) return;
+    const rows = unique.map((tag) =>
+      this.tagsRepo.create({
+        tripStopId: stopId,
+        tag,
+        isSystem: SYSTEM_TAGS.has(tag),
+      }),
+    );
+    await this.tagsRepo.save(rows);
   }
 
   private async requireOwnedTrip(userId: string, tripId: string): Promise<TripEntity> {

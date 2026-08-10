@@ -16,8 +16,10 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { StatusesGuard } from '../../common/guards/statuses.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
+import { AddStopDto } from './dto/add-stop.dto';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { PatchDayDto } from './dto/patch-day.dto';
+import { PatchStopDto } from './dto/patch-stop.dto';
 import { PatchTripDto } from './dto/patch-trip.dto';
 import { TripsService } from './trips.service';
 
@@ -67,5 +69,33 @@ export class TripsController {
   @Delete(':tripId')
   remove(@Req() req: AuthRequest, @Param('tripId', ParseUUIDPipe) tripId: string) {
     return this.tripsService.remove(req.user.sub, tripId);
+  }
+
+  @Post(':tripId/stops')
+  addStop(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: AddStopDto,
+  ) {
+    return this.tripsService.addStop(req.user.sub, tripId, dto);
+  }
+
+  @Patch(':tripId/stops/:stopId')
+  patchStop(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('stopId', ParseUUIDPipe) stopId: string,
+    @Body() dto: PatchStopDto,
+  ) {
+    return this.tripsService.patchStop(req.user.sub, tripId, stopId, dto);
+  }
+
+  @Delete(':tripId/stops/:stopId')
+  deleteStop(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('stopId', ParseUUIDPipe) stopId: string,
+  ) {
+    return this.tripsService.deleteStop(req.user.sub, tripId, stopId);
   }
 }

@@ -14,6 +14,6 @@ import { OsrmProvider } from './providers/osrm.provider';
   imports: [TypeOrmModule.forFeature([LocationEntity]), PlacesModule, UsersModule],
   controllers: [MapController],
   providers: [MapService, OverpassProvider, OsrmProvider, RolesGuard, StatusesGuard],
-  exports: [MapService],
+  exports: [MapService, OsrmProvider],
 })
 export class MapModule {}
