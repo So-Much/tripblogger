@@ -16,7 +16,7 @@ import { MapSearchBar } from '../search/MapSearchBar';
 import { SearchFocusView } from '../search/SearchFocusView';
 import { useRecentSearchesStore } from '../search/recent-searches.store';
 import { TripBottomNav } from '../nav/TripBottomNav';
-import { PlanDragPrototype } from '../plan/PlanDragPrototype';
+import { PlanTab } from '../plan/PlanTab';
 import { DirectionsSheet } from '../sheets/DirectionsSheet';
 import { ExploreSheet } from '../sheets/ExploreSheet';
 import { PlaceDetailSheet } from '../sheets/PlaceDetailSheet';
@@ -327,7 +327,7 @@ export function TripHomeScreen() {
         userLng={coords?.lng}
         onFitRoute={onFitRoute}
       />
-      {bottomTab === 'plan' ? <PlanDragPrototype /> : null}
+      {bottomTab === 'plan' ? <PlanTab /> : null}
       <TripBottomNav
         onExplorePress={() => {
           useMapStore.setState((s) => ({

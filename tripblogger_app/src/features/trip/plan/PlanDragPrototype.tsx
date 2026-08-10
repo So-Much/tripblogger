@@ -26,11 +26,16 @@ const SNAP_POINTS = ['18%', '50%', '92%'] as const;
 /** Matches TripBottomNav bar height above safe-area padding. */
 const NAV_BAR_OFFSET = 56;
 
+type Props = {
+  /** Active trip title when wired from PlanTab; falls back to mapTabPlan. */
+  tripTitle?: string;
+};
+
 /**
  * Early gesture prototype (rủi ro #1): drag list only when sheet is full;
  * lock sheet pan while a row is being dragged.
  */
-export function PlanDragPrototype() {
+export function PlanDragPrototype({ tripTitle }: Props) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const surface = useThemeColor({}, 'surface');
@@ -99,7 +104,9 @@ export function PlanDragPrototype() {
       handleIndicatorStyle={{ backgroundColor: muted }}
       style={styles.sheet}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: text }]}>{t('mapTabPlan')}</Text>
+        <Text style={[styles.title, { color: text }]} numberOfLines={1}>
+          {tripTitle?.trim() || t('mapTabPlan')}
+        </Text>
         <Text style={[styles.sub, { color: muted }]}>
           {canDrag ? t('planPrototypeHintFull') : t('planPrototypeHintPeek')}
         </Text>
