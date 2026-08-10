@@ -4,6 +4,8 @@ import { computeDaySchedule } from '@tripblogger/itinerary-engine';
 import type { ScheduleConflict, ScheduledStop } from '@tripblogger/itinerary-engine';
 import { In, Repository } from 'typeorm';
 import { CreateTripDto } from './dto/create-trip.dto';
+import { PatchDayDto } from './dto/patch-day.dto';
+import { PatchTripDto } from './dto/patch-trip.dto';
 import type {
   TripDayDto,
   TripDetailDto,
@@ -101,10 +103,7 @@ export class TripsService {
   }
 
   async findOne(userId: string, tripId: string): Promise<TripDetailDto> {
-    const trip = await this.tripsRepo.findOne({ where: { id: tripId } });
-    if (!trip || trip.userId !== userId) {
-      throw new NotFoundException('Trip not found');
-    }
+    const trip = await this.requireOwnedTrip(userId, tripId);
 
     const days = await this.daysRepo.find({
       where: { tripId },
@@ -117,6 +116,157 @@ export class TripsService {
 
     const tagsByStopId = await this.loadTagsByStopId(stops.map((s) => s.id));
     return this.toDetail(trip, days, stops, tagsByStopId);
+  }
+
+  async patch(userId: string, tripId: string, dto: PatchTripDto): Promise<TripDetailDto> {
+    const trip = await this.requireOwnedTrip(userId, tripId);
+
+    const nextStart = dto.startDate ?? toDateString(trip.startDate);
+    const nextEnd = dto.endDate ?? toDateString(trip.endDate);
+    // Validate range early (also throws if inverted)
+    const targetDates = eachDateInclusive(nextStart, nextEnd);
+    const dateRangeChanged =
+      dto.startDate !== undefined || dto.endDate !== undefined;
+
+    await this.tripsRepo.manager.transaction(async (em) => {
+      const tripsRepo = em.getRepository(TripEntity);
+      const daysRepo = em.getRepository(TripDayEntity);
+      const stopsRepo = em.getRepository(TripStopEntity);
+
+      if (dto.title !== undefined) trip.title = dto.title;
+      if (dto.destinationLabel !== undefined) trip.destinationLabel = dto.destinationLabel;
+      if (dto.destinationLat !== undefined) trip.destinationLat = String(dto.destinationLat);
+      if (dto.destinationLng !== undefined) trip.destinationLng = String(dto.destinationLng);
+      if (dto.defaultTravelMode !== undefined) trip.defaultTravelMode = dto.defaultTravelMode;
+      if (dto.defaultBufferMinutes !== undefined) {
+        trip.defaultBufferMinutes = dto.defaultBufferMinutes;
+      }
+      if (dto.defaultDayStartTime !== undefined) {
+        trip.defaultDayStartTime = dto.defaultDayStartTime;
+      }
+      if (dto.status !== undefined) trip.status = dto.status;
+
+      trip.startDate = nextStart;
+      trip.endDate = nextEnd;
+      trip.version = trip.version + 1;
+      await tripsRepo.save(trip);
+
+      if (!dateRangeChanged) return;
+
+      const existingDays = await daysRepo.find({
+        where: { tripId },
+        order: { dayIndex: 'ASC' },
+      });
+      const targetSet = new Set(targetDates);
+      const existingByDate = new Map(
+        existingDays.map((d) => [toDateString(d.date), d]),
+      );
+
+      const daysToRemove = existingDays.filter((d) => !targetSet.has(toDateString(d.date)));
+      if (daysToRemove.length) {
+        const removedIds = new Set(daysToRemove.map((d) => d.id));
+        const dayIndexById = new Map(existingDays.map((d) => [d.id, d.dayIndex]));
+        const allStops = await stopsRepo.find({
+          where: { tripId },
+          order: { position: 'ASC' },
+        });
+
+        const existingIdea = allStops.filter((s) => s.tripDayId == null);
+        const parked = allStops.filter(
+          (s) => s.tripDayId != null && removedIds.has(s.tripDayId),
+        );
+
+        // Preserve existing idea order, then append parked stops (by day, then position)
+        parked.sort((a, b) => {
+          const idxA = dayIndexById.get(a.tripDayId!) ?? 0;
+          const idxB = dayIndexById.get(b.tripDayId!) ?? 0;
+          if (idxA !== idxB) return idxA - idxB;
+          return a.position - b.position;
+        });
+
+        const ideaBucket = [...existingIdea, ...parked];
+        ideaBucket.forEach((s, i) => {
+          s.tripDayId = null;
+          s.position = i;
+        });
+        if (ideaBucket.length) {
+          await stopsRepo.save(ideaBucket);
+        }
+
+        // Must null stops before deleting days (FK NO ACTION)
+        await daysRepo.remove(daysToRemove);
+      }
+
+      const dateToIndex = new Map(targetDates.map((d, i) => [d, i]));
+
+      const daysToAdd = targetDates
+        .filter((date) => !existingByDate.has(date))
+        .map((date) =>
+          daysRepo.create({
+            tripId,
+            date,
+            dayIndex: dateToIndex.get(date)!,
+            startTime: null,
+          }),
+        );
+      if (daysToAdd.length) {
+        await daysRepo.save(daysToAdd);
+      }
+
+      // Renumber dayIndex for kept days (e.g. startDate shifted forward)
+      const keptDays = existingDays.filter((d) => targetSet.has(toDateString(d.date)));
+      let needsRenumber = false;
+      for (const day of keptDays) {
+        const expected = dateToIndex.get(toDateString(day.date))!;
+        if (day.dayIndex !== expected) {
+          day.dayIndex = expected;
+          needsRenumber = true;
+        }
+      }
+      if (needsRenumber) {
+        await daysRepo.save(keptDays);
+      }
+    });
+
+    return this.findOne(userId, tripId);
+  }
+
+  async patchDay(
+    userId: string,
+    tripId: string,
+    dayId: string,
+    dto: PatchDayDto,
+  ): Promise<TripDetailDto> {
+    await this.requireOwnedTrip(userId, tripId);
+
+    const day = await this.daysRepo.findOne({ where: { id: dayId, tripId } });
+    if (!day) {
+      throw new NotFoundException('Trip day not found');
+    }
+
+    day.startTime = dto.startTime;
+    await this.daysRepo.save(day);
+
+    const trip = await this.tripsRepo.findOne({ where: { id: tripId } });
+    if (trip) {
+      trip.version = trip.version + 1;
+      await this.tripsRepo.save(trip);
+    }
+
+    return this.findOne(userId, tripId);
+  }
+
+  async remove(userId: string, tripId: string): Promise<void> {
+    const trip = await this.requireOwnedTrip(userId, tripId);
+    await this.tripsRepo.remove(trip);
+  }
+
+  private async requireOwnedTrip(userId: string, tripId: string): Promise<TripEntity> {
+    const trip = await this.tripsRepo.findOne({ where: { id: tripId } });
+    if (!trip || trip.userId !== userId) {
+      throw new NotFoundException('Trip not found');
+    }
+    return trip;
   }
 
   private async loadTagsByStopId(stopIds: string[]): Promise<Map<string, string[]>> {
