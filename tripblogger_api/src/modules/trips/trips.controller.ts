@@ -18,6 +18,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { AddStopDto } from './dto/add-stop.dto';
 import { CreateTripDto } from './dto/create-trip.dto';
+import { MoveStopDto } from './dto/move-stop.dto';
 import { PatchDayDto } from './dto/patch-day.dto';
 import { PatchStopDto } from './dto/patch-stop.dto';
 import { PatchTripDto } from './dto/patch-trip.dto';
@@ -97,5 +98,15 @@ export class TripsController {
     @Param('stopId', ParseUUIDPipe) stopId: string,
   ) {
     return this.tripsService.deleteStop(req.user.sub, tripId, stopId);
+  }
+
+  @Post(':tripId/stops/:stopId/move')
+  moveStop(
+    @Req() req: AuthRequest,
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Param('stopId', ParseUUIDPipe) stopId: string,
+    @Body() dto: MoveStopDto,
+  ) {
+    return this.tripsService.moveStop(req.user.sub, tripId, stopId, dto);
   }
 }

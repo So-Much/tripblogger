@@ -641,3 +641,269 @@ describe('TripsService.deleteStop', () => {
   });
 });
 
+function makeStop(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'stop-a',
+    tripId: 'trip-1',
+    tripDayId: 'day-0',
+    position: 0,
+    name: 'A',
+    address: null,
+    lat: '11.94',
+    lng: '108.45',
+    category: null,
+    externalPlaceId: null,
+    openingHoursRaw: null,
+    locationId: null,
+    durationMinutes: 60,
+    bufferAfterMinutes: null,
+    travelModeOverride: null,
+    anchorTime: null,
+    priority: 'nice',
+    status: 'todo',
+    travelFromPrevSeconds: 0,
+    travelFromPrevDistanceM: 0,
+    travelModeUsed: 'motorbike',
+    ...overrides,
+  };
+}
+
+describe('TripsService.moveStop', () => {
+  const day0 = {
+    id: 'day-0',
+    tripId: 'trip-1',
+    date: '2026-08-10',
+    dayIndex: 0,
+    startTime: null,
+  };
+  const day1 = {
+    id: 'day-1',
+    tripId: 'trip-1',
+    date: '2026-08-11',
+    dayIndex: 1,
+    startTime: null,
+  };
+
+  it('reorders within the same day and renumbers 0..n-1', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const a = makeStop({ id: 'stop-a', position: 0, name: 'A' });
+    const b = makeStop({
+      id: 'stop-b',
+      position: 1,
+      name: 'B',
+      lat: '11.95',
+      lng: '108.46',
+    });
+    const c = makeStop({
+      id: 'stop-c',
+      position: 2,
+      name: 'C',
+      lat: '11.96',
+      lng: '108.47',
+    });
+
+    const allStops = [a, b, c];
+    trips.findOne.mockResolvedValueOnce(baseTrip()).mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue(a);
+    stops.find.mockImplementation(async () =>
+      allStops
+        .filter((s) => s.tripDayId === 'day-0')
+        .sort((x, y) => x.position - y.position)
+        .map((s) => ({ ...s })),
+    );
+    stops.save.mockImplementation(async (x: any) => {
+      const list = Array.isArray(x) ? x : [x];
+      for (const s of list) {
+        const idx = allStops.findIndex((t) => t.id === s.id);
+        if (idx >= 0) Object.assign(allStops[idx], s);
+      }
+      return x;
+    });
+    days.find.mockResolvedValue([day0, day1]);
+    days.findOne.mockResolvedValue(day0);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.moveStop('user-1', 'trip-1', 'stop-a', {
+      toTripDayId: 'day-0',
+      toPosition: 2,
+    });
+
+    expect(result.trip.days[0].stops.map((s) => s.id)).toEqual([
+      'stop-b',
+      'stop-c',
+      'stop-a',
+    ]);
+    expect(result.trip.days[0].stops.map((s) => s.position)).toEqual([0, 1, 2]);
+    expect(travelLegs.recomputeDayLegs).toHaveBeenCalledTimes(1);
+    expect(result.trip.version).toBe(2);
+  });
+
+  it('moves stop from one day to another and renumbers both buckets', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const a = makeStop({ id: 'stop-a', tripDayId: 'day-0', position: 0, name: 'A' });
+    const b = makeStop({
+      id: 'stop-b',
+      tripDayId: 'day-0',
+      position: 1,
+      name: 'B',
+      lat: '11.95',
+      lng: '108.46',
+    });
+    const c = makeStop({
+      id: 'stop-c',
+      tripDayId: 'day-1',
+      position: 0,
+      name: 'C',
+      lat: '11.96',
+      lng: '108.47',
+    });
+    const allStops = [a, b, c];
+
+    trips.findOne.mockResolvedValueOnce(baseTrip()).mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue(a);
+    stops.find.mockImplementation(async () =>
+      allStops
+        .slice()
+        .sort((x, y) => x.position - y.position)
+        .map((s) => ({ ...s })),
+    );
+    stops.save.mockImplementation(async (x: any) => {
+      const list = Array.isArray(x) ? x : [x];
+      for (const s of list) {
+        const idx = allStops.findIndex((t) => t.id === s.id);
+        if (idx >= 0) Object.assign(allStops[idx], s);
+      }
+      return x;
+    });
+    days.find.mockResolvedValue([day0, day1]);
+    days.findOne.mockResolvedValue(day1);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.moveStop('user-1', 'trip-1', 'stop-a', {
+      toTripDayId: 'day-1',
+      toPosition: 1,
+    });
+
+    expect(result.trip.days[0].stops.map((s) => s.id)).toEqual(['stop-b']);
+    expect(result.trip.days[0].stops[0].position).toBe(0);
+    expect(result.trip.days[1].stops.map((s) => s.id)).toEqual(['stop-c', 'stop-a']);
+    expect(result.trip.days[1].stops.map((s) => s.position)).toEqual([0, 1]);
+    expect(travelLegs.recomputeDayLegs).toHaveBeenCalledTimes(2);
+  });
+
+  it('moves stop from day to idea bucket', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const a = makeStop({ id: 'stop-a', tripDayId: 'day-0', position: 0, name: 'A' });
+    const b = makeStop({
+      id: 'stop-b',
+      tripDayId: 'day-0',
+      position: 1,
+      name: 'B',
+      lat: '11.95',
+      lng: '108.46',
+    });
+    const idea = makeStop({
+      id: 'stop-idea',
+      tripDayId: null,
+      position: 0,
+      name: 'Idea',
+      lat: '11.97',
+      lng: '108.48',
+      travelFromPrevSeconds: null,
+      travelFromPrevDistanceM: null,
+      travelModeUsed: null,
+    });
+    const allStops = [a, b, idea];
+
+    trips.findOne.mockResolvedValueOnce(baseTrip()).mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue(a);
+    stops.find.mockImplementation(async () =>
+      allStops
+        .slice()
+        .sort((x, y) => x.position - y.position)
+        .map((s) => ({ ...s })),
+    );
+    stops.save.mockImplementation(async (x: any) => {
+      const list = Array.isArray(x) ? x : [x];
+      for (const s of list) {
+        const idx = allStops.findIndex((t) => t.id === s.id);
+        if (idx >= 0) Object.assign(allStops[idx], s);
+      }
+      return x;
+    });
+    days.find.mockResolvedValue([day0, day1]);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.moveStop('user-1', 'trip-1', 'stop-a', {
+      toTripDayId: null,
+      toPosition: 0,
+    });
+
+    expect(result.trip.days[0].stops.map((s) => s.id)).toEqual(['stop-b']);
+    expect(result.trip.ideaStops.map((s) => s.id)).toEqual(['stop-a', 'stop-idea']);
+    expect(result.trip.ideaStops.map((s) => s.position)).toEqual([0, 1]);
+    expect(travelLegs.recomputeDayLegs).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves stop from idea bucket into a day', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const a = makeStop({
+      id: 'stop-a',
+      tripDayId: null,
+      position: 0,
+      name: 'A',
+      travelFromPrevSeconds: null,
+      travelFromPrevDistanceM: null,
+      travelModeUsed: null,
+    });
+    const b = makeStop({
+      id: 'stop-b',
+      tripDayId: 'day-0',
+      position: 0,
+      name: 'B',
+      lat: '11.95',
+      lng: '108.46',
+    });
+    const allStops = [a, b];
+
+    trips.findOne.mockResolvedValueOnce(baseTrip()).mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue(a);
+    stops.find.mockImplementation(async () =>
+      allStops
+        .slice()
+        .sort((x, y) => x.position - y.position)
+        .map((s) => ({ ...s })),
+    );
+    stops.save.mockImplementation(async (x: any) => {
+      const list = Array.isArray(x) ? x : [x];
+      for (const s of list) {
+        const idx = allStops.findIndex((t) => t.id === s.id);
+        if (idx >= 0) Object.assign(allStops[idx], s);
+      }
+      return x;
+    });
+    days.find.mockResolvedValue([day0, day1]);
+    days.findOne.mockResolvedValue(day0);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.moveStop('user-1', 'trip-1', 'stop-a', {
+      toTripDayId: 'day-0',
+      toPosition: 0,
+    });
+
+    expect(result.trip.ideaStops).toEqual([]);
+    expect(result.trip.days[0].stops.map((s) => s.id)).toEqual(['stop-a', 'stop-b']);
+    expect(result.trip.days[0].stops.map((s) => s.position)).toEqual([0, 1]);
+    expect(travelLegs.recomputeDayLegs).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects moveStop for another users trip', async () => {
+    const { svc, trips } = makeService();
+    trips.findOne.mockResolvedValue(baseTrip({ userId: 'other-user' }));
+
+    await expect(
+      svc.moveStop('user-1', 'trip-1', 'stop-a', { toTripDayId: null, toPosition: 0 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+

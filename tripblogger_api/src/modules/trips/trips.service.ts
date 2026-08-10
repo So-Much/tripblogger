@@ -5,6 +5,7 @@ import type { ScheduleConflict, ScheduledStop } from '@tripblogger/itinerary-eng
 import { In, Repository } from 'typeorm';
 import { AddStopDto } from './dto/add-stop.dto';
 import { CreateTripDto } from './dto/create-trip.dto';
+import { MoveStopDto } from './dto/move-stop.dto';
 import { PatchDayDto } from './dto/patch-day.dto';
 import { PatchStopDto } from './dto/patch-stop.dto';
 import { PatchTripDto } from './dto/patch-trip.dto';
@@ -427,6 +428,103 @@ export class TripsService {
     await this.tripsRepo.save(trip);
 
     if (dayId) {
+      await this.recomputeLegsForDay(trip, dayId);
+    }
+
+    const detail = await this.findOne(userId, tripId);
+    return { trip: detail };
+  }
+
+  async moveStop(
+    userId: string,
+    tripId: string,
+    stopId: string,
+    dto: MoveStopDto,
+  ): Promise<TripMutationResult> {
+    const trip = await this.requireOwnedTrip(userId, tripId);
+    const stop = await this.stopsRepo.findOne({ where: { id: stopId, tripId } });
+    if (!stop) {
+      throw new NotFoundException('Stop not found');
+    }
+
+    if (dto.toTripDayId != null) {
+      const day = await this.daysRepo.findOne({
+        where: { id: dto.toTripDayId, tripId },
+      });
+      if (!day) {
+        throw new NotFoundException('Trip day not found');
+      }
+    }
+
+    const fromDayId = stop.tripDayId;
+    const toDayId = dto.toTripDayId ?? null;
+
+    await this.tripsRepo.manager.transaction(async (em) => {
+      const stopsRepo = em.getRepository(TripStopEntity);
+      const tripsRepo = em.getRepository(TripEntity);
+
+      const allStops = await stopsRepo.find({
+        where: { tripId },
+        order: { position: 'ASC' },
+      });
+
+      const inBucket = (s: TripStopEntity, dayId: string | null) =>
+        dayId == null ? s.tripDayId == null : s.tripDayId === dayId;
+
+      const sameBucket =
+        (fromDayId == null && toDayId == null) ||
+        (fromDayId != null && fromDayId === toDayId);
+
+      if (sameBucket) {
+        const bucket = allStops.filter((s) => inBucket(s, fromDayId));
+        const fromIndex = bucket.findIndex((s) => s.id === stop.id);
+        if (fromIndex < 0) {
+          throw new NotFoundException('Stop not found');
+        }
+        const [moved] = bucket.splice(fromIndex, 1);
+        const insertAt = Math.min(Math.max(0, dto.toPosition), bucket.length);
+        bucket.splice(insertAt, 0, moved);
+        bucket.forEach((s, i) => {
+          s.position = i;
+        });
+        await stopsRepo.save(bucket);
+      } else {
+        const source = allStops.filter(
+          (s) => s.id !== stop.id && inBucket(s, fromDayId),
+        );
+        source.forEach((s, i) => {
+          s.position = i;
+        });
+
+        const dest = allStops.filter(
+          (s) => s.id !== stop.id && inBucket(s, toDayId),
+        );
+        const insertAt = Math.min(Math.max(0, dto.toPosition), dest.length);
+        stop.tripDayId = toDayId;
+        if (toDayId == null) {
+          stop.travelFromPrevSeconds = null;
+          stop.travelFromPrevDistanceM = null;
+          stop.travelModeUsed = null;
+        }
+        dest.splice(insertAt, 0, stop);
+        dest.forEach((s, i) => {
+          s.position = i;
+        });
+
+        const toSave = [...source, ...dest];
+        if (toSave.length) {
+          await stopsRepo.save(toSave);
+        }
+      }
+
+      trip.version = trip.version + 1;
+      await tripsRepo.save(trip);
+    });
+
+    const affectedDayIds = new Set<string>();
+    if (fromDayId) affectedDayIds.add(fromDayId);
+    if (toDayId) affectedDayIds.add(toDayId);
+    for (const dayId of affectedDayIds) {
       await this.recomputeLegsForDay(trip, dayId);
     }
 
