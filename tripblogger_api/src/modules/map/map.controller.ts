@@ -40,7 +40,14 @@ export class MapController {
   @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   search(@Query() query: MapSearchQueryDto) {
-    return this.mapService.search(query.q, query.lat, query.lng, query.limit ?? 15);
+    return this.mapService.search(
+      query.q,
+      query.lat,
+      query.lng,
+      query.limit ?? 15,
+      query.biasLat,
+      query.biasLng,
+    );
   }
 
   @Get('reverse')
@@ -48,7 +55,7 @@ export class MapController {
   @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   reverse(@Query() query: MapReverseQueryDto) {
-    return this.mapService.reverse(query.lat, query.lng);
+    return this.mapService.reverse(query.lat, query.lng, query.fromLat, query.fromLng);
   }
 
   @Get('route')

@@ -28,8 +28,18 @@ export const useRecentSearchesStore = create<RecentState>((set, get) => ({
     if (get().hydrated) return;
     try {
       const raw = await SecureStore.getItemAsync(KEY);
-      const items = raw ? (JSON.parse(raw) as MapPlace[]) : [];
-      set({ items: Array.isArray(items) ? items.slice(0, MAX) : [], hydrated: true });
+      const parsed = raw ? (JSON.parse(raw) as Partial<MapPlace>[]) : [];
+      const items = Array.isArray(parsed)
+        ? parsed
+            .filter((p): p is MapPlace => !!p && typeof p.id === 'string' && typeof p.name === 'string')
+            .map((p) => ({
+              ...p,
+              rating: p.rating ?? null,
+              reviewCount: p.reviewCount ?? null,
+            }))
+            .slice(0, MAX)
+        : [];
+      set({ items, hydrated: true });
     } catch {
       set({ items: [], hydrated: true });
     }

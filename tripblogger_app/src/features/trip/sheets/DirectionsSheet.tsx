@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,7 +13,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { useDirections } from '../hooks/useDirections';
 import { useMapStore } from '../store/map.store';
-import type { TravelMode } from '../types/map';
+import type { MapPlace, TravelMode } from '../types/map';
 import { decodePolyline6, formatDistance, formatDuration } from '../utils/geo';
 
 type Props = {
@@ -27,6 +27,21 @@ const MODES: { id: TravelMode; icon: keyof typeof MaterialIcons.glyphMap; labelK
   { id: 'bike', icon: 'two-wheeler', labelKey: 'mapModeBike' },
   { id: 'foot', icon: 'directions-walk', labelKey: 'mapModeWalk' },
 ];
+
+function buildUserOrigin(lat: number, lng: number, name: string): MapPlace {
+  return {
+    id: 'user-location',
+    name,
+    address: null,
+    lat,
+    lng,
+    category: null,
+    source: 'db',
+    distanceM: 0,
+    rating: null,
+    reviewCount: null,
+  };
+}
 
 export function DirectionsSheet({ userLat, userLng, onFitRoute }: Props) {
   const { t, language } = useI18n();
@@ -48,39 +63,51 @@ export function DirectionsSheet({ userLat, userLng, onFitRoute }: Props) {
   const routeResult = useMapStore((s) => s.routeResult);
   const selectedRouteIndex = useMapStore((s) => s.selectedRouteIndex);
   const setSelectedRouteIndex = useMapStore((s) => s.setSelectedRouteIndex);
-  const setActiveSheet = useMapStore((s) => s.setActiveSheet);
-  const clearRoute = useMapStore((s) => s.clearRoute);
+  const closeDirections = useMapStore((s) => s.closeDirections);
 
   const query = useDirections();
+  const fittedGeometryRef = useRef<string | null>(null);
+  const onFitRouteRef = useRef(onFitRoute);
+  onFitRouteRef.current = onFitRoute;
 
-  useEffect(() => {
+  // Prefer layout effect so origin exists before paint / query enable when possible.
+  useLayoutEffect(() => {
     if (activeSheet !== 'directions') return;
-    if (!origin && userLat != null && userLng != null) {
-      setOrigin({
-        id: 'user-location',
-        name: t('mapMyLocation'),
-        address: null,
-        lat: userLat,
-        lng: userLng,
-        category: null,
-        source: 'db',
-        distanceM: 0,
-        rating: null,
-      });
-    }
+    if (origin) return;
+    if (userLat == null || userLng == null) return;
+    setOrigin(buildUserOrigin(userLat, userLng, t('mapMyLocation')));
   }, [activeSheet, origin, userLat, userLng, setOrigin, t]);
 
   const route = routeResult?.routes[selectedRouteIndex];
+  const routeGeometry = route?.geometry ?? null;
   const coords = useMemo(
-    () => (route?.geometry ? decodePolyline6(route.geometry) : []),
-    [route?.geometry],
+    () => (routeGeometry ? decodePolyline6(routeGeometry) : []),
+    [routeGeometry],
   );
 
+  // Fit once per geometry — do NOT re-fit when parent re-creates onFitRoute
+  // (that caused a fit ↔ onRegionChangeComplete ↔ re-render death spiral).
   useEffect(() => {
-    if (coords.length > 1) onFitRoute(coords);
-  }, [coords, onFitRoute]);
+    if (activeSheet !== 'directions') {
+      fittedGeometryRef.current = null;
+      return;
+    }
+    if (!routeGeometry || coords.length < 2) return;
+    if (fittedGeometryRef.current === routeGeometry) return;
+    fittedGeometryRef.current = routeGeometry;
+    const frame = requestAnimationFrame(() => {
+      // Bail if user closed while waiting for the frame.
+      if (useMapStore.getState().activeSheet !== 'directions') return;
+      onFitRouteRef.current(coords);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSheet, routeGeometry, coords]);
 
   if (activeSheet !== 'directions' || !destination) return null;
+
+  const awaitingOrigin = !origin;
+  const showLoading = awaitingOrigin || query.isFetching;
+  const showRoute = !showLoading && !!route;
 
   return (
     <View
@@ -96,8 +123,8 @@ export function DirectionsSheet({ userLat, userLng, onFitRoute }: Props) {
         <Text style={[styles.title, { color: text }]}>{t('mapDirections')}</Text>
         <Pressable
           onPress={() => {
-            clearRoute();
-            setActiveSheet('place');
+            fittedGeometryRef.current = null;
+            closeDirections();
           }}
           hitSlop={10}>
           <MaterialIcons name="close" size={22} color={muted} />
@@ -131,12 +158,12 @@ export function DirectionsSheet({ userLat, userLng, onFitRoute }: Props) {
         })}
       </View>
 
-      {query.isFetching ? (
+      {showLoading ? (
         <View style={styles.loadingRow}>
           <ActivityIndicator color={tint} />
           <Text style={{ color: muted, fontSize: 13 }}>{t('mapLoadingRoute')}</Text>
         </View>
-      ) : route ? (
+      ) : showRoute ? (
         <>
           <View style={styles.summaryRow}>
             <Text style={[styles.summary, { color: text }]}>
@@ -175,7 +202,7 @@ export function DirectionsSheet({ userLat, userLng, onFitRoute }: Props) {
           </Pressable>
           {stepsOpen ? (
             <ScrollView style={{ maxHeight: 180 }} contentContainerStyle={{ gap: 8, paddingTop: 8 }}>
-              {route.steps.map((step, i) => (
+              {(route.steps ?? []).map((step, i) => (
                 <Text key={i} style={{ color: text, fontSize: 13 }}>
                   {step.instruction}
                   {step.distanceM > 0

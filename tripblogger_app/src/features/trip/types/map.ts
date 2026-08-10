@@ -19,7 +19,10 @@ export type MapPlace = {
   category: string | null;
   source: 'db' | 'overpass' | 'photon' | 'nominatim';
   distanceM: number | null;
+  /** TripBlogger avg from location_reviews; null for OSM/external. */
   rating: number | null;
+  /** TripBlogger review count; null when unknown or zero. */
+  reviewCount: number | null;
 };
 
 export type TravelMode = 'car' | 'bike' | 'foot';

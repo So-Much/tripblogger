@@ -56,8 +56,10 @@ export class OverpassProvider {
       }
     }
 
-    this.logger.warn('All Overpass endpoints failed — returning empty list (soft-fail)');
-    return [];
+    // Fail hard so callers can retry. Soft-failing as [] was cached as a real
+    // empty nearby result and left the UI showing "no places" when data exists.
+    this.logger.warn('All Overpass endpoints failed');
+    throw new Error('All Overpass endpoints failed');
   }
 
   private buildQuery(lat: number, lng: number, radiusM: number, filters: OsmTagFilter[]): string {

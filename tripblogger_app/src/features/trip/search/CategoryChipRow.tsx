@@ -1,5 +1,14 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import {
+  ActivityIndicator,
+  InteractionManager,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
@@ -9,6 +18,9 @@ import { POI_CATEGORIES, type PoiCategoryId } from '../types/map';
 type Props = {
   loading?: boolean;
 };
+
+/** After place sheet hide — let Reanimated/layout settle before category fetch. */
+const CATEGORY_AFTER_PLACE_CLOSE_MS = 64;
 
 export function CategoryChipRow({ loading }: Props) {
   const { t } = useI18n();
@@ -20,9 +32,30 @@ export function CategoryChipRow({ loading }: Props) {
   const onCta = useThemeColor({}, 'onCta');
   const selected = useMapStore((s) => s.selectedCategory);
   const setSelectedCategory = useMapStore((s) => s.setSelectedCategory);
+  const pendingCategoryRef = useRef<PoiCategoryId | null | undefined>(undefined);
 
   const toggle = (id: PoiCategoryId) => {
-    setSelectedCategory(selected === id ? null : id);
+    const next: PoiCategoryId | null = selected === id ? null : id;
+    pendingCategoryRef.current = next;
+
+    // Crash-proof: close place/directions FIRST, then change category after the
+    // sheet tree has settled. Same-frame overlay hide + nearbyEpoch + marker
+    // churn was still killing react-native-maps after the prior abort-only fix.
+    const closed = useMapStore.getState().closeOverlayForCategoryChange();
+    if (closed) {
+      const requested = next;
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          if (pendingCategoryRef.current !== requested) return;
+          pendingCategoryRef.current = undefined;
+          useMapStore.getState().setSelectedCategory(requested);
+        }, CATEGORY_AFTER_PLACE_CLOSE_MS);
+      });
+      return;
+    }
+
+    pendingCategoryRef.current = undefined;
+    setSelectedCategory(next);
   };
 
   return (

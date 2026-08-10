@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
@@ -17,44 +17,27 @@ export function MapSearchBar({ loading }: Props) {
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const query = useMapStore((s) => s.searchQuery);
-  const setSearchQuery = useMapStore((s) => s.setSearchQuery);
   const setSearchOpen = useMapStore((s) => s.setSearchOpen);
   const setActiveSheet = useMapStore((s) => s.setActiveSheet);
 
+  const openFocus = () => {
+    setSearchOpen(true);
+    setActiveSheet('search');
+  };
+
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + 8, paddingLeft: 52 }]} pointerEvents="box-none">
-      <View style={[styles.pill, { backgroundColor: surface, borderColor: border }]}>
+      <Pressable
+        onPress={openFocus}
+        accessibilityRole="search"
+        accessibilityLabel={t('mapSearchPlaceholder')}
+        style={[styles.pill, { backgroundColor: surface, borderColor: border }]}>
         <MaterialIcons name="search" size={22} color={muted} />
-        <TextInput
-          value={query}
-          onChangeText={(v) => {
-            setSearchQuery(v);
-            setSearchOpen(true);
-            setActiveSheet('search');
-          }}
-          onFocus={() => {
-            setSearchOpen(true);
-            setActiveSheet('search');
-          }}
-          placeholder={t('mapSearchPlaceholder')}
-          placeholderTextColor={muted}
-          style={[styles.input, { color: text }]}
-          returnKeyType="search"
-          autoCorrect={false}
-        />
+        <Text numberOfLines={1} style={[styles.input, { color: query ? text : muted }]}>
+          {query || t('mapSearchPlaceholder')}
+        </Text>
         {loading ? <ActivityIndicator size="small" color={muted} /> : null}
-        {query.length > 0 ? (
-          <Pressable
-            onPress={() => {
-              setSearchQuery('');
-              setSearchOpen(false);
-            }}
-            hitSlop={8}
-            accessibilityLabel={t('close')}>
-            <MaterialIcons name="close" size={20} color={muted} />
-          </Pressable>
-        ) : null}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -74,7 +57,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     elevation: 4,
     shadowColor: '#000',
     shadowOpacity: 0.12,
@@ -83,7 +66,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 17,
     paddingVertical: 0,
   },
 });

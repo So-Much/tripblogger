@@ -139,6 +139,69 @@ export class OsrmProvider {
     }
   }
 
+  /**
+   * One-to-many driving distances via OSRM Table API.
+   * Returns meters per destination (null when no route); order matches input.
+   */
+  async tableDistances(
+    fromLat: number,
+    fromLng: number,
+    destinations: Array<{ lat: number; lng: number }>,
+    mode: TravelMode = 'car',
+  ): Promise<Array<number | null>> {
+    if (!destinations.length) return [];
+
+    const profile = PROFILE[mode];
+    const out: Array<number | null> = [];
+
+    // Keep requests modest for the public FOSSGIS demo (coords + latency).
+    const CHUNK = 40;
+    for (let offset = 0; offset < destinations.length; offset += CHUNK) {
+      const chunk = destinations.slice(offset, offset + CHUNK);
+      const coords = [
+        `${fromLng},${fromLat}`,
+        ...chunk.map((d) => `${d.lng},${d.lat}`),
+      ].join(';');
+      const params = new URLSearchParams({
+        sources: '0',
+        annotations: 'distance',
+      });
+      const url = `${OSRM_BASE}/${profile}/table/v1/driving/${coords}?${params.toString()}`;
+
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': USER_AGENT },
+        });
+        if (!res.ok) {
+          this.logger.warn(`OSRM table HTTP ${res.status}`);
+          out.push(...chunk.map(() => null));
+          continue;
+        }
+        const body = (await res.json()) as {
+          code?: string;
+          distances?: Array<Array<number | null>>;
+        };
+        if (body.code !== 'Ok' || !body.distances?.[0]) {
+          out.push(...chunk.map(() => null));
+          continue;
+        }
+        // distances[0] = [self, dest0, dest1, ...]
+        const row = body.distances[0];
+        for (let i = 0; i < chunk.length; i++) {
+          const meters = row[i + 1];
+          out.push(meters == null || Number.isNaN(meters) ? null : Math.round(meters));
+        }
+      } catch (err) {
+        this.logger.warn(
+          `OSRM table failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        out.push(...chunk.map(() => null));
+      }
+    }
+
+    return out;
+  }
+
   private viInstruction(type: string, modifier?: string, roadName?: string): string {
     const base = MANEUVER_VI[type] ?? type;
     const mod = modifier ? MODIFIER_VI[modifier] ?? modifier : '';

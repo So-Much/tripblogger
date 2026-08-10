@@ -1,5 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { InteractionManager, Platform, StyleSheet, View } from 'react-native';
 import MapView, {
   Marker,
   Polyline,
@@ -7,12 +7,18 @@ import MapView, {
   type Region,
   type Camera,
 } from 'react-native-maps';
+import { MARKER_PAINT_FREEZE_MS } from '../store/category-change';
 import { useMapStore } from '../store/map.store';
 import { decodePolyline6 } from '../utils/geo';
+import { CategoryMapMarker } from './CategoryMapMarker';
 import type { MapCanvasHandle } from './map-canvas-types';
+import { computeMarkerPaintDelayMs } from './marker-paint';
 import { DEFAULT_MAP_CENTER, type MapTypeId } from './map-style';
 
 export type { MapCanvasHandle } from './map-canvas-types';
+
+/** Extra hold on epoch bump; store freeze usually covers sheet settle. */
+const MARKER_SWAP_SETTLE_MS = MARKER_PAINT_FREEZE_MS;
 
 type Props = {
   userLat?: number;
@@ -32,10 +38,20 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const setFollowMode = useMapStore((s) => s.setFollowMode);
   const setBearing = useMapStore((s) => s.setBearing);
   const nearbyPlaces = useMapStore((s) => s.nearbyPlaces);
+  const nearbyEpoch = useMapStore((s) => s.nearbyEpoch);
+  const markerPaintFreezeUntil = useMapStore((s) => s.markerPaintFreezeUntil);
   const selectedPlace = useMapStore((s) => s.selectedPlace);
+  const activeSheet = useMapStore((s) => s.activeSheet);
   const routeResult = useMapStore((s) => s.routeResult);
   const selectedRouteIndex = useMapStore((s) => s.selectedRouteIndex);
   const mapStyleVariant = useMapStore((s) => s.mapStyleVariant);
+
+  // Painted marker list is intentionally lagged behind the store so we never
+  // empty→remount custom Markers in the same frame as PlaceDetail hide /
+  // Explore reappear (native crash vector on react-native-maps).
+  const [paintedPlaces, setPaintedPlaces] = useState(nearbyPlaces);
+  const paintedEpochRef = useRef(nearbyEpoch);
+  const holdSwapUntilRef = useRef(0);
 
   const mapType: MapTypeId =
     mapStyleVariant === 'dark'
@@ -71,14 +87,22 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     },
     fitRoute: (coordinates) => {
       if (coordinates.length < 2 || !mapRef.current) return;
+      // Drop follow so fitToCoordinates isn't fighting the native follow camera.
+      if (useMapStore.getState().followMode !== 'free') {
+        setFollowMode('free');
+      }
       // coordinates are [lng, lat]
-      mapRef.current.fitToCoordinates(
-        coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
-        {
-          edgePadding: { top: 120, right: 40, bottom: 280, left: 40 },
-          animated: true,
-        },
-      );
+      const points = coordinates
+        .filter(
+          ([longitude, latitude]) =>
+            Number.isFinite(latitude) && Number.isFinite(longitude),
+        )
+        .map(([longitude, latitude]) => ({ latitude, longitude }));
+      if (points.length < 2) return;
+      mapRef.current.fitToCoordinates(points, {
+        edgePadding: { top: 120, right: 40, bottom: 280, left: 40 },
+        animated: true,
+      });
     },
     resetNorth: () => {
       const cam: Partial<Camera> = {
@@ -126,6 +150,56 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     );
   }, [followMode, userLat, userLng]);
 
+  useEffect(() => {
+    const now = Date.now();
+    const epochBumped = nearbyEpoch !== paintedEpochRef.current;
+    if (epochBumped) {
+      paintedEpochRef.current = nearbyEpoch;
+    }
+
+    const { delayMs, nextHoldUntil } = computeMarkerPaintDelayMs({
+      now,
+      freezeUntil: markerPaintFreezeUntil,
+      epochBumped,
+      settleMs: MARKER_SWAP_SETTLE_MS,
+      holdSwapUntil: holdSwapUntilRef.current,
+    });
+    holdSwapUntilRef.current = nextHoldUntil;
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let interactionHandle: { cancel: () => void } | null = null;
+
+    const scheduleApply = () => {
+      interactionHandle = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        // Re-check freeze in case a newer tag/place transition extended it.
+        const state = useMapStore.getState();
+        const remaining = Math.max(0, state.markerPaintFreezeUntil - Date.now());
+        if (remaining > 0) {
+          timeoutId = setTimeout(() => {
+            if (!cancelled) scheduleApply();
+          }, remaining);
+          return;
+        }
+        setPaintedPlaces(state.nearbyPlaces);
+      });
+    };
+
+    if (delayMs > 0) {
+      // Keep current pins on-screen while PlaceDetail hides / Explore springs.
+      timeoutId = setTimeout(scheduleApply, delayMs);
+    } else {
+      scheduleApply();
+    }
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      interactionHandle?.cancel?.();
+    };
+  }, [nearbyPlaces, nearbyEpoch, markerPaintFreezeUntil]);
+
   const routeCoords = useMemo(() => {
     const route = routeResult?.routes[selectedRouteIndex];
     if (!route?.geometry) return [] as { latitude: number; longitude: number }[];
@@ -140,14 +214,28 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     return routeResult.routes.map((r, i) => ({
       index: i,
       selected: i === selectedRouteIndex,
-      coords: decodePolyline6(r.geometry).map(([longitude, latitude]) => ({
-        latitude,
-        longitude,
-      })),
+      coords:
+        typeof r.geometry === 'string' && r.geometry.length > 0
+          ? decodePolyline6(r.geometry).map(([longitude, latitude]) => ({
+              latitude,
+              longitude,
+            }))
+          : ([] as { latitude: number; longitude: number }[]),
     }));
   }, [routeResult, selectedRouteIndex]);
 
-  const visiblePois = useMemo(() => nearbyPlaces.slice(0, 80), [nearbyPlaces]);
+  const visiblePois = useMemo(
+    () =>
+      paintedPlaces
+        .filter(
+          (p) =>
+            !!p?.id &&
+            Number.isFinite(p.lat) &&
+            Number.isFinite(p.lng),
+        )
+        .slice(0, 80),
+    [paintedPlaces],
+  );
 
   return (
     <View style={styles.root}>
@@ -172,7 +260,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
         }}
         onRegionChangeComplete={(region) => {
           regionRef.current = region;
-          setBearing(0);
+          // Avoid needless store writes (bearing already 0) — each set() re-renders
+          // subscribers and previously retriggered an unstable onFitRoute loop.
+          if (Math.abs(useMapStore.getState().bearing) > 0.5) {
+            setBearing(0);
+          }
           onMapIdleCenter?.(region.latitude, region.longitude);
         }}
         onPanDrag={() => {
@@ -182,22 +274,39 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
           <Marker
             key={p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
-            pinColor="#0EA5E9"
             title={p.name}
             description={p.address ?? undefined}
+            anchor={{ x: 0.5, y: 1 }}
+            // Permanent false: pulsing tracksViewChanges while markers remount crashes.
+            tracksViewChanges={false}
+            // Do not bind zIndex/selected to store selection: with tracksViewChanges
+            // false the bitmap won't update anyway, but zIndex churn on tag/place
+            // close still hits the native map and contributes to crashes.
+            zIndex={1}
             onPress={(e) => {
               e.stopPropagation?.();
               onPoiPress?.(p.id);
-            }}
-          />
+            }}>
+            <CategoryMapMarker category={p.category} selected={false} />
+          </Marker>
         ))}
 
-        {selectedPlace ? (
+        {/* Orphan selected pin only while place/directions is open — dropped pins
+            / search picks that are not in the painted nearby list. */}
+        {selectedPlace &&
+        (activeSheet === 'place' || activeSheet === 'directions') &&
+        Number.isFinite(selectedPlace.lat) &&
+        Number.isFinite(selectedPlace.lng) &&
+        !visiblePois.some((p) => p.id === selectedPlace.id) ? (
           <Marker
+            key={`selected:${selectedPlace.id}`}
             coordinate={{ latitude: selectedPlace.lat, longitude: selectedPlace.lng }}
-            pinColor="#DC2626"
             title={selectedPlace.name}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
+            zIndex={2}>
+            <CategoryMapMarker category={selectedPlace.category} selected />
+          </Marker>
         ) : null}
 
         {altRoutes.map((r) =>

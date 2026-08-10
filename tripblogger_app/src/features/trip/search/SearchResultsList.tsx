@@ -1,18 +1,22 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
+import { resolvePlaceCategoryVisual } from '@/src/utils/location-type-display';
+import { PlaceRatingLabel } from '../components/PlaceRatingLabel';
 import { useMapStore } from '../store/map.store';
 import { useRecentSearchesStore } from './recent-searches.store';
 import type { MapPlace } from '../types/map';
 import { formatDistance } from '../utils/geo';
+import { formatResultSubline } from '../utils/search-result-format';
 
 type Props = {
   onSelect: (place: MapPlace) => void;
   loading?: boolean;
+  error?: boolean;
 };
 
-export function SearchResultsList({ onSelect, loading }: Props) {
+export function SearchResultsList({ onSelect, loading, error }: Props) {
   const { t, language } = useI18n();
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
@@ -24,7 +28,11 @@ export function SearchResultsList({ onSelect, loading }: Props) {
   const recent = useRecentSearchesStore((s) => s.items);
   const searching = query.trim().length >= 2;
   const data = searching ? results : recent;
-  const emptyLabel = searching ? t('mapSearchEmpty') : t('mapRecentSearches');
+  const emptyLabel = searching
+    ? error
+      ? t('mapSearchError')
+      : t('mapSearchEmpty')
+    : t('mapRecentSearches');
 
   return (
     <View style={[styles.root, { backgroundColor: surface }]}>
@@ -46,28 +54,33 @@ export function SearchResultsList({ onSelect, loading }: Props) {
             <Text style={[styles.empty, { color: muted }]}>{emptyLabel}</Text>
           )
         }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() => onSelect(item)}
-            style={[styles.row, { borderBottomColor: border }]}>
-            <MaterialIcons name="place" size={22} color={muted} />
-            <View style={styles.meta}>
-              <Text style={[styles.name, { color: text }]} numberOfLines={1}>
-                {item.name}
-              </Text>
-              {item.address ? (
-                <Text style={[styles.addr, { color: muted }]} numberOfLines={1}>
-                  {item.address}
+        renderItem={({ item }) => {
+          const categoryVisual = resolvePlaceCategoryVisual(item.category);
+          return (
+            <Pressable
+              onPress={() => onSelect(item)}
+              style={[styles.row, { borderBottomColor: border }]}>
+              <LocationTypeIcon
+                locationType={{ code: item.category ?? 'other', name: categoryVisual.label }}
+                size="sm"
+              />
+              <View style={styles.meta}>
+                <Text style={[styles.name, { color: text }]} numberOfLines={1}>
+                  {item.name}
                 </Text>
-              ) : null}
-            </View>
-            {item.distanceM != null ? (
-              <Text style={[styles.dist, { color: muted }]}>
-                {formatDistance(item.distanceM, language)}
-              </Text>
-            ) : null}
-          </Pressable>
-        )}
+                <Text style={[styles.addr, { color: muted }]} numberOfLines={1}>
+                  {formatResultSubline({
+                    category: categoryVisual.label,
+                    address: item.address,
+                    distanceLabel:
+                      item.distanceM != null ? formatDistance(item.distanceM, language) : null,
+                  })}
+                </Text>
+                <PlaceRatingLabel rating={item.rating} reviewCount={item.reviewCount} />
+              </View>
+            </Pressable>
+          );
+        }}
       />
     </View>
   );
@@ -109,6 +122,5 @@ const styles = StyleSheet.create({
   meta: { flex: 1, gap: 2 },
   name: { fontSize: 15, fontWeight: '600' },
   addr: { fontSize: 12 },
-  dist: { fontSize: 12, fontWeight: '600' },
   empty: { padding: 24, textAlign: 'center' },
 });

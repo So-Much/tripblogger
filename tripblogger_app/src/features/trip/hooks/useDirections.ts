@@ -7,7 +7,6 @@ export function useDirections() {
   const origin = useMapStore((s) => s.directionsOrigin);
   const destination = useMapStore((s) => s.directionsDestination);
   const mode = useMapStore((s) => s.travelMode);
-  const setRouteResult = useMapStore((s) => s.setRouteResult);
   const activeSheet = useMapStore((s) => s.activeSheet);
 
   const enabled =
@@ -28,7 +27,7 @@ export function useDirections() {
       destination?.lng,
     ],
     enabled,
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       mapService.route({
         fromLat: origin!.lat,
         fromLng: origin!.lng,
@@ -36,13 +35,25 @@ export function useDirections() {
         toLng: destination!.lng,
         mode,
         alternatives: true,
+        signal,
       }),
     staleTime: 2 * 60_000,
   });
 
   useEffect(() => {
-    if (query.data) setRouteResult(query.data);
-  }, [query.data, setRouteResult]);
+    if (!query.data) return;
+    // Ignore late responses after the user closed directions / changed destination.
+    // (RQ already aborts the HTTP call via `signal` when the query key / enabled flips.)
+    const state = useMapStore.getState();
+    if (state.activeSheet !== 'directions' || !state.directionsDestination) return;
+    if (
+      state.directionsDestination.lat !== destination?.lat ||
+      state.directionsDestination.lng !== destination?.lng
+    ) {
+      return;
+    }
+    state.setRouteResult(query.data);
+  }, [query.data, destination?.lat, destination?.lng]);
 
   return query;
 }

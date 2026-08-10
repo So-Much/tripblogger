@@ -1,5 +1,11 @@
+const polylineCache = new Map<string, [number, number][]>();
+
 /** Decode Google-encoded polyline with precision 1e6 (polyline6). */
 export function decodePolyline6(encoded: string): [number, number][] {
+  if (!encoded) return [];
+  const cached = polylineCache.get(encoded);
+  if (cached) return cached;
+
   let index = 0;
   const len = encoded.length;
   let lat = 0;
@@ -31,6 +37,12 @@ export function decodePolyline6(encoded: string): [number, number][] {
     coordinates.push([lng / 1e6, lat / 1e6]);
   }
 
+  // Bound cache size so long sessions don't retain every route forever.
+  if (polylineCache.size > 32) {
+    const oldest = polylineCache.keys().next().value;
+    if (oldest != null) polylineCache.delete(oldest);
+  }
+  polylineCache.set(encoded, coordinates);
   return coordinates;
 }
 

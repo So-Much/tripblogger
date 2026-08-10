@@ -1,11 +1,25 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ActivityIndicator, Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
 import { apiClient } from '@/src/services/api/client';
+import { resolvePlaceCategoryVisual } from '@/src/utils/location-type-display';
+import { PlaceRatingLabel } from '../components/PlaceRatingLabel';
 import { useMapStore } from '../store/map.store';
+import type { MapPlace } from '../types/map';
 import { formatDistance } from '../utils/geo';
 
 type SavedGroup = {
@@ -13,7 +27,11 @@ type SavedGroup = {
   locations: { id: string; locationId: string }[];
 };
 
-export function PlaceDetailSheet() {
+type Props = {
+  onDirections?: (place: MapPlace) => void;
+};
+
+export function PlaceDetailSheet({ onDirections }: Props) {
   const { t, language } = useI18n();
   const insets = useSafeAreaInsets();
   const surface = useThemeColor({}, 'surface');
@@ -24,9 +42,18 @@ export function PlaceDetailSheet() {
   const border = useThemeColor({}, 'border');
   const place = useMapStore((s) => s.selectedPlace);
   const activeSheet = useMapStore((s) => s.activeSheet);
-  const setActiveSheet = useMapStore((s) => s.setActiveSheet);
+  const closePlace = useMapStore((s) => s.closePlace);
   const openDirectionsTo = useMapStore((s) => s.openDirectionsTo);
   const queryClient = useQueryClient();
+
+  // Soft-hide like ExploreSheet: hard-unmount mid tag-switch races map markers.
+  const lastPlaceRef = useRef<MapPlace | null>(place);
+  useEffect(() => {
+    if (place) lastPlaceRef.current = place;
+  }, [place]);
+
+  const displayPlace = place ?? lastPlaceRef.current;
+  const visible = activeSheet === 'place' && !!place;
 
   const savedQuery = useQuery({
     queryKey: ['saved-locations'],
@@ -34,13 +61,13 @@ export function PlaceDetailSheet() {
       const res = await apiClient.get<SavedGroup[]>('/saved-locations');
       return res.data;
     },
-    enabled: activeSheet === 'place' && !!place && place.source === 'db',
+    enabled: visible && !!place && place.source === 'db',
     retry: false,
   });
 
   const savedRow = savedQuery.data
     ?.flatMap((g) => g.locations)
-    .find((l) => l.locationId === place?.id);
+    .find((l) => l.locationId === displayPlace?.id);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -55,43 +82,99 @@ export function PlaceDetailSheet() {
     onError: () => Alert.alert(t('errorTitle'), t('locationErrorGeneric')),
   });
 
-  if (activeSheet !== 'place' || !place) return null;
+  if (!displayPlace) return null;
+
+  const categoryVisual = resolvePlaceCategoryVisual(displayPlace.category);
+  const hasCoords =
+    Number.isFinite(displayPlace.lat) && Number.isFinite(displayPlace.lng);
+
+  const openInGoogleMaps = () => {
+    if (!hasCoords) return;
+    const query = encodeURIComponent(
+      `${displayPlace.name} ${displayPlace.lat},${displayPlace.lng}`,
+    );
+    const url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    void Linking.openURL(url).catch(() => {
+      Alert.alert(t('errorTitle'), t('mapOpenInMapsFailed'));
+    });
+  };
 
   return (
     <View
+      pointerEvents={visible ? 'auto' : 'none'}
       style={[
         styles.sheet,
         {
           backgroundColor: surface,
           paddingBottom: Math.max(insets.bottom, 12) + 64,
           borderColor: border,
+          opacity: visible ? 1 : 0,
         },
       ]}>
       <View style={[styles.handle, { backgroundColor: muted }]} />
-      <Pressable onPress={() => setActiveSheet('explore')} style={styles.close} hitSlop={10}>
+      <Pressable onPress={closePlace} style={styles.close} hitSlop={10}>
         <MaterialIcons name="close" size={22} color={muted} />
       </Pressable>
-      <Text style={[styles.name, { color: text }]}>{place.name}</Text>
-      {place.address ? (
-        <Text style={[styles.addr, { color: muted }]}>{place.address}</Text>
-      ) : null}
-      <Text style={[styles.meta, { color: muted }]}>
-        {[place.category, place.distanceM != null ? formatDistance(place.distanceM, language) : null]
-          .filter(Boolean)
-          .join(' · ')}
-      </Text>
+      <View style={styles.titleRow}>
+        <LocationTypeIcon
+          locationType={{
+            code: displayPlace.category ?? 'other',
+            name: categoryVisual.label,
+          }}
+          size="md"
+        />
+        <View style={styles.titleMeta}>
+          <Text style={[styles.name, { color: text }]}>{displayPlace.name}</Text>
+          {displayPlace.address ? (
+            <Text style={[styles.addr, { color: muted }]}>{displayPlace.address}</Text>
+          ) : null}
+          <Text style={[styles.meta, { color: muted }]}>
+            {[
+              categoryVisual.label,
+              displayPlace.distanceM != null
+                ? formatDistance(displayPlace.distanceM, language)
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </Text>
+          <PlaceRatingLabel
+            rating={displayPlace.rating}
+            reviewCount={displayPlace.reviewCount}
+            size="md"
+          />
+        </View>
+        <Pressable
+          style={[
+            styles.mapsIconBtn,
+            { backgroundColor: `${tint}18`, opacity: hasCoords ? 1 : 0.4 },
+          ]}
+          disabled={!hasCoords || !visible}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={t('mapOpenInMaps')}
+          onPress={openInGoogleMaps}>
+          <MaterialIcons name="place" size={20} color={tint} />
+        </Pressable>
+      </View>
 
       <View style={styles.actions}>
         <Pressable
           style={[styles.btn, { backgroundColor: tint }]}
-          onPress={() => openDirectionsTo(place)}>
+          disabled={!visible}
+          onPress={() => {
+            if (!place) return;
+            if (onDirections) onDirections(place);
+            else openDirectionsTo(place);
+          }}>
           <MaterialIcons name="directions" size={20} color={onCta} />
           <Text style={[styles.btnText, { color: onCta }]}>{t('mapDirections')}</Text>
         </Pressable>
         <Pressable
           style={[styles.btnOutline, { borderColor: border }]}
-          disabled={saveMutation.isPending}
+          disabled={!visible || saveMutation.isPending}
           onPress={() => {
+            if (!place) return;
             if (place.source !== 'db') {
               Alert.alert(t('locationExternalHint'));
               return;
@@ -117,9 +200,10 @@ export function PlaceDetailSheet() {
         </Pressable>
         <Pressable
           style={[styles.btnOutline, { borderColor: border }]}
+          disabled={!visible}
           onPress={() =>
             void Share.share({
-              message: `${place.name}${place.address ? `\n${place.address}` : ''}\nhttps://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}`,
+              message: `${displayPlace.name}${displayPlace.address ? `\n${displayPlace.address}` : ''}\nhttps://www.openstreetmap.org/?mlat=${displayPlace.lat}&mlon=${displayPlace.lng}`,
             })
           }>
           <MaterialIcons name="share" size={20} color={tint} />
@@ -151,10 +235,19 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginBottom: 8,
   },
-  close: { position: 'absolute', right: 12, top: 12 },
-  name: { fontSize: 20, fontWeight: '700', paddingRight: 28 },
+  close: { position: 'absolute', right: 12, top: 12, zIndex: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingRight: 28 },
+  titleMeta: { flex: 1, gap: 2, minWidth: 0 },
+  name: { fontSize: 20, fontWeight: '700' },
   addr: { fontSize: 13 },
   meta: { fontSize: 12, marginBottom: 8 },
+  mapsIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 40 * 0.28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   actions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   btn: {
     flexDirection: 'row',

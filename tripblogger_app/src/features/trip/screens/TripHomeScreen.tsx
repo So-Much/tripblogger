@@ -1,4 +1,4 @@
-﻿import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,13 +13,13 @@ import { useUserLocation } from '../hooks/useUserLocation';
 import { MapCanvas, type MapCanvasHandle } from '../map/MapCanvas';
 import { CategoryChipRow } from '../search/CategoryChipRow';
 import { MapSearchBar } from '../search/MapSearchBar';
-import { SearchResultsList } from '../search/SearchResultsList';
+import { SearchFocusView } from '../search/SearchFocusView';
 import { useRecentSearchesStore } from '../search/recent-searches.store';
 import { TripBottomNav } from '../nav/TripBottomNav';
 import { DirectionsSheet } from '../sheets/DirectionsSheet';
 import { ExploreSheet } from '../sheets/ExploreSheet';
 import { PlaceDetailSheet } from '../sheets/PlaceDetailSheet';
-import { mapService } from '../services/map.service';
+import { isAbortedError, mapService } from '../services/map.service';
 import { useMapStore } from '../store/map.store';
 import type { MapPlace } from '../types/map';
 import { haversineM } from '../utils/geo';
@@ -34,6 +34,8 @@ export function TripHomeScreen() {
   const border = useThemeColor({}, 'border');
 
   const mapRef = useRef<MapCanvasHandle>(null);
+  /** Aborts reverse/route work from long-press when the user moves on or unmounts. */
+  const reverseAbortRef = useRef<AbortController | null>(null);
   const [reverseLoading, setReverseLoading] = useState(false);
 
   const { coords, granted } = useUserLocation(true);
@@ -46,21 +48,33 @@ export function TripHomeScreen() {
   const showSearchThisArea = useMapStore((s) => s.showSearchThisArea);
   const setShowSearchThisArea = useMapStore((s) => s.setShowSearchThisArea);
   const openPlace = useMapStore((s) => s.openPlace);
-  const setActiveSheet = useMapStore((s) => s.setActiveSheet);
-  const setExploreSnapIndex = useMapStore((s) => s.setExploreSnapIndex);
   const setFollowMode = useMapStore((s) => s.setFollowMode);
-  const activeSheet = useMapStore((s) => s.activeSheet);
-  const searchOpen = useMapStore((s) => s.searchOpen);
   const nearbyPlaces = useMapStore((s) => s.nearbyPlaces);
   const hydrateRecent = useRecentSearchesStore((s) => s.hydrate);
   const remember = useRememberSearch();
+
+  useEffect(() => {
+    return () => {
+      reverseAbortRef.current?.abort();
+      reverseAbortRef.current = null;
+    };
+  }, []);
+
+  // Tag change (or clear) → drop any in-flight long-press reverse; nearby is aborted via RQ.
+  useEffect(() => {
+    reverseAbortRef.current?.abort();
+    reverseAbortRef.current = null;
+    setReverseLoading(false);
+  }, [selectedCategory]);
 
   const effectiveCenter =
     searchCenter ??
     (coords ? { lat: coords.lat, lng: coords.lng } : null);
 
   const nearby = useNearbyPlaces(effectiveCenter, selectedCategory);
-  const search = usePlaceSearch(coords?.lat, coords?.lng);
+  const searchOrigin = coords ? { lat: coords.lat, lng: coords.lng } : null;
+  const searchBias = mapCenter ?? searchOrigin;
+  const search = usePlaceSearch(searchOrigin, searchBias);
 
   useEffect(() => {
     void hydrateRecent();
@@ -87,7 +101,14 @@ export function TripHomeScreen() {
 
   const handleSelectPlace = useCallback(
     (place: MapPlace) => {
+      // Selecting a place supersedes any in-flight long-press reverse/route.
+      reverseAbortRef.current?.abort();
+      reverseAbortRef.current = null;
+      setReverseLoading(false);
       remember(place);
+      // Google-Maps style: leave focus, clear the text, then fly + open detail.
+      useMapStore.getState().setSearchQuery('');
+      useMapStore.getState().setSearchOpen(false);
       openPlace(place);
       setFollowMode('free');
       mapRef.current?.flyTo(place.lng, place.lat, 16);
@@ -97,10 +118,44 @@ export function TripHomeScreen() {
 
   const handleLongPress = useCallback(
     async (lat: number, lng: number) => {
+      reverseAbortRef.current?.abort();
+      const ac = new AbortController();
+      reverseAbortRef.current = ac;
       setReverseLoading(true);
       try {
-        const reversed = await mapService.reverse(lat, lng);
-        const place: MapPlace = reversed ?? {
+        const reversed = await mapService.reverse(
+          lat,
+          lng,
+          coords?.lat,
+          coords?.lng,
+          ac.signal,
+        );
+        if (ac.signal.aborted) return;
+        if (reversed) {
+          handleSelectPlace(reversed);
+          return;
+        }
+        let distanceM: number | null = null;
+        if (coords) {
+          try {
+            const { routes } = await mapService.route({
+              fromLat: coords.lat,
+              fromLng: coords.lng,
+              toLat: lat,
+              toLng: lng,
+              mode: 'car',
+              alternatives: false,
+              signal: ac.signal,
+            });
+            if (ac.signal.aborted) return;
+            distanceM = routes[0]?.distanceM ?? null;
+          } catch (err) {
+            if (isAbortedError(err) || ac.signal.aborted) return;
+            distanceM = null;
+          }
+        }
+        if (ac.signal.aborted) return;
+        handleSelectPlace({
           id: `dropped:${lat.toFixed(5)},${lng.toFixed(5)}`,
           name: t('mapDroppedPin'),
           address: null,
@@ -108,13 +163,12 @@ export function TripHomeScreen() {
           lng,
           category: null,
           source: 'nominatim',
-          distanceM: coords
-            ? Math.round(haversineM(coords.lat, coords.lng, lat, lng))
-            : null,
+          distanceM,
           rating: null,
-        };
-        handleSelectPlace(place);
-      } catch {
+          reviewCount: null,
+        });
+      } catch (err) {
+        if (isAbortedError(err) || ac.signal.aborted) return;
         handleSelectPlace({
           id: `dropped:${lat.toFixed(5)},${lng.toFixed(5)}`,
           name: t('mapDroppedPin'),
@@ -125,9 +179,13 @@ export function TripHomeScreen() {
           source: 'nominatim',
           distanceM: null,
           rating: null,
+          reviewCount: null,
         });
       } finally {
-        setReverseLoading(false);
+        if (reverseAbortRef.current === ac) {
+          reverseAbortRef.current = null;
+          setReverseLoading(false);
+        }
       }
     },
     [coords, handleSelectPlace, t],
@@ -145,6 +203,32 @@ export function TripHomeScreen() {
     if (!coords) return;
     mapRef.current?.flyTo(coords.lng, coords.lat, followMode === 'follow-heading' ? 17 : 15);
   }, [coords, followMode]);
+
+  const onFitRoute = useCallback((c: [number, number][]) => {
+    mapRef.current?.fitRoute(c);
+  }, []);
+
+  const openDirectionsFromPlace = useCallback(
+    (place: MapPlace) => {
+      const origin =
+        coords != null
+          ? {
+              id: 'user-location',
+              name: t('mapMyLocation'),
+              address: null,
+              lat: coords.lat,
+              lng: coords.lng,
+              category: null,
+              source: 'db' as const,
+              distanceM: 0,
+              rating: null,
+              reviewCount: null,
+            }
+          : null;
+      useMapStore.getState().openDirectionsTo(place, origin);
+    },
+    [coords, t],
+  );
 
   return (
     <View style={styles.root}>
@@ -182,6 +266,8 @@ export function TripHomeScreen() {
           style={[styles.searchArea, { top: insets.top + 108, backgroundColor: surface, borderColor: border }]}
           disabled={nearby.isFetching}
           onPress={() => {
+            // New map area → invalidate prior POIs + any open place (abort/ignore via epoch).
+            useMapStore.getState().invalidateNearbyDataset({ openExplore: true });
             setSearchCenter(mapCenter);
             setShowSearchThisArea(false);
           }}>
@@ -219,23 +305,30 @@ export function TripHomeScreen() {
       />
       <MapAttribution />
 
-      {searchOpen && activeSheet === 'search' ? (
-        <View style={[styles.searchOverlay, { paddingTop: insets.top + 120, backgroundColor: surface }]}>
-          <SearchResultsList onSelect={handleSelectPlace} loading={search.isFetching} />
-        </View>
-      ) : null}
+      <SearchFocusView
+        onSelect={handleSelectPlace}
+        loading={search.isFetching}
+        error={search.showError}
+      />
 
-      <ExploreSheet onSelectPlace={handleSelectPlace} loading={nearby.isFetching} />
-      <PlaceDetailSheet />
+      <ExploreSheet
+        onSelectPlace={handleSelectPlace}
+        loading={nearby.isFetching}
+        error={nearby.showError}
+      />
+      <PlaceDetailSheet onDirections={openDirectionsFromPlace} />
       <DirectionsSheet
         userLat={coords?.lat}
         userLng={coords?.lng}
-        onFitRoute={(c) => mapRef.current?.fitRoute(c)}
+        onFitRoute={onFitRoute}
       />
       <TripBottomNav
         onExplorePress={() => {
-          setExploreSnapIndex(1);
-          setActiveSheet('explore');
+          useMapStore.setState((s) => ({
+            exploreSnapIndex: 1,
+            activeSheet: 'explore',
+            sheetEpoch: s.sheetEpoch + 1,
+          }));
         }}
       />
     </View>
@@ -291,9 +384,5 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  searchOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 28,
   },
 });

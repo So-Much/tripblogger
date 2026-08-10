@@ -53,6 +53,21 @@ export class MapSearchQueryDto {
   @Max(180)
   lng?: number;
 
+  /** Map viewport center for ranking bias (falls back to lat/lng when absent). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  biasLat?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  biasLng?: number;
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
@@ -73,6 +88,21 @@ export class MapReverseQueryDto {
   @Min(-180)
   @Max(180)
   lng!: number;
+
+  /** Optional origin for road distance (e.g. user location). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  fromLat?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  fromLng?: number;
 }
 
 export class MapRouteQueryDto {

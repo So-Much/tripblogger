@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { BadGatewayException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { Repository } from 'typeorm';
@@ -14,6 +14,7 @@ import {
 import { OverpassProvider } from './providers/overpass.provider';
 import { OsrmProvider, TravelMode } from './providers/osrm.provider';
 import { encodeGeohash } from './utils/geohash';
+import { rankPlaces } from './utils/search-ranking';
 
 export type MapPlaceDto = {
   id: string;
@@ -24,7 +25,10 @@ export type MapPlaceDto = {
   category: string | null;
   source: 'db' | 'overpass' | 'photon' | 'nominatim';
   distanceM: number | null;
+  /** TripBlogger location_reviews average; null for OSM/external POIs. */
   rating: number | null;
+  /** TripBlogger review count; null when unknown or zero. */
+  reviewCount: number | null;
 };
 
 const NEARBY_TTL_S = 7 * 24 * 60 * 60;
@@ -54,16 +58,39 @@ export class MapService {
     if (!isPoiCategoryId(categoryId)) return [];
     const category = POI_CATEGORIES[categoryId];
     const hash = encodeGeohash(lat, lng, 6);
-    const cacheKey = `map:nearby:${categoryId}:${hash}:${Math.round(radiusM / 100)}`;
+    // v4: do not cache Overpass soft-fail empties (v3 poisoned some keys)
+    const cacheKey = `map:nearby:v4:${categoryId}:${hash}:${Math.round(radiusM / 100)}`;
 
     const cached = await this.cacheGet<MapPlaceDto[]>(cacheKey);
     if (cached) return cached.slice(0, limit);
 
     const radiusKm = radiusM / 1000;
-    const dbPlaces = await this.queryDbNearby(lat, lng, radiusKm, category.dbTypeCodes, limit);
-    const need = Math.max(0, limit - dbPlaces.length);
-    const overpassPlaces =
-      need > 0 ? await this.overpass.nearby(lat, lng, radiusM, category, need + 10) : [];
+    // Over-fetch slightly so haversine shortlist can be re-ranked by road distance.
+    const candidateLimit = Math.min(limit + 15, 80);
+    const dbPlaces = await this.queryDbNearby(
+      lat,
+      lng,
+      radiusKm,
+      category.dbTypeCodes,
+      candidateLimit,
+    );
+    const need = Math.max(0, candidateLimit - dbPlaces.length);
+    let overpassPlaces: Awaited<ReturnType<OverpassProvider['nearby']>> = [];
+    let overpassOk = true;
+    if (need > 0) {
+      try {
+        overpassPlaces = await this.overpass.nearby(lat, lng, radiusM, category, need + 10);
+      } catch (err) {
+        overpassOk = false;
+        this.logger.warn(
+          `Overpass nearby failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        // No DB fallback → surface as error so the client can retry.
+        if (dbPlaces.length === 0) {
+          throw new BadGatewayException('Nearby places temporarily unavailable');
+        }
+      }
+    }
 
     const merged = this.dedupePlaces([
       ...dbPlaces,
@@ -77,34 +104,61 @@ export class MapService {
         source: 'overpass' as const,
         distanceM: Math.round(haversineKm(lat, lng, p.lat, p.lng) * 1000),
         rating: null,
+        reviewCount: null,
       })),
     ]);
 
+    // Sort/filter candidates by crow-flies, then replace displayed distance with road meters.
     merged.sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0));
-    const result = merged.slice(0, limit);
-    await this.cacheSet(cacheKey, result, NEARBY_TTL_S);
+    const shortlist = merged.slice(0, candidateLimit);
+    const withRoad = await this.applyRoadDistances(lat, lng, shortlist);
+    withRoad.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
+    const result = withRoad.slice(0, limit);
+    // Only cache complete successes (including genuine empty from Overpass).
+    if (overpassOk) {
+      await this.cacheSet(cacheKey, result, NEARBY_TTL_S);
+    }
     return result;
   }
 
-  async search(q: string, lat?: number, lng?: number, limit = 15): Promise<MapPlaceDto[]> {
+  async search(
+    q: string,
+    lat?: number,
+    lng?: number,
+    limit = 15,
+    biasLat?: number,
+    biasLng?: number,
+  ): Promise<MapPlaceDto[]> {
     const trimmed = q.trim();
     if (trimmed.length < 2) return [];
-    const cacheKey = `map:search:${trimmed.toLowerCase()}:${lat?.toFixed(2) ?? ''}:${lng?.toFixed(2) ?? ''}:${limit}`;
+
+    const bias =
+      biasLat != null && biasLng != null
+        ? { lat: biasLat, lng: biasLng }
+        : lat != null && lng != null
+          ? { lat, lng }
+          : null;
+
+    // v4: composite ranking (text + bias distance + source + rating); bias in key.
+    const cacheKey = `map:search:v4:${trimmed.toLowerCase()}:${lat?.toFixed(2) ?? ''}:${lng?.toFixed(2) ?? ''}:${bias ? `${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : ''}:${limit}`;
     const cached = await this.cacheGet<MapPlaceDto[]>(cacheKey);
     if (cached) return cached;
 
+    // Accent-insensitive recall (SQL Server collation) across name/address.
     const qb = this.locationsRepo
       .createQueryBuilder('l')
       .leftJoinAndSelect('l.locationType', 'lt')
       .where('l.status = :status', { status: 'ACTIVE' })
-      .andWhere('(LOWER(l.name) LIKE :q OR LOWER(l.address) LIKE :q)', {
-        q: `%${trimmed.toLowerCase()}%`,
-      })
-      .take(limit);
+      .andWhere(
+        '(l.name COLLATE Latin1_General_CI_AI LIKE :q OR l.address COLLATE Latin1_General_CI_AI LIKE :q)',
+        { q: `%${trimmed}%` },
+      )
+      .take(Math.max(limit * 2, 30));
     const dbRows = await qb.getMany();
     const dbPlaces: MapPlaceDto[] = dbRows.map((loc) => {
       const plat = Number(loc.latitude);
       const plng = Number(loc.longitude);
+      const { rating, reviewCount } = this.dbRatingFields(loc);
       return {
         id: loc.id,
         name: loc.name,
@@ -115,13 +169,21 @@ export class MapService {
         source: 'db' as const,
         distanceM:
           lat != null && lng != null ? Math.round(haversineKm(lat, lng, plat, plng) * 1000) : null,
-        rating: Number(loc.avgRating) || null,
+        rating,
+        reviewCount,
       };
     });
 
     let external: MapPlaceDto[] = [];
+    let externalOk = true;
     try {
-      const places = await this.placesService.search(trimmed, lat, lng, Math.max(8, limit - dbPlaces.length));
+      // Photon bias uses the viewport center when available.
+      const places = await this.placesService.search(
+        trimmed,
+        bias?.lat ?? lat,
+        bias?.lng ?? lng,
+        Math.max(8, limit - dbPlaces.length),
+      );
       external = places.map((p) => ({
         id: p.id,
         name: p.name,
@@ -135,25 +197,49 @@ export class MapService {
             ? Math.round(haversineKm(lat, lng, p.lat, p.lng) * 1000)
             : null,
         rating: null,
+        reviewCount: null,
       }));
     } catch (err) {
+      externalOk = false;
       this.logger.warn(`Places search failed: ${err instanceof Error ? err.message : String(err)}`);
+      // No DB hits → let the client retry instead of caching a false empty.
+      if (dbPlaces.length === 0) {
+        if (err instanceof HttpException) throw err;
+        throw new BadGatewayException('Places search temporarily unavailable');
+      }
     }
 
     const merged = this.dedupePlaces([...dbPlaces, ...external]);
+    // Composite ranking replaces the old distance-only sort.
+    let result = rankPlaces(trimmed, merged, bias).slice(0, limit);
     if (lat != null && lng != null) {
-      merged.sort((a, b) => (a.distanceM ?? Infinity) - (b.distanceM ?? Infinity));
+      // Displayed distance stays GPS-origin road distance; ranking order is preserved.
+      result = await this.applyRoadDistances(lat, lng, result);
     }
-    const result = merged.slice(0, limit);
-    await this.cacheSet(cacheKey, result, SEARCH_TTL_S);
+    if (externalOk) {
+      await this.cacheSet(cacheKey, result, SEARCH_TTL_S);
+    }
     return result;
   }
 
-  async reverse(lat: number, lng: number): Promise<MapPlaceDto | null> {
+  async reverse(
+    lat: number,
+    lng: number,
+    fromLat?: number,
+    fromLng?: number,
+  ): Promise<MapPlaceDto | null> {
     try {
       const results = await this.placesService.reverse(lat, lng);
       const first = results[0];
       if (!first) return null;
+      let distanceM: number | null = null;
+      if (fromLat != null && fromLng != null) {
+        const [road] = await this.osrm.tableDistances(fromLat, fromLng, [
+          { lat: first.lat, lng: first.lng },
+        ]);
+        distanceM =
+          road ?? Math.round(haversineKm(fromLat, fromLng, first.lat, first.lng) * 1000);
+      }
       return {
         id: first.id,
         name: first.name,
@@ -162,8 +248,9 @@ export class MapService {
         lng: first.lng,
         category: null,
         source: first.source,
-        distanceM: 0,
+        distanceM,
         rating: null,
+        reviewCount: null,
       };
     } catch (err) {
       this.logger.warn(`Reverse failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -218,6 +305,7 @@ export class MapService {
         const plat = Number(loc.latitude);
         const plng = Number(loc.longitude);
         const distanceM = Math.round(haversineKm(lat, lng, plat, plng) * 1000);
+        const { rating, reviewCount } = this.dbRatingFields(loc);
         return {
           id: loc.id,
           name: loc.name,
@@ -227,12 +315,48 @@ export class MapService {
           category: loc.locationType?.code ?? null,
           source: 'db' as const,
           distanceM,
-          rating: Number(loc.avgRating) || null,
+          rating,
+          reviewCount,
         };
       })
       .filter((p) => (p.distanceM ?? Infinity) <= radiusKm * 1000)
       .sort((a, b) => (a.distanceM ?? 0) - (b.distanceM ?? 0))
       .slice(0, limit);
+  }
+
+  /** Only expose real TripBlogger aggregates — never invent 0-star placeholders. */
+  private dbRatingFields(loc: LocationEntity): {
+    rating: number | null;
+    reviewCount: number | null;
+  } {
+    const rating = Number(loc.avgRating);
+    const reviewCount = Number(loc.totalReview) || 0;
+    return {
+      rating: rating > 0 ? rating : null,
+      reviewCount: reviewCount > 0 ? reviewCount : null,
+    };
+  }
+
+  /**
+   * Replace haversine distanceM with OSRM car road distance for the visible list.
+   * Falls back to existing (haversine) values when table lookup fails for a point.
+   */
+  private async applyRoadDistances(
+    fromLat: number,
+    fromLng: number,
+    places: MapPlaceDto[],
+  ): Promise<MapPlaceDto[]> {
+    if (!places.length) return places;
+    const roadMeters = await this.osrm.tableDistances(
+      fromLat,
+      fromLng,
+      places.map((p) => ({ lat: p.lat, lng: p.lng })),
+      'car',
+    );
+    return places.map((place, i) => ({
+      ...place,
+      distanceM: roadMeters[i] ?? place.distanceM,
+    }));
   }
 
   /** Prefer DB entries; drop duplicates within ~50m with similar names. */
