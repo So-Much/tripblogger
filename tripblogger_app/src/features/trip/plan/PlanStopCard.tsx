@@ -16,6 +16,8 @@ type Props = {
   showTime?: boolean;
   canDrag: boolean;
   isActive: boolean;
+  onPress?: () => void;
+  onConflictPress?: (conflict: ScheduleConflict) => void;
   onLongPress?: () => void;
 };
 
@@ -26,13 +28,15 @@ function formatClock(iso: string | null | undefined): string {
 }
 
 /**
- * Stop row: time column + name/meta + conflict chips (display only; resolve = Task 15).
+ * Stop row: time column + name/meta + conflict chips (tap → resolve).
  */
 export function PlanStopCard({
   stop,
   showTime = true,
   canDrag,
   isActive,
+  onPress,
+  onConflictPress,
   onLongPress,
 }: Props) {
   const { t } = useI18n();
@@ -56,6 +60,7 @@ export function PlanStopCard({
 
   return (
     <Pressable
+      onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={180}
       disabled={isActive}
@@ -94,12 +99,18 @@ export function PlanStopCard({
           {stop.durationMinutes}′
           {stop.priority === 'must' ? ` · ${t('planPriorityMust')}` : ''}
           {stop.status !== 'todo' ? ` · ${statusLabel(stop.status, t)}` : ''}
+          {stop.tags.includes('accommodation') ? ` · ${t('planTagAccommodation')}` : ''}
+          {stop.tags.includes('entry_point') ? ` · ${t('planTagEntryPoint')}` : ''}
         </Text>
         {conflicts.length > 0 ? (
           <View style={styles.chips}>
             {conflicts.map((c) => (
-              <View
+              <Pressable
                 key={`${c.stopId}-${c.type}`}
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  onConflictPress?.(c);
+                }}
                 style={[
                   styles.chip,
                   {
@@ -116,7 +127,7 @@ export function PlanStopCard({
                   }}>
                   {t(CONFLICT_KEY[c.type])}
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : null}

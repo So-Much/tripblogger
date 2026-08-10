@@ -10,9 +10,11 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { useTripDetail } from '../hooks/useTripDetail';
 import { useMoveStopMutation } from '../hooks/useTripMutations';
-import type { TripStopDto } from '../types/plan';
+import type { ScheduleConflict, TripStopDto } from '../types/plan';
+import { PlanConflictActions } from './PlanConflictActions';
 import { PlanDayChips, type PlanDaySelection } from './PlanDayChips';
 import { PlanStopCard } from './PlanStopCard';
+import { PlanStopDetailSheet } from './PlanStopDetailSheet';
 import { PlanTravelConnector } from './PlanTravelConnector';
 
 const FULL_INDEX = 2;
@@ -49,6 +51,11 @@ export function PlanTimeline({ tripId, tripTitle }: Props) {
   const [dragging, setDragging] = useState(false);
   /** Local order while move is in flight; null = follow server. */
   const [optimisticStops, setOptimisticStops] = useState<TripStopDto[] | null>(null);
+  const [detailStopId, setDetailStopId] = useState<string | null>(null);
+  const [conflictTarget, setConflictTarget] = useState<{
+    stopId: string;
+    conflict: ScheduleConflict;
+  } | null>(null);
 
   useEffect(() => {
     if (!days.length) {
@@ -87,6 +94,24 @@ export function PlanTimeline({ tripId, tripTitle }: Props) {
   const isIdeas = resolvedSelection.kind === 'ideas';
   const defaultBuffer = trip?.defaultBufferMinutes ?? 15;
   const travelPending = moveStop.isPending && !isIdeas;
+
+  const allStops = useMemo(() => {
+    if (!trip) return [] as TripStopDto[];
+    return [...trip.days.flatMap((d) => d.stops), ...trip.ideaStops];
+  }, [trip]);
+
+  const detailStop = useMemo(
+    () => (detailStopId ? allStops.find((s) => s.id === detailStopId) ?? null : null),
+    [allStops, detailStopId],
+  );
+
+  const conflictStop = useMemo(
+    () =>
+      conflictTarget
+        ? allStops.find((s) => s.id === conflictTarget.stopId) ?? null
+        : null,
+    [allStops, conflictTarget],
+  );
 
   const snapPoints = useMemo(() => [...SNAP_POINTS], []);
   const canDrag = sheetIndex === FULL_INDEX;
@@ -163,6 +188,10 @@ export function PlanTimeline({ tripId, tripTitle }: Props) {
               showTime={!isIdeas}
               canDrag={canDrag}
               isActive={isActive}
+              onPress={() => setDetailStopId(item.id)}
+              onConflictPress={(conflict) =>
+                setConflictTarget({ stopId: item.id, conflict })
+              }
               onLongPress={canDrag ? drag : undefined}
             />
           </View>
@@ -240,36 +269,54 @@ export function PlanTimeline({ tripId, tripTitle }: Props) {
   }
 
   return (
-    <BottomSheet
-      index={1}
-      snapPoints={snapPoints}
-      onChange={setSheetIndex}
-      enableDynamicSizing={false}
-      enablePanDownToClose={false}
-      enableContentPanningGesture={enableContentPanning}
-      enableHandlePanningGesture={enableHandlePanning}
-      bottomInset={bottomInset}
-      backgroundStyle={{
-        backgroundColor: surface,
-        borderTopColor: border,
-        borderTopWidth: StyleSheet.hairlineWidth,
-      }}
-      handleIndicatorStyle={{ backgroundColor: muted }}
-      style={styles.sheet}>
-      <DraggableFlatList
-        data={stops}
-        keyExtractor={(item) => item.id}
-        onDragBegin={() => setDragging(true)}
-        onDragEnd={onDragEnd}
-        onRelease={endDrag}
-        activationDistance={canDrag ? 8 : 10_000}
-        containerStyle={styles.list}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={listHeader}
-        ListEmptyComponent={<Text style={[styles.empty, { color: muted }]}>—</Text>}
-        renderItem={renderItem}
+    <>
+      <BottomSheet
+        index={1}
+        snapPoints={snapPoints}
+        onChange={setSheetIndex}
+        enableDynamicSizing={false}
+        enablePanDownToClose={false}
+        enableContentPanningGesture={enableContentPanning}
+        enableHandlePanningGesture={enableHandlePanning}
+        bottomInset={bottomInset}
+        backgroundStyle={{
+          backgroundColor: surface,
+          borderTopColor: border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+        }}
+        handleIndicatorStyle={{ backgroundColor: muted }}
+        style={styles.sheet}>
+        <DraggableFlatList
+          data={stops}
+          keyExtractor={(item) => item.id}
+          onDragBegin={() => setDragging(true)}
+          onDragEnd={onDragEnd}
+          onRelease={endDrag}
+          activationDistance={canDrag ? 8 : 10_000}
+          containerStyle={styles.list}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={<Text style={[styles.empty, { color: muted }]}>—</Text>}
+          renderItem={renderItem}
+        />
+      </BottomSheet>
+
+      <PlanStopDetailSheet
+        visible={detailStopId != null && detailStop != null}
+        tripId={tripId}
+        trip={trip}
+        stop={detailStop}
+        onClose={() => setDetailStopId(null)}
       />
-    </BottomSheet>
+
+      <PlanConflictActions
+        visible={conflictTarget != null && conflictStop != null}
+        tripId={tripId}
+        stop={conflictStop}
+        conflict={conflictTarget?.conflict ?? null}
+        onClose={() => setConflictTarget(null)}
+      />
+    </>
   );
 }
 
