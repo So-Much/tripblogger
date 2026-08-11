@@ -7,10 +7,14 @@ import MapView, {
   type Region,
   type Camera,
 } from 'react-native-maps';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { useTripDetail } from '../hooks/useTripDetail';
 import { MARKER_PAINT_FREEZE_MS } from '../store/category-change';
 import { useMapStore } from '../store/map.store';
+import { usePlanStore } from '../store/plan.store';
 import { decodePolyline6 } from '../utils/geo';
 import { CategoryMapMarker } from './CategoryMapMarker';
+import { NumberedPlanMarker } from './NumberedPlanMarker';
 import type { MapCanvasHandle } from './map-canvas-types';
 import { computeMarkerPaintDelayMs } from './marker-paint';
 import { DEFAULT_MAP_CENTER, type MapTypeId } from './map-style';
@@ -45,6 +49,23 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
   const routeResult = useMapStore((s) => s.routeResult);
   const selectedRouteIndex = useMapStore((s) => s.selectedRouteIndex);
   const mapStyleVariant = useMapStore((s) => s.mapStyleVariant);
+  const bottomTab = useMapStore((s) => s.bottomTab);
+  const activeTripId = usePlanStore((s) => s.activeTripId);
+  const selectedDayId = usePlanStore((s) => s.selectedDayId);
+  const planTint = useThemeColor({}, 'tint');
+  const planOnCta = useThemeColor({}, 'onCta');
+
+  const planDetailQuery = useTripDetail(
+    bottomTab === 'plan' && selectedDayId ? activeTripId : null,
+  );
+  const planDayStops = useMemo(() => {
+    if (bottomTab !== 'plan' || !selectedDayId || !planDetailQuery.data) return [];
+    const day = planDetailQuery.data.days.find((d) => d.id === selectedDayId);
+    if (!day) return [];
+    return [...day.stops]
+      .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng))
+      .sort((a, b) => a.position - b.position);
+  }, [bottomTab, selectedDayId, planDetailQuery.data]);
 
   // Painted marker list is intentionally lagged behind the store so we never
   // empty→remount custom Markers in the same frame as PlaceDetail hide /
@@ -308,6 +329,24 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
             <CategoryMapMarker category={selectedPlace.category} selected />
           </Marker>
         ) : null}
+
+        {/* Plan-day numbered stops — separate layer; only while Plan tab + day selected. */}
+        {planDayStops.map((stop, index) => (
+          <Marker
+            key={`plan-stop:${stop.id}`}
+            coordinate={{ latitude: stop.lat, longitude: stop.lng }}
+            title={stop.name}
+            description={stop.address ?? undefined}
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
+            zIndex={3}>
+            <NumberedPlanMarker
+              number={index + 1}
+              color={planTint}
+              textColor={planOnCta}
+            />
+          </Marker>
+        ))}
 
         {altRoutes.map((r) =>
           r.coords.length > 1 ? (

@@ -10,6 +10,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { useTripDetail } from '../hooks/useTripDetail';
 import { useMoveStopMutation } from '../hooks/useTripMutations';
+import { usePlanStore } from '../store/plan.store';
 import type { ScheduleConflict, TripStopDto } from '../types/plan';
 import { PlanConflictActions } from './PlanConflictActions';
 import { PlanDayChips, type PlanDaySelection } from './PlanDayChips';
@@ -46,6 +47,7 @@ export function PlanTimeline({ tripId, tripTitle }: Props) {
   const trip = detailQuery.data;
   const days = useMemo(() => trip?.days ?? [], [trip?.days]);
 
+  const setSelectedDayId = usePlanStore((s) => s.setSelectedDayId);
   const [selection, setSelection] = useState<PlanDaySelection | null>(null);
   const [sheetIndex, setSheetIndex] = useState(1);
   const [dragging, setDragging] = useState(false);
@@ -74,6 +76,13 @@ export function PlanTimeline({ tripId, tripTitle }: Props) {
     return days[0] ? { kind: 'day', dayId: days[0].id } : { kind: 'ideas' };
   }, [selection, days]);
 
+  useEffect(() => {
+    if (resolvedSelection.kind === 'day') {
+      setSelectedDayId(resolvedSelection.dayId);
+    } else {
+      setSelectedDayId(null);
+    }
+  }, [resolvedSelection, setSelectedDayId]);
   const selectedDay = useMemo(() => {
     if (resolvedSelection.kind !== 'day') return null;
     return days.find((d) => d.id === resolvedSelection.dayId) ?? null;

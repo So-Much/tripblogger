@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,8 +16,10 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
 import { apiClient } from '@/src/services/api/client';
+import { useAuthStore } from '@/src/store/auth.store';
 import { resolvePlaceCategoryVisual } from '@/src/utils/location-type-display';
 import { PlaceRatingLabel } from '../components/PlaceRatingLabel';
+import { PlanAddDayPicker } from '../plan/PlanAddDayPicker';
 import { useMapStore } from '../store/map.store';
 import type { MapPlace } from '../types/map';
 import { formatDistance } from '../utils/geo';
@@ -45,6 +47,8 @@ export function PlaceDetailSheet({ onDirections }: Props) {
   const closePlace = useMapStore((s) => s.closePlace);
   const openDirectionsTo = useMapStore((s) => s.openDirectionsTo);
   const queryClient = useQueryClient();
+  const me = useAuthStore((s) => s.me);
+  const [dayPickerOpen, setDayPickerOpen] = useState(false);
 
   // Soft-hide like ExploreSheet: hard-unmount mid tag-switch races map markers.
   const lastPlaceRef = useRef<MapPlace | null>(place);
@@ -164,11 +168,25 @@ export function PlaceDetailSheet({ onDirections }: Props) {
           disabled={!visible}
           onPress={() => {
             if (!place) return;
+            if (me?.role !== 'MEMBER') {
+              Alert.alert(t('planGuestGateTitle'), t('planGuestGateBody'));
+              return;
+            }
+            setDayPickerOpen(true);
+          }}>
+          <MaterialIcons name="playlist-add" size={20} color={onCta} />
+          <Text style={[styles.btnText, { color: onCta }]}>{t('planAddToPlan')}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.btnOutline, { borderColor: border }]}
+          disabled={!visible}
+          onPress={() => {
+            if (!place) return;
             if (onDirections) onDirections(place);
             else openDirectionsTo(place);
           }}>
-          <MaterialIcons name="directions" size={20} color={onCta} />
-          <Text style={[styles.btnText, { color: onCta }]}>{t('mapDirections')}</Text>
+          <MaterialIcons name="directions" size={20} color={tint} />
+          <Text style={[styles.btnOutlineText, { color: text }]}>{t('mapDirections')}</Text>
         </Pressable>
         <Pressable
           style={[styles.btnOutline, { borderColor: border }]}
@@ -210,6 +228,12 @@ export function PlaceDetailSheet({ onDirections }: Props) {
           <Text style={[styles.btnOutlineText, { color: text }]}>{t('locationShare')}</Text>
         </Pressable>
       </View>
+
+      <PlanAddDayPicker
+        visible={dayPickerOpen && visible}
+        place={place}
+        onClose={() => setDayPickerOpen(false)}
+      />
     </View>
   );
 }

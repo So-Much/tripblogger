@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +12,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useTrips } from '../hooks/useTrips';
+import { usePlanStore } from '../store/plan.store';
 import type { TripDetailDto, TripSummaryDto } from '../types/plan';
 import { PlanEmptyCreate } from './PlanEmptyCreate';
 import { PlanGuestGate } from './PlanGuestGate';
@@ -41,22 +42,27 @@ function PlanMemberFlow() {
   const tint = useThemeColor({}, 'tint');
 
   const tripsQuery = useTrips({ enabled: true });
-  const [activeTripId, setActiveTripId] = useState<string | null>(null);
+  const activeTripId = usePlanStore((s) => s.activeTripId);
+  const setActiveTripId = usePlanStore((s) => s.setActiveTripId);
+  const setSelectedDayId = usePlanStore((s) => s.setSelectedDayId);
   const tripList = tripsQuery.data;
 
   useEffect(() => {
     if (!tripList?.length) {
       if (activeTripId) setActiveTripId(null);
+      setSelectedDayId(null);
       return;
     }
     const stillThere = activeTripId && tripList.some((tr) => tr.id === activeTripId);
     if (!stillThere) {
       setActiveTripId(tripList[0].id);
+      setSelectedDayId(null);
     }
-  }, [tripList, activeTripId]);
+  }, [tripList, activeTripId, setActiveTripId, setSelectedDayId]);
 
   const onCreated = (trip: TripDetailDto) => {
     setActiveTripId(trip.id);
+    setSelectedDayId(null);
   };
 
   if (tripsQuery.isLoading || tripsQuery.isPending) {
