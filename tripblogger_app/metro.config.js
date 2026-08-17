@@ -15,7 +15,7 @@ function resolveNodeModule(moduleName) {
       return candidate;
     }
   }
-  return candidates[1];
+  return candidates[0];
 }
 
 /** @type {import('expo/metro-config').MetroConfig} */
@@ -26,12 +26,15 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
-// Keep hierarchical lookup so hoisted workspace packages (e.g.
-// @react-native/virtualized-lists at the monorepo root) resolve when
-// react-native lives under tripblogger_app/node_modules.
-config.resolver.disableHierarchicalLookup = false;
+// Prevent Metro from walking into nested node_modules and loading a second
+// copy of React (Invalid hook call / useMemoCache of null).
+config.resolver.disableHierarchicalLookup = true;
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
+  react: resolveNodeModule('react'),
+  'react-dom': resolveNodeModule('react-dom'),
+  'react-native': resolveNodeModule('react-native'),
+  scheduler: resolveNodeModule('scheduler'),
   '@react-native/virtualized-lists': resolveNodeModule(
     '@react-native/virtualized-lists',
   ),
