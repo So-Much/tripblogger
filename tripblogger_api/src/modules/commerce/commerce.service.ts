@@ -5,9 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import sanitizeHtml from 'sanitize-html';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { sanitizeProductHtml } from '../../common/utils/html-sanitize';
 import { MemberProfileEntity } from '../users/entities/member-profile.entity';
 import { MediaResolver } from '../posts/media.resolver';
 import { parseProductMediaJson } from './commerce-media.util';
@@ -20,12 +20,6 @@ import { ProductEntity } from './entities/product.entity';
 import { ProductTagEntity } from './entities/product-tag.entity';
 import { decodeProductCursor, encodeProductCursor } from './product-cursor.util';
 import { TagsService } from './tags.service';
-
-const DESC_SANITIZE: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'a'],
-  allowedAttributes: { a: ['href', 'target', 'rel'] },
-  allowedSchemes: ['http', 'https', 'mailto'],
-};
 
 export type CommerceReqMeta = { protocol: string; host?: string; forwardedProto?: string };
 
@@ -80,7 +74,7 @@ export class CommerceService {
   ) {}
 
   private sanitizeDescription(html: string): string {
-    return sanitizeHtml(html, DESC_SANITIZE).trim();
+    return sanitizeProductHtml(html);
   }
 
   private async uniqueSlug(base: string): Promise<string> {

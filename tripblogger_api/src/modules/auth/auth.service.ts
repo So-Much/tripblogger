@@ -17,6 +17,7 @@ import { UserStatusCode } from '../users/enums/status.enum';
 import { GuestProfileEntity } from '../users/entities/guest-profile.entity';
 import { OAuth2Client } from 'google-auth-library';
 import { OAuthIdentityEntity, OAuthProvider } from './entities/oauth-identity.entity';
+import { sanitizePlainText } from '../../common/utils/html-sanitize';
 
 @Injectable()
 export class AuthService {
@@ -51,7 +52,7 @@ export class AuthService {
         email: null,
         username: dto.username,
         passwordHash,
-        displayName: dto.displayName,
+        displayName: dto.displayName != null ? sanitizePlainText(dto.displayName) || undefined : undefined,
         avatarUrl: dto.avatarUrl,
       }),
     );
@@ -217,7 +218,7 @@ export class AuthService {
         username,
         email: null,
         passwordHash,
-        displayName: payload.name ?? undefined,
+        displayName: payload.name ? sanitizePlainText(payload.name) || undefined : undefined,
         avatarUrl: payload.picture ?? undefined,
       }),
     );

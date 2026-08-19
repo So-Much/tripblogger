@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { sanitizePlainText } from '../../common/utils/html-sanitize';
 import { MemberProfileEntity } from '../users/entities/member-profile.entity';
 import { CreateLocationReviewDto, UpdateLocationReviewDto } from './dto/create-location-review.dto';
 import { LocationEntity } from './entities/location.entity';
@@ -152,7 +153,7 @@ export class LocationReviewsService {
           locationId,
           userId,
           rating: dto.rating,
-          content: dto.content?.trim() || null,
+          content: sanitizePlainText(dto.content) || null,
           tagsJson: dto.tags?.length ? JSON.stringify(dto.tags) : null,
         }),
       );
@@ -179,7 +180,7 @@ export class LocationReviewsService {
     if (review.userId !== userId) throw new ForbiddenException('Not your review');
 
     if (dto.rating != null) review.rating = dto.rating;
-    if (dto.content !== undefined) review.content = dto.content?.trim() || null;
+    if (dto.content !== undefined) review.content = sanitizePlainText(dto.content) || null;
     if (dto.tags !== undefined) {
       review.tagsJson = dto.tags.length ? JSON.stringify(dto.tags) : null;
     }

@@ -4,12 +4,15 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import helmet from 'helmet';
 import { requestContextMiddleware } from './common/middleware/request-context.middleware';
 import { HttpLoggingInterceptor } from './common/interceptors/http-logging.interceptor';
+import { HELMET_OPTIONS } from './config/http-security';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: true });
+  app.use(helmet(HELMET_OPTIONS));
   app.use(requestContextMiddleware);
   app.useGlobalInterceptors(new HttpLoggingInterceptor());
   const uploadsDir = join(process.cwd(), 'uploads');

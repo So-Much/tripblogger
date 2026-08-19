@@ -5,6 +5,7 @@ import { In, Repository } from 'typeorm';
 import { UserEntity } from './entities/user.entity';
 import { UserStatusEntity } from './entities/user-status.entity';
 import { UserStatusCode } from './enums/status.enum';
+import { sanitizePlainText } from '../../common/utils/html-sanitize';
 import { PostEntity } from '../posts/entities/post.entity';
 import { ProductEntity } from '../commerce/entities/product.entity';
 
@@ -45,7 +46,7 @@ export class UsersService {
     if (!profile) throw new NotFoundException('Member profile not found');
 
     if (payload.displayName !== undefined) {
-      const nextName = payload.displayName.trim();
+      const nextName = sanitizePlainText(payload.displayName);
       profile.displayName = nextName.length > 0 ? nextName : profile.username;
     }
     if (payload.avatarUrl !== undefined) {

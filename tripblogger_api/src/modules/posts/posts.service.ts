@@ -7,7 +7,6 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import sanitizeHtml from 'sanitize-html';
 import { In, Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -15,6 +14,7 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { QueryPostsNearLocationDto } from './dto/query-posts-near-location.dto';
 import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { haversineKm } from '../../common/utils/haversine';
+import { sanitizePlainText, sanitizePostHtml } from '../../common/utils/html-sanitize';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CompositionEntity } from '../compositions/entities/composition.entity';
 import { CommentEntity } from './entities/comment.entity';
@@ -28,24 +28,6 @@ import { MediaResolver } from './media.resolver';
 import { MediaMigrationWorker } from './media.migration.worker';
 import { normalizePostMediaItem, PostMediaItem } from './media.types';
 import { toIsoString } from '../../common/utils/iso-date';
-
-const POST_SANITIZE: sanitizeHtml.IOptions = {
-  allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'img', 'span']),
-  allowedAttributes: {
-    ...sanitizeHtml.defaults.allowedAttributes,
-    img: ['src', 'alt', 'width', 'height'],
-    a: ['href', 'name', 'target', 'rel'],
-  },
-  allowedSchemes: ['http', 'https', 'mailto'],
-};
-
-function sanitizePostHtml(raw: string): string {
-  return sanitizeHtml(raw, POST_SANITIZE);
-}
-
-function sanitizeCommentText(raw: string): string {
-  return sanitizeHtml(raw, { allowedTags: [], allowedAttributes: {} }).trim();
-}
 
 function parseJsonArray(raw: string | null): string[] {
   if (!raw) return [];
@@ -855,7 +837,7 @@ export class PostsService {
       }
     }
 
-    const content = sanitizeCommentText(dto.content);
+    const content = sanitizePlainText(dto.content);
     if (!content) throw new BadRequestException('Comment is empty');
 
     const comment = this.commentsRepo.create({

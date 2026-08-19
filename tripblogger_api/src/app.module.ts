@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env/env.schema';
+import { THROTTLE_DEFAULT } from './config/http-security';
 import { typeOrmOptionsFactory } from './config/db/typeorm.options';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
@@ -25,7 +27,9 @@ import { OtelModule } from './config/otel/otel.module';
       envFilePath: '.env',
       validate: validateEnv,
     }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    ThrottlerModule.forRoot({
+      throttlers: [THROTTLE_DEFAULT],
+    }),
     TypeOrmModule.forRootAsync(typeOrmOptionsFactory),
     RedisModule,
     QueueModule,
@@ -40,6 +44,12 @@ import { OtelModule } from './config/otel/otel.module';
     LocationsModule,
     MapModule,
     TripsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}
