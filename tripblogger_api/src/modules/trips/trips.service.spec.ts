@@ -583,6 +583,56 @@ describe('TripsService.patchStop', () => {
       svc.patchStop('user-1', 'trip-1', 'stop-1', { durationMinutes: 30 }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('patches travelFromPrevSeconds without recomputing OSRM table legs', async () => {
+    const { svc, trips, days, stops, tags, travelLegs } = makeService();
+    const existing = {
+      id: 'stop-2',
+      tripId: 'trip-1',
+      tripDayId: 'day-0',
+      position: 1,
+      name: 'Pagoda',
+      address: null,
+      lat: '11.95',
+      lng: '108.46',
+      category: null,
+      externalPlaceId: 'node/2',
+      openingHoursRaw: null,
+      locationId: null,
+      durationMinutes: 60,
+      bufferAfterMinutes: null,
+      travelModeOverride: null,
+      anchorTime: null,
+      priority: 'nice',
+      status: 'todo',
+      travelFromPrevSeconds: 480,
+      travelFromPrevDistanceM: 1200,
+      travelModeUsed: 'car',
+    };
+
+    trips.findOne
+      .mockResolvedValueOnce(baseTrip())
+      .mockResolvedValue(baseTrip({ version: 2 }));
+    stops.findOne.mockResolvedValue({ ...existing });
+    stops.save.mockImplementation(async (x: any) => x);
+    days.find.mockResolvedValue([
+      { id: 'day-0', tripId: 'trip-1', date: '2026-08-10', dayIndex: 0, startTime: null },
+    ]);
+    stops.find.mockResolvedValue([
+      { ...existing, travelFromPrevSeconds: 720, travelFromPrevDistanceM: 1200 },
+    ]);
+    tags.find.mockResolvedValue([]);
+
+    const result = await svc.patchStop('user-1', 'trip-1', 'stop-2', {
+      travelFromPrevSeconds: 720,
+    });
+
+    expect(stops.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'stop-2', travelFromPrevSeconds: 720 }),
+    );
+    expect(travelLegs.recomputeDayLegs).not.toHaveBeenCalled();
+    expect(result.trip.days[0].stops[0].travelFromPrevSeconds).toBe(720);
+  });
 });
 
 describe('TripsService.deleteStop', () => {

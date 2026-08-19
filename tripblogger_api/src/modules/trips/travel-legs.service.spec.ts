@@ -96,4 +96,25 @@ describe('TravelLegsService.recomputeDayLegs', () => {
     expect(stops[1].travelFromPrevSeconds).toBe(400);
     expect(stops[1].travelFromPrevDistanceM).toBe(900);
   });
+
+  it('clamps OSRM 0s legs to 60s so consecutive stops never persist 0 travel', async () => {
+    const osrm = {
+      tableLegs: jest.fn().mockResolvedValue([{ durationS: 0, distanceM: 0 }]),
+    };
+    const redis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+    };
+    const svc = new TravelLegsService(osrm as any, redis as any);
+
+    const stops = [
+      stop({ id: 'a', lat: '11.9400', lng: '108.4500', position: 0 }),
+      stop({ id: 'b', lat: '11.9401', lng: '108.4501', position: 1 }),
+    ];
+
+    await svc.recomputeDayLegs(stops, 'foot');
+
+    expect(stops[0].travelFromPrevSeconds).toBe(0);
+    expect(stops[1].travelFromPrevSeconds).toBe(60);
+  });
 });

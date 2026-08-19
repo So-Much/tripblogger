@@ -372,6 +372,9 @@ export class TripsService {
     if (dto.bufferAfterMinutes !== undefined) {
       stop.bufferAfterMinutes = dto.bufferAfterMinutes;
     }
+    if (dto.travelFromPrevSeconds !== undefined) {
+      stop.travelFromPrevSeconds = dto.travelFromPrevSeconds;
+    }
     if (dto.travelModeOverride !== undefined) {
       stop.travelModeOverride = dto.travelModeOverride;
     }

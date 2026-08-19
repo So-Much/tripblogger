@@ -109,9 +109,8 @@ export class TravelLegsService {
     if (raw.durationS == null) {
       stop.travelFromPrevSeconds = null;
     } else {
-      stop.travelFromPrevSeconds = Math.round(
-        applyMotorbikeFactor(raw.durationS, planMode),
-      );
+      const factored = Math.round(applyMotorbikeFactor(raw.durationS, planMode));
+      stop.travelFromPrevSeconds = factored <= 0 ? 60 : factored;
     }
   }
 

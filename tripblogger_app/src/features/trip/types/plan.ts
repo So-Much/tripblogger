@@ -105,6 +105,7 @@ export type AddStopDto = {
 export type PatchStopDto = {
   durationMinutes?: number;
   bufferAfterMinutes?: number | null;
+  travelFromPrevSeconds?: number;
   travelModeOverride?: PlanTravelMode | null;
   anchorTime?: string | null;
   priority?: StopPriority;

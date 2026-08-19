@@ -16,6 +16,9 @@ function mapStopWithPatch(stop: TripStopDto, stopId: string, patch: PatchStopDto
     ...(patch.bufferAfterMinutes !== undefined
       ? { bufferAfterMinutes: patch.bufferAfterMinutes }
       : {}),
+    ...(patch.travelFromPrevSeconds !== undefined
+      ? { travelFromPrevSeconds: patch.travelFromPrevSeconds }
+      : {}),
     ...(patch.travelModeOverride !== undefined
       ? { travelModeOverride: patch.travelModeOverride }
       : {}),
@@ -90,6 +93,7 @@ export function patchAffectsLocalSchedule(patch: PatchStopDto): boolean {
   return (
     patch.durationMinutes !== undefined ||
     patch.bufferAfterMinutes !== undefined ||
+    patch.travelFromPrevSeconds !== undefined ||
     patch.anchorTime !== undefined ||
     patch.status !== undefined
   );

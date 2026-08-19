@@ -30,6 +30,13 @@ export class PatchStopDto {
   @Min(0)
   bufferAfterMinutes?: number | null;
 
+  /** User override of the inbound travel leg; skips OSRM recompute. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  travelFromPrevSeconds?: number;
+
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsIn(PLAN_TRAVEL_MODES)
