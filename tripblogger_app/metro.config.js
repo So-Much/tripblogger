@@ -35,6 +35,7 @@ config.resolver.extraNodeModules = {
   'react-dom': resolveNodeModule('react-dom'),
   'react-native': resolveNodeModule('react-native'),
   scheduler: resolveNodeModule('scheduler'),
+  semver: resolveNodeModule('semver'),
   '@react-native/virtualized-lists': resolveNodeModule(
     '@react-native/virtualized-lists',
   ),
