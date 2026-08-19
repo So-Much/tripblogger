@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { PasswordField } from '@/src/components/forms/PasswordField';
@@ -39,6 +39,7 @@ export function RegisterScreen() {
   const meQuery = useMeQuery();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successPulse, setSuccessPulse] = useState(0);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const borderColor = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
@@ -72,6 +73,12 @@ export function RegisterScreen() {
     },
   });
 
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    };
+  }, []);
+
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
@@ -81,7 +88,7 @@ export function RegisterScreen() {
       await persistAuthTokens(tokens);
       await meQuery.refetch();
       setSuccessPulse((k) => k + 1);
-      setTimeout(() => router.replace('/'), 200);
+      navTimerRef.current = setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('registerFailed')));
     }

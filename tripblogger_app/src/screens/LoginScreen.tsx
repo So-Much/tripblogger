@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
 import { PasswordField } from '@/src/components/forms/PasswordField';
@@ -27,6 +27,7 @@ import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
 import { clearSessionQueryCache } from '@/src/services/session/session-bootstrap.service';
 import { ensureDeviceId, persistAuthTokens } from '@/src/services/session/session.service';
+import { DEV_TEST_ACCOUNT } from '@/src/constants/dev-test-account';
 
 type LoginForm = {
   username: string;
@@ -41,6 +42,7 @@ export function LoginScreen() {
   const meQuery = useMeQuery();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successPulse, setSuccessPulse] = useState(0);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const borderColor = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
@@ -61,10 +63,16 @@ export function LoginScreen() {
   const { control, handleSubmit } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: '',
-      password: '',
+      username: __DEV__ ? DEV_TEST_ACCOUNT.username : '',
+      password: __DEV__ ? DEV_TEST_ACCOUNT.password : '',
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    };
+  }, []);
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
@@ -75,7 +83,7 @@ export function LoginScreen() {
       await persistAuthTokens(tokens);
       await meQuery.refetch();
       setSuccessPulse((k) => k + 1);
-      setTimeout(() => router.replace('/'), 200);
+      navTimerRef.current = setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('loginFailed')));
     }
@@ -91,7 +99,7 @@ export function LoginScreen() {
       await persistAuthTokens(tokens);
       await meQuery.refetch();
       setSuccessPulse((k) => k + 1);
-      setTimeout(() => router.replace('/'), 200);
+      navTimerRef.current = setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('googleSignInFailed')));
     }
@@ -152,7 +160,14 @@ export function LoginScreen() {
               {submitError ? <ThemedText style={styles.error}>{submitError}</ThemedText> : null}
 
               {__DEV__ ? (
-                <ThemedText style={[styles.devHint, { color: muted }]} selectable>{`API: ${apiBaseUrl}`}</ThemedText>
+                <View style={styles.devHints}>
+                  <ThemedText style={[styles.devHint, { color: muted }]}>
+                    {`Dev: prefilled ${DEV_TEST_ACCOUNT.username} / ${DEV_TEST_ACCOUNT.password}`}
+                  </ThemedText>
+                  <ThemedText style={[styles.devHint, { color: muted }]} selectable>
+                    {`API: ${apiBaseUrl}`}
+                  </ThemedText>
+                </View>
               ) : null}
 
               <ActionPulse pulseKey={successPulse}>
@@ -242,12 +257,11 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   field: { gap: 4 },
+  devHints: { gap: 2, marginTop: 4, marginBottom: 2 },
   devHint: {
     fontSize: 11,
     lineHeight: 15,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    marginTop: 4,
-    marginBottom: 2,
     opacity: 0.95,
   },
   signInButton: {

@@ -1,7 +1,8 @@
-import { authService } from '@/src/services/api/auth.service';
+import { apiClient } from '@/src/services/api/client';
 import { queryClient } from '@/src/services/query-client';
 import { useAuthStore } from '@/src/store/auth.store';
 import { usePostComposerHandoffStore } from '@/src/store/post-composer-handoff.store';
+import type { AuthTokens, MeResponse } from '@/src/types/auth';
 import {
   clearPersistedAuthTokens,
   ensureDeviceId,
@@ -16,17 +17,25 @@ export function resetAppSessionStores() {
   usePostComposerHandoffStore.getState().setReturnPostId(null);
 }
 
-/** Issue a fresh guest token pair and hydrate `/auth/me` (mirrors app boot in `_layout.tsx`). */
+/**
+ * Issue a fresh guest token pair and hydrate `/auth/me`.
+ * Uses `apiClient` directly (not `authService`) to avoid the require cycle:
+ * auth.service → client → session-bootstrap → auth.service
+ */
 export async function bootstrapGuestSession(): Promise<void> {
   const sessionId = await ensureSessionId();
   const deviceId = await ensureDeviceId();
   try {
-    const tokens = await authService.guest({ sessionId, deviceId });
+    const tokensRes = await apiClient.post<AuthTokens>('/auth/guest', {
+      sessionId,
+      deviceId,
+    });
+    const tokens = tokensRes.data;
     useAuthStore.getState().setTokens(tokens);
     await persistAuthTokens(tokens);
     try {
-      const me = await authService.me();
-      useAuthStore.getState().setMe(me);
+      const meRes = await apiClient.get<MeResponse>('/auth/me');
+      useAuthStore.getState().setMe(meRes.data);
     } catch {
       useAuthStore.getState().setMe(null);
     }

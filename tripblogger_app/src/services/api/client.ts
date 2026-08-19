@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '@/src/store/auth.store';
 import { resolveApiBaseUrl } from '@/src/services/api/resolve-api-base-url';
-import { bootstrapGuestSession } from '@/src/services/session/session-bootstrap.service';
 import { clearPersistedAuthTokens, persistAuthTokens } from '@/src/services/session/session.service';
 
 /** Effective base URL (dev rewrites localhost for real devices via Expo Metro host). */
@@ -14,6 +13,13 @@ export const apiClient = axios.create({
 
 let isRefreshing = false;
 let pendingRequests: ((token: string | null) => void)[] = [];
+
+function rebootstrapGuest(): void {
+  // Lazy import breaks client ↔ session-bootstrap require cycle.
+  void import('@/src/services/session/session-bootstrap.service').then((m) =>
+    m.bootstrapGuestSession(),
+  );
+}
 
 apiClient.interceptors.request.use((config) => {
   const accessToken = useAuthStore.getState().tokens?.accessToken;
@@ -41,7 +47,7 @@ apiClient.interceptors.response.use(
     if (!refreshToken) {
       useAuthStore.getState().logout();
       void clearPersistedAuthTokens();
-      void bootstrapGuestSession();
+      rebootstrapGuest();
       return Promise.reject(error);
     }
     if (!deviceId) return Promise.reject(error);
@@ -70,7 +76,9 @@ apiClient.interceptors.response.use(
       pendingRequests = [];
       useAuthStore.getState().logout();
       await clearPersistedAuthTokens();
-      await bootstrapGuestSession();
+      await import('@/src/services/session/session-bootstrap.service').then((m) =>
+        m.bootstrapGuestSession(),
+      );
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

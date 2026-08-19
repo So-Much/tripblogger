@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
@@ -35,6 +36,7 @@ type Props = {
 
 export function PlaceDetailSheet({ onDirections }: Props) {
   const { t, language } = useI18n();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const surface = useThemeColor({}, 'surface');
   const text = useThemeColor({}, 'text');
@@ -169,7 +171,13 @@ export function PlaceDetailSheet({ onDirections }: Props) {
           onPress={() => {
             if (!place) return;
             if (me?.role !== 'MEMBER') {
-              Alert.alert(t('planGuestGateTitle'), t('planGuestGateBody'));
+              Alert.alert(t('planGuestGateTitle'), t('planGuestGateBody'), [
+                { text: t('cancel'), style: 'cancel' },
+                {
+                  text: t('planGuestGateCta'),
+                  onPress: () => router.push('/login'),
+                },
+              ]);
               return;
             }
             setDayPickerOpen(true);
@@ -250,7 +258,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
     gap: 6,
-    zIndex: 30,
+    zIndex: 34,
   },
   handle: {
     alignSelf: 'center',
