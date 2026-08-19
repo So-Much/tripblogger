@@ -5,4 +5,7 @@ module.exports = {
   roots: ['<rootDir>/src/features/trip/plan'],
   testMatch: ['**/*.spec.ts'],
   moduleFileExtensions: ['ts', 'js'],
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true }],
+  },
 };
