@@ -108,3 +108,9 @@ docs/**
 # Local project structure map (personal reference — not versioned)
 # -----------------------------------------------------------------------------
 docs/PROJECT_STRUCTURE.md
+
+# -----------------------------------------------------------------------------
+# scripts and .superpowers folder
+# -----------------------------------------------------------------------------
+scripts/
+.superpowers/
