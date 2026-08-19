@@ -1,11 +1,14 @@
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import type { TripDayDto } from '../types/plan';
 
 export type PlanDaySelection =
   | { kind: 'day'; dayId: string }
-  | { kind: 'ideas' };
+  | { kind: 'ideas' }
+  | { kind: 'overview' };
 
 type Props = {
   days: TripDayDto[];
@@ -15,7 +18,7 @@ type Props = {
 };
 
 /**
- * Horizontal day chips + idea-bucket chip above the stop list.
+ * Horizontal day chips + overview + idea-bucket chip above the stop list.
  */
 export function PlanDayChips({ days, selection, onSelect, ideaCount }: Props) {
   const { t } = useI18n();
@@ -25,10 +28,14 @@ export function PlanDayChips({ days, selection, onSelect, ideaCount }: Props) {
   const tint = useThemeColor({}, 'tint');
 
   const ideasActive = selection.kind === 'ideas';
+  const overviewActive = selection.kind === 'overview';
 
   return (
     <ScrollView
       horizontal
+      nestedScrollEnabled
+      directionalLockEnabled
+      keyboardShouldPersistTaps="handled"
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}>
       {days.map((day) => {
@@ -53,6 +60,32 @@ export function PlanDayChips({ days, selection, onSelect, ideaCount }: Props) {
           </Pressable>
         );
       })}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ selected: overviewActive }}
+        accessibilityLabel={t('planOverviewTab')}
+        onPress={() => onSelect({ kind: 'overview' })}
+        style={[
+          styles.chip,
+          {
+            borderColor: overviewActive ? tint : border,
+            backgroundColor: overviewActive ? `${tint}18` : 'transparent',
+          },
+        ]}>
+        <View style={styles.overviewLabel}>
+          <MaterialIcons
+            name="layers"
+            size={14}
+            color={overviewActive ? tint : text}
+          />
+          <Text style={{ color: overviewActive ? tint : text, fontWeight: '600', fontSize: 13 }}>
+            {t('planOverviewTab')}
+          </Text>
+        </View>
+        <Text style={{ color: overviewActive ? tint : muted, fontSize: 11 }}>
+          {t('planOverviewChipHint')}
+        </Text>
+      </Pressable>
       <Pressable
         onPress={() => onSelect({ kind: 'ideas' })}
         style={[
@@ -86,5 +119,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     minWidth: 72,
     gap: 2,
+  },
+  overviewLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 });
