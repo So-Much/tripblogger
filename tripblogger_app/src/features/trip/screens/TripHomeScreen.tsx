@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { AppErrorBoundary } from '@/src/components/AppErrorBoundary';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { MapAttribution } from '../controls/MapAttribution';
@@ -16,14 +17,17 @@ import { MapSearchBar } from '../search/MapSearchBar';
 import { SearchFocusView } from '../search/SearchFocusView';
 import { useRecentSearchesStore } from '../search/recent-searches.store';
 import { TripBottomNav } from '../nav/TripBottomNav';
+import { shouldShowMapSearchBar } from '../plan/plan-search-chrome';
 import { PlanTab } from '../plan/PlanTab';
 import { DirectionsSheet } from '../sheets/DirectionsSheet';
 import { ExploreSheet } from '../sheets/ExploreSheet';
 import { PlaceDetailSheet } from '../sheets/PlaceDetailSheet';
 import { isAbortedError, mapService } from '../services/map.service';
 import { useMapStore } from '../store/map.store';
+import { usePlanStore } from '../store/plan.store';
 import type { MapPlace } from '../types/map';
 import { haversineM } from '../utils/geo';
+import { createCoalescedInvoker } from '../plan/plan-camera';
 
 export function TripHomeScreen() {
   const { t } = useI18n();
@@ -37,6 +41,7 @@ export function TripHomeScreen() {
   const mapRef = useRef<MapCanvasHandle>(null);
   /** Aborts reverse/route work from long-press when the user moves on or unmounts. */
   const reverseAbortRef = useRef<AbortController | null>(null);
+  const placeSelectCoalesceRef = useRef(createCoalescedInvoker());
   const [reverseLoading, setReverseLoading] = useState(false);
 
   const { coords, granted } = useUserLocation(true);
@@ -54,11 +59,13 @@ export function TripHomeScreen() {
   const nearbyPlaces = useMapStore((s) => s.nearbyPlaces);
   const hydrateRecent = useRecentSearchesStore((s) => s.hydrate);
   const remember = useRememberSearch();
+  const createOverlayOpen = usePlanStore((s) => s.createOverlayOpen);
 
   useEffect(() => {
     return () => {
       reverseAbortRef.current?.abort();
       reverseAbortRef.current = null;
+      placeSelectCoalesceRef.current.dispose();
     };
   }, []);
 
@@ -103,17 +110,18 @@ export function TripHomeScreen() {
 
   const handleSelectPlace = useCallback(
     (place: MapPlace) => {
-      // Selecting a place supersedes any in-flight long-press reverse/route.
-      reverseAbortRef.current?.abort();
-      reverseAbortRef.current = null;
-      setReverseLoading(false);
-      remember(place);
-      // Google-Maps style: leave focus, clear the text, then fly + open detail.
-      useMapStore.getState().setSearchQuery('');
-      useMapStore.getState().setSearchOpen(false);
-      openPlace(place);
-      setFollowMode('free');
-      mapRef.current?.flyTo(place.lng, place.lat, 16);
+      if (!place?.id || !Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return;
+      placeSelectCoalesceRef.current.run(() => {
+        reverseAbortRef.current?.abort();
+        reverseAbortRef.current = null;
+        setReverseLoading(false);
+        remember(place);
+        useMapStore.getState().setSearchQuery('');
+        useMapStore.getState().setSearchOpen(false);
+        openPlace(place);
+        setFollowMode('free');
+        mapRef.current?.flyTo(place.lng, place.lat, 16);
+      });
     },
     [openPlace, remember, setFollowMode],
   );
@@ -235,7 +243,26 @@ export function TripHomeScreen() {
     [coords, t],
   );
 
+  const [planLayerMounted, setPlanLayerMounted] = useState(false);
+  const hideMapChrome = bottomTab === 'plan';
+  const showSearchBar = shouldShowMapSearchBar({ bottomTab, createOverlayOpen });
+
+  useEffect(() => {
+    if (bottomTab !== 'plan' || !createOverlayOpen) return;
+    const map = useMapStore.getState();
+    map.setSearchOpen(false);
+    if (map.activeSheet === 'search') map.setActiveSheet('none');
+  }, [bottomTab, createOverlayOpen]);
+
+  useEffect(() => {
+    if (bottomTab === 'plan') setPlanLayerMounted(true);
+  }, [bottomTab]);
+
   return (
+    <AppErrorBoundary
+      title={t('appRecoverTitle')}
+      body={t('appRecoverBody')}
+      action={t('appRecoverAction')}>
     <View style={styles.root}>
       <MapCanvas
         ref={mapRef}
@@ -263,10 +290,10 @@ export function TripHomeScreen() {
         <MaterialIcons name="arrow-back" size={22} color={text} />
       </Pressable>
 
-      <MapSearchBar loading={search.isFetching} />
-      <CategoryChipRow loading={nearby.isFetching} />
+      {showSearchBar ? <MapSearchBar loading={search.isFetching} /> : null}
+      {!hideMapChrome ? <CategoryChipRow loading={nearby.isFetching} /> : null}
 
-      {showSearchThisArea && mapCenter ? (
+      {!hideMapChrome && showSearchThisArea && mapCenter ? (
         <Pressable
           style={[styles.searchArea, { top: insets.top + 108, backgroundColor: surface, borderColor: border }]}
           disabled={nearby.isFetching}
@@ -287,7 +314,7 @@ export function TripHomeScreen() {
         </Pressable>
       ) : null}
 
-      {reverseLoading ? (
+      {!hideMapChrome && reverseLoading ? (
         <View
           style={[
             styles.reversePill,
@@ -298,36 +325,43 @@ export function TripHomeScreen() {
         </View>
       ) : null}
 
-      {!granted ? (
+      {!hideMapChrome && !granted ? (
         <View style={[styles.permBanner, { top: insets.top + 108, backgroundColor: surface, borderColor: border }]}>
           <Text style={{ color: text, fontSize: 13 }}>{t('mapLocationDenied')}</Text>
         </View>
       ) : null}
 
-      <MapControlColumn
-        onRecenter={recenter}
-        onResetNorth={() => mapRef.current?.resetNorth()}
-      />
-      <MapAttribution />
-
-      <SearchFocusView
-        onSelect={handleSelectPlace}
-        loading={search.isFetching}
-        error={search.showError}
-      />
+      {!hideMapChrome ? (
+        <MapControlColumn
+          onRecenter={recenter}
+          onResetNorth={() => mapRef.current?.resetNorth()}
+        />
+      ) : null}
+      {!hideMapChrome ? <MapAttribution /> : null}
 
       <ExploreSheet
         onSelectPlace={handleSelectPlace}
         loading={nearby.isFetching}
         error={nearby.showError}
       />
+      {planLayerMounted ? (
+        <View
+          pointerEvents={bottomTab === 'plan' ? 'box-none' : 'none'}
+          style={[styles.planLayer, { opacity: bottomTab === 'plan' ? 1 : 0 }]}>
+          <PlanTab />
+        </View>
+      ) : null}
       <PlaceDetailSheet onDirections={openDirectionsFromPlace} />
       <DirectionsSheet
         userLat={coords?.lat}
         userLng={coords?.lng}
         onFitRoute={onFitRoute}
       />
-      {bottomTab === 'plan' ? <PlanTab /> : null}
+      <SearchFocusView
+        onSelect={handleSelectPlace}
+        loading={search.isFetching}
+        error={search.showError}
+      />
       <TripBottomNav
         onExplorePress={() => {
           useMapStore.setState((s) => ({
@@ -338,15 +372,20 @@ export function TripHomeScreen() {
         }}
       />
     </View>
+    </AppErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  planLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
   backBtn: {
     position: 'absolute',
     left: 12,
-    zIndex: 25,
+    zIndex: 33,
     width: 40,
     height: 40,
     borderRadius: 20,

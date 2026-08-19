@@ -59,6 +59,7 @@ export function SearchFocusView({ onSelect, loading, error }: Props) {
   };
 
   const searching = query.trim().length >= 2;
+  const placeholder = t('mapSearchPlaceholder');
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8, backgroundColor: surface }]}>
@@ -70,7 +71,7 @@ export function SearchFocusView({ onSelect, loading, error }: Props) {
           ref={inputRef}
           value={query}
           onChangeText={setSearchQuery}
-          placeholder={t('mapSearchPlaceholder')}
+          placeholder={placeholder}
           placeholderTextColor={muted}
           style={[styles.input, { color: text }]}
           cursorColor={tint}
@@ -106,7 +107,8 @@ export function SearchFocusView({ onSelect, loading, error }: Props) {
 const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 30,
+    zIndex: 35,
+    elevation: 35,
   },
   header: {
     flexDirection: 'row',

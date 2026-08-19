@@ -114,6 +114,9 @@ export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        // JS closures (snapHeights, etc.) — keep handlers on JS thread to avoid
+        // worklet/RNGH crashes when Reanimated cannot auto-workletize them.
+        .runOnJS(true)
         .activeOffsetY([-8, 8])
         .onBegin(() => {
           dragStart.value = heightSv.value;
@@ -147,7 +150,7 @@ export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
             }
           }
           heightSv.value = withSpring(target, SPRING);
-          runOnJS(commitSnap)(targetIndex);
+          commitSnap(targetIndex);
         }),
     [
       commitSnap,

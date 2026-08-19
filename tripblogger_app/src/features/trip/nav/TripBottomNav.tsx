@@ -56,6 +56,7 @@ export function TripBottomNav({ onExplorePress }: Props) {
                 onExplorePress();
               } else if (tab.id === 'plan') {
                 setActiveSheet('none');
+                useMapStore.getState().setSearchOpen(false);
               }
             }}>
             <MaterialIcons name={tab.icon} size={24} color={active ? tint : muted} />

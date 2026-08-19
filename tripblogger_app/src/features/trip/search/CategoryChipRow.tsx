@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   InteractionManager,
@@ -33,10 +33,25 @@ export function CategoryChipRow({ loading }: Props) {
   const selected = useMapStore((s) => s.selectedCategory);
   const setSelectedCategory = useMapStore((s) => s.setSelectedCategory);
   const pendingCategoryRef = useRef<PoiCategoryId | null | undefined>(undefined);
+  const applyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interactionRef = useRef<{ cancel: () => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      interactionRef.current?.cancel?.();
+      if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
+      pendingCategoryRef.current = undefined;
+    };
+  }, []);
 
   const toggle = (id: PoiCategoryId) => {
     const next: PoiCategoryId | null = selected === id ? null : id;
     pendingCategoryRef.current = next;
+    interactionRef.current?.cancel?.();
+    if (applyTimerRef.current) {
+      clearTimeout(applyTimerRef.current);
+      applyTimerRef.current = null;
+    }
 
     // Crash-proof: close place/directions FIRST, then change category after the
     // sheet tree has settled. Same-frame overlay hide + nearbyEpoch + marker
@@ -44,8 +59,8 @@ export function CategoryChipRow({ loading }: Props) {
     const closed = useMapStore.getState().closeOverlayForCategoryChange();
     if (closed) {
       const requested = next;
-      InteractionManager.runAfterInteractions(() => {
-        setTimeout(() => {
+      interactionRef.current = InteractionManager.runAfterInteractions(() => {
+        applyTimerRef.current = setTimeout(() => {
           if (pendingCategoryRef.current !== requested) return;
           pendingCategoryRef.current = undefined;
           useMapStore.getState().setSelectedCategory(requested);

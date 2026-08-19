@@ -19,6 +19,7 @@ export function MapSearchBar({ loading }: Props) {
   const query = useMapStore((s) => s.searchQuery);
   const setSearchOpen = useMapStore((s) => s.setSearchOpen);
   const setActiveSheet = useMapStore((s) => s.setActiveSheet);
+  const label = t('mapSearchPlaceholder');
 
   const openFocus = () => {
     setSearchOpen(true);
@@ -26,15 +27,17 @@ export function MapSearchBar({ loading }: Props) {
   };
 
   return (
-    <View style={[styles.wrap, { paddingTop: insets.top + 8, paddingLeft: 52 }]} pointerEvents="box-none">
+    <View
+      style={[styles.wrap, { paddingTop: insets.top + 8, paddingLeft: 52 }]}
+      pointerEvents="box-none">
       <Pressable
         onPress={openFocus}
         accessibilityRole="search"
-        accessibilityLabel={t('mapSearchPlaceholder')}
+        accessibilityLabel={label}
         style={[styles.pill, { backgroundColor: surface, borderColor: border }]}>
         <MaterialIcons name="search" size={22} color={muted} />
         <Text numberOfLines={1} style={[styles.input, { color: query ? text : muted }]}>
-          {query || t('mapSearchPlaceholder')}
+          {query || label}
         </Text>
         {loading ? <ActivityIndicator size="small" color={muted} /> : null}
       </Pressable>
@@ -48,7 +51,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 12,
-    zIndex: 20,
+    zIndex: 31,
   },
   pill: {
     flexDirection: 'row',

@@ -17,6 +17,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { queryClient } from '@/src/services/query-client';
+import { AppErrorBoundary, installJsExceptionGuard } from '@/src/components/AppErrorBoundary';
+import { useI18n } from '@/src/i18n';
 import {
   clearPersistedAuthTokens,
   ensureDeviceId,
@@ -64,6 +66,7 @@ const navigationDark = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const { t } = useI18n();
   const [fontsLoaded] = useFonts({
     NotoSerifDisplay_400Regular,
     NotoSerifDisplay_600SemiBold,
@@ -78,6 +81,8 @@ export default function RootLayout() {
       void SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  useEffect(() => installJsExceptionGuard(), []);
 
   useEffect(() => {
     hydrateSettings();
@@ -214,12 +219,17 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider value={colorScheme === 'dark' ? navigationDark : navigationLight}>
-            <Stack>
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-            </Stack>
-            <StatusBar style="auto" />
+            <AppErrorBoundary
+              title={t('appRecoverTitle')}
+              body={t('appRecoverBody')}
+              action={t('appRecoverAction')}>
+              <Stack>
+                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+              </Stack>
+              <StatusBar style="auto" />
+            </AppErrorBoundary>
           </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
