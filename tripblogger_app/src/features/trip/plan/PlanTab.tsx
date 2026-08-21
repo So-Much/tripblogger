@@ -16,6 +16,10 @@ import { useTrips } from '../hooks/useTrips';
 import { usePlanStore } from '../store/plan.store';
 import type { TripDetailDto, TripSummaryDto } from '../types/plan';
 import { formatDateRangeDisplay } from './plan-create-dates';
+import {
+  PLAN_SHEET_SNAP_DEBOUNCE_MS,
+  consumePendingTripAfterDismiss,
+} from './plan-sheet-layout';
 import { PlanEmptyCreate } from './PlanEmptyCreate';
 import { PlanGuestGate } from './PlanGuestGate';
 import { PlanTimeline } from './PlanTimeline';
@@ -57,6 +61,9 @@ function PlanMemberFlow() {
   const tripsQuery = useTrips({ enabled: true });
   const activeTripId = usePlanStore((s) => s.activeTripId);
   const setActiveTripId = usePlanStore((s) => s.setActiveTripId);
+  const requestActiveTripId = usePlanStore((s) => s.requestActiveTripId);
+  const pendingTripId = usePlanStore((s) => s.pendingTripId);
+  const settingsSheetIndex = usePlanStore((s) => s.settingsSheetIndex);
   const setSelectedDayId = usePlanStore((s) => s.setSelectedDayId);
   const tripList = tripsQuery.data;
   const [creating, setCreating] = useState(false);
@@ -91,6 +98,18 @@ function PlanMemberFlow() {
     }
   }, [tripList, activeTripId, setActiveTripId, setSelectedDayId]);
 
+  useEffect(() => {
+    const next = consumePendingTripAfterDismiss({
+      pendingTripId,
+      settingsSheetIndex,
+    });
+    if (!next || next === activeTripId) return;
+    const timer = setTimeout(() => {
+      setActiveTripId(next);
+    }, PLAN_SHEET_SNAP_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [pendingTripId, settingsSheetIndex, activeTripId, setActiveTripId]);
+
   const onCreated = (trip: TripDetailDto) => {
     setCreating(false);
     setActiveTripId(trip.id);
@@ -124,36 +143,34 @@ function PlanMemberFlow() {
     return <PlanEmptyCreate onCreated={onCreated} />;
   }
 
-  if (creating) {
-    return (
-      <View style={styles.memberRoot} pointerEvents="box-none">
-        <PlanEmptyCreate onCreated={onCreated} onCancel={() => setCreating(false)} />
-      </View>
-    );
-  }
-
   const active = tripList.find((tr) => tr.id === activeTripId) ?? tripList[0];
   const pickerTop = insets.top + HEADER_CLEARANCE;
   const sheetTopInset = pickerTop + pickerHeight + PICKER_SHEET_GAP;
 
   return (
     <View style={styles.memberRoot} pointerEvents="box-none">
-      <View
-        collapsable={false}
-        style={[styles.pickerSlot, { top: pickerTop }]}
-        onLayout={(e) => {
-          const next = Math.round(e.nativeEvent.layout.height);
-          if (next > 0 && next !== pickerHeight) setPickerHeight(next);
-        }}>
-        <TripPickerBar
-          trips={tripList}
-          activeTripId={active.id}
-          onSelect={setActiveTripId}
-          onCreate={() => setCreating(true)}
-        />
-      </View>
+      {creating ? (
+        <PlanEmptyCreate onCreated={onCreated} onCancel={() => setCreating(false)} />
+      ) : (
+        <View
+          collapsable={false}
+          style={[styles.pickerSlot, { top: pickerTop }]}
+          onLayout={(e) => {
+            const next = Math.round(e.nativeEvent.layout.height);
+            if (next > 0 && next !== pickerHeight) setPickerHeight(next);
+          }}>
+          <TripPickerBar
+            trips={tripList}
+            activeTripId={active.id}
+            onSelect={requestActiveTripId}
+            onCreate={() => setCreating(true)}
+          />
+        </View>
+      )}
 
-      <View style={styles.timelineSlot} pointerEvents="box-none">
+      <View
+        style={[styles.timelineSlot, creating ? styles.timelineHidden : null]}
+        pointerEvents={creating ? 'none' : 'box-none'}>
         <PlanTimeline
           tripId={active.id}
           tripTitle={active.title}
@@ -269,6 +286,9 @@ const styles = StyleSheet.create({
   timelineSlot: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 30,
+  },
+  timelineHidden: {
+    opacity: 0,
   },
   pickerPanel: {
     borderRadius: 12,

@@ -1,11 +1,28 @@
 import {
   PLAN_HOST_SWAP_DEBOUNCE_MS,
+  PLAN_NAV_BAR_OFFSET,
+  PLAN_SHEET_CLOSED_INDEX,
   PLAN_SHEET_FULL_INDEX,
+  PLAN_SHEET_MID_INDEX,
+  PLAN_SHEET_SNAP_DEBOUNCE_MS,
+  PLAN_STOP_CARD_BORDER_WIDTH,
+  consumePendingTripAfterDismiss,
+  planSettingsPointerEvents,
+  planSettingsSheetCommandIndex,
+  planSheetCanInvoke,
+  planSheetChromeLayout,
   planSheetGesturePolicy,
   planSheetListViewportHeight,
+  planSheetNeedsClose,
+  planSheetNeedsSnap,
   planSheetSnapPoints,
   planSheetVisibleHeight,
+  planStopDetailVisible,
+  planStopSettingsSheetIndex,
+  planTimelineBodyKind,
+  resolvePendingTripSwap,
   resolvePlanSheetHost,
+  resolvePlanTimelineBody,
   samePlanSheetTab,
   wantedPlanSheetHost,
 } from './plan-sheet-layout';
@@ -25,6 +42,56 @@ describe('planSheetSnapPoints', () => {
     expect(peek).toBeLessThan(mid);
     expect(mid).toBeLessThanOrEqual(full);
     expect(peek).toBeLessThanOrEqual(full);
+  });
+});
+
+describe('planSheetChromeLayout', () => {
+  it('sizes full snap to the gap below trip chips/search and above the tab bar', () => {
+    const layout = planSheetChromeLayout({
+      windowHeight: 800,
+      sheetTopInset: 170,
+      safeBottom: 34,
+    });
+    expect(PLAN_NAV_BAR_OFFSET).toBe(56);
+    expect(layout.bottomInset).toBe(90);
+    expect(layout.availableHeight).toBe(540);
+    expect(layout.snapPoints).toEqual(planSheetSnapPoints(540));
+    expect(layout.snapPoints[2]).toBe(540);
+  });
+
+  it('gives the stop-settings sheet the same snaps as the timeline sheet', () => {
+    const input = { windowHeight: 780, sheetTopInset: 162, safeBottom: 12 };
+    const timeline = planSheetChromeLayout(input);
+    const settings = planSheetChromeLayout(input);
+    expect(settings.snapPoints).toEqual(timeline.snapPoints);
+    expect(settings.bottomInset).toBe(timeline.bottomInset);
+  });
+});
+
+describe('planStopSettingsSheetIndex', () => {
+  it('stays closed at -1 and opens at mid so the form is usable', () => {
+    expect(PLAN_SHEET_CLOSED_INDEX).toBe(-1);
+    expect(planStopSettingsSheetIndex(false)).toBe(PLAN_SHEET_CLOSED_INDEX);
+    expect(planStopSettingsSheetIndex(true)).toBe(PLAN_SHEET_MID_INDEX);
+  });
+});
+
+describe('planStopDetailVisible', () => {
+  it('is hidden when the stop is missing even if an id is still set (stale close)', () => {
+    expect(planStopDetailVisible({ detailStopId: 's1', stop: null })).toBe(false);
+    expect(
+      planStopDetailVisible({ detailStopId: 's1', stop: { id: 's1' } }),
+    ).toBe(true);
+    expect(
+      planStopDetailVisible({ detailStopId: null, stop: { id: 's1' } }),
+    ).toBe(false);
+  });
+});
+
+describe('PLAN_STOP_CARD_BORDER_WIDTH', () => {
+  it('is bolder than hairline so place cards read as distinct rows', () => {
+    expect(PLAN_STOP_CARD_BORDER_WIDTH).toBeGreaterThan(1);
+    expect(PLAN_STOP_CARD_BORDER_WIDTH).toBeLessThanOrEqual(2);
   });
 });
 
@@ -71,15 +138,26 @@ describe('planSheetGesturePolicy', () => {
     expect(policy.listKind).toBe('sheet-scroll');
   });
 
-  it('at mid, still uses the sheet scrollable so later stops are reachable', () => {
+  it('at mid, allows long-press reorder on the draggable host', () => {
     const policy = planSheetGesturePolicy({
-      sheetIndex: 1,
+      sheetIndex: PLAN_SHEET_MID_INDEX,
       dragging: false,
       gesturesEnabled: true,
     });
     expect(policy.enableContentPanningGesture).toBe(false);
-    expect(policy.listKind).toBe('sheet-scroll');
+    expect(policy.enableHandlePanningGesture).toBe(true);
+    expect(policy.listKind).toBe('draggable');
+    expect(policy.canDragReorder).toBe(true);
+  });
+
+  it('keeps the draggable host at mid/full when settings overlay disables gestures', () => {
+    const policy = planSheetGesturePolicy({
+      sheetIndex: PLAN_SHEET_MID_INDEX,
+      dragging: false,
+      gesturesEnabled: false,
+    });
     expect(policy.canDragReorder).toBe(false);
+    expect(policy.listKind).toBe('draggable');
   });
 
   it('at full, allows reorder while keeping inner scroll unlocked', () => {
@@ -129,13 +207,18 @@ describe('wantedPlanSheetHost', () => {
     expect(hosts[0]).toBe('sheet-scroll');
   });
 
-  it('still uses the draggable host at full snap for every tab', () => {
+  it('still uses the draggable host at mid and full for every tab', () => {
+    const mid = planSheetGesturePolicy({
+      sheetIndex: PLAN_SHEET_MID_INDEX,
+      dragging: false,
+      gesturesEnabled: true,
+    });
     const full = planSheetGesturePolicy({
       sheetIndex: PLAN_SHEET_FULL_INDEX,
       dragging: false,
       gesturesEnabled: true,
     });
-    expect(wantedPlanSheetHost({ tabKind: 'overview', listKind: full.listKind })).toBe(
+    expect(wantedPlanSheetHost({ tabKind: 'overview', listKind: mid.listKind })).toBe(
       'draggable',
     );
     expect(wantedPlanSheetHost({ tabKind: 'day', listKind: full.listKind })).toBe(
@@ -200,5 +283,177 @@ describe('resolvePlanSheetHost', () => {
   it('debounces host remounts long enough for a snap/chip gesture to finish', () => {
     expect(PLAN_HOST_SWAP_DEBOUNCE_MS).toBeGreaterThanOrEqual(150);
     expect(PLAN_HOST_SWAP_DEBOUNCE_MS).toBeLessThanOrEqual(400);
+  });
+
+  it('keeps the current list host while the settings sheet is still attached', () => {
+    expect(
+      resolvePlanSheetHost({
+        wanted: 'sheet-scroll',
+        current: 'draggable',
+        dragging: false,
+        settingsAttached: true,
+      }),
+    ).toBe('draggable');
+  });
+});
+
+describe('planSettingsSheetCommandIndex', () => {
+  it('drives Gorhom index from openRequested so dismiss actually changes the prop', () => {
+    expect(planSettingsSheetCommandIndex(false)).toBe(PLAN_SHEET_CLOSED_INDEX);
+    expect(planSettingsSheetCommandIndex(true)).toBe(PLAN_SHEET_MID_INDEX);
+    expect(planSettingsSheetCommandIndex(false)).not.toBe(
+      planSettingsSheetCommandIndex(true),
+    );
+  });
+});
+
+describe('planSettingsPointerEvents', () => {
+  it('blocks hits only after onChange(-1), not while a ghost sheet is still attached', () => {
+    expect(planSettingsPointerEvents(PLAN_SHEET_CLOSED_INDEX)).toBe('none');
+    expect(planSettingsPointerEvents(PLAN_SHEET_MID_INDEX)).toBe('box-none');
+    expect(planSettingsPointerEvents(0)).toBe('box-none');
+  });
+});
+
+describe('planSheetCanInvoke', () => {
+  it('refuses snapToIndex/close after unmount', () => {
+    expect(planSheetCanInvoke(true)).toBe(true);
+    expect(planSheetCanInvoke(false)).toBe(false);
+  });
+});
+
+describe('planSheetNeedsSnap / planSheetNeedsClose', () => {
+  it('does not snap when already at the target or unmounted', () => {
+    expect(
+      planSheetNeedsSnap({
+        mounted: true,
+        openRequested: true,
+        currentIndex: PLAN_SHEET_MID_INDEX,
+        targetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe(false);
+    expect(
+      planSheetNeedsSnap({
+        mounted: false,
+        openRequested: true,
+        currentIndex: PLAN_SHEET_CLOSED_INDEX,
+        targetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe(false);
+    expect(
+      planSheetNeedsSnap({
+        mounted: true,
+        openRequested: true,
+        currentIndex: PLAN_SHEET_CLOSED_INDEX,
+        targetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe(true);
+  });
+
+  it('closes only when still attached after dismiss was requested', () => {
+    expect(
+      planSheetNeedsClose({
+        mounted: true,
+        openRequested: false,
+        currentIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe(true);
+    expect(
+      planSheetNeedsClose({
+        mounted: true,
+        openRequested: false,
+        currentIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBe(false);
+    expect(
+      planSheetNeedsClose({
+        mounted: false,
+        openRequested: false,
+        currentIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('resolvePendingTripSwap', () => {
+  it('swaps immediately when settings are fully dismissed', () => {
+    expect(
+      resolvePendingTripSwap({
+        requestedTripId: 'b',
+        currentTripId: 'a',
+        settingsSheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toEqual({ activeTripId: 'b', pendingTripId: null });
+  });
+
+  it('holds the current trip until onChange(-1) when settings are still attached', () => {
+    expect(
+      resolvePendingTripSwap({
+        requestedTripId: 'b',
+        currentTripId: 'a',
+        settingsSheetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toEqual({ activeTripId: 'a', pendingTripId: 'b' });
+  });
+
+  it('is a no-op when the same trip is tapped again', () => {
+    expect(
+      resolvePendingTripSwap({
+        requestedTripId: 'a',
+        currentTripId: 'a',
+        settingsSheetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toEqual({ activeTripId: 'a', pendingTripId: null });
+  });
+});
+
+describe('consumePendingTripAfterDismiss', () => {
+  it('applies the pending trip only after the settings sheet reports -1', () => {
+    expect(
+      consumePendingTripAfterDismiss({
+        pendingTripId: 'b',
+        settingsSheetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBeNull();
+    expect(
+      consumePendingTripAfterDismiss({
+        pendingTripId: 'b',
+        settingsSheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBe('b');
+    expect(
+      consumePendingTripAfterDismiss({
+        pendingTripId: null,
+        settingsSheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('planTimelineBodyKind / resolvePlanTimelineBody', () => {
+  it('keeps the list body mounted across loading so Gorhom hosts are not torn down', () => {
+    expect(planTimelineBodyKind({ hasTrip: true, isError: false })).toBe('list');
+    expect(planTimelineBodyKind({ hasTrip: false, isError: false })).toBe(
+      'loading',
+    );
+    expect(planTimelineBodyKind({ hasTrip: false, isError: true })).toBe('error');
+    expect(
+      resolvePlanTimelineBody({ current: 'list', wanted: 'loading' }),
+    ).toBe('list');
+    expect(resolvePlanTimelineBody({ current: 'list', wanted: 'error' })).toBe(
+      'error',
+    );
+    expect(resolvePlanTimelineBody({ current: null, wanted: 'loading' })).toBe(
+      'loading',
+    );
+  });
+});
+
+describe('PLAN_SHEET_SNAP_DEBOUNCE_MS', () => {
+  it('waits out list remount + camera fit before snapping or swapping trips', () => {
+    expect(PLAN_SHEET_SNAP_DEBOUNCE_MS).toBeGreaterThanOrEqual(
+      PLAN_HOST_SWAP_DEBOUNCE_MS,
+    );
+    expect(PLAN_SHEET_SNAP_DEBOUNCE_MS).toBeLessThanOrEqual(500);
   });
 });

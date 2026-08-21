@@ -1,7 +1,6 @@
-import {
+import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetHandle,
-  BottomSheetModal,
   BottomSheetScrollView,
   type BottomSheetBackdropProps,
   type BottomSheetHandleProps,
@@ -44,7 +43,16 @@ import {
   patchAffectsLocalSchedule,
 } from './applyLocalDaySchedule';
 import { PlanMinuteStepper } from './PlanMinuteStepper';
-import { planSheetSnapPoints } from './plan-sheet-layout';
+import {
+  PLAN_SHEET_CLOSED_INDEX,
+  planSettingsPointerEvents,
+  planSettingsSheetCommandIndex,
+  planSheetCanInvoke,
+  planSheetChromeLayout,
+  planSheetNeedsClose,
+  planSheetNeedsSnap,
+  planStopSettingsSheetIndex,
+} from './plan-sheet-layout';
 import { planStopDeleteTarget } from './plan-stop-delete';
 import {
   clampBufferMinutes,
@@ -90,7 +98,13 @@ type Props = {
   trip: TripDetailDto | null;
   stop: TripStopDto | null;
   prevStop?: TripStopDto | null;
+  /** Same top chrome as PlanTimeline so full snap sits below search + trip chips. */
+  sheetTopInset: number;
+  /** Bump on every settings tap so the same stop can re-open after a hung close. */
+  presentEpoch: number;
   onClose: () => void;
+  /** Live Gorhom index so trip swaps wait for onChange(-1). */
+  onIndexChange?: (index: number) => void;
 };
 
 function formatClock(iso: string | null | undefined): string {
@@ -100,8 +114,9 @@ function formatClock(iso: string | null | undefined): string {
 }
 
 /**
- * Stop settings: Gorhom snap-point sheet (drag handle to resize), not a static Modal.
- * Approach A fields only — name, time, stay, status, travel/buffer, day, tags.
+ * Stop settings: sibling Gorhom BottomSheet (same layout math as the timeline).
+ * Not a BottomSheetModal — nesting a modal on the Plan sheet left a portal hung
+ * and crashed when days/trips changed after close.
  */
 export function PlanStopDetailSheet({
   visible,
@@ -109,7 +124,10 @@ export function PlanStopDetailSheet({
   trip,
   stop,
   prevStop = null,
+  sheetTopInset,
+  presentEpoch,
   onClose,
+  onIndexChange,
 }: Props) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
@@ -118,9 +136,13 @@ export function PlanStopDetailSheet({
   const patchStop = usePatchStopMutation();
   const deleteStop = useDeleteStopMutation();
   const moveStop = useMoveStopMutation();
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheet>(null);
   const stopRef = useRef(stop);
   if (stop) stopRef.current = stop;
+  const mountedRef = useRef(false);
+  const liveIndexRef = useRef(PLAN_SHEET_CLOSED_INDEX);
+  const prevEpochRef = useRef(presentEpoch);
+  const [liveIndex, setLiveIndex] = useState(PLAN_SHEET_CLOSED_INDEX);
 
   const surface = useThemeColor({}, 'surface');
   const background = useThemeColor({}, 'background');
@@ -137,20 +159,85 @@ export function PlanStopDetailSheet({
   const [error, setError] = useState<string | null>(null);
 
   const current = stop ?? stopRef.current;
-  const snapPoints = useMemo(() => {
-    const available = Math.max(180, windowHeight - insets.top - Math.max(insets.bottom, 8));
-    return planSheetSnapPoints(available);
-  }, [windowHeight, insets.top, insets.bottom]);
+  const chrome = useMemo(
+    () =>
+      planSheetChromeLayout({
+        windowHeight,
+        sheetTopInset,
+        safeBottom: insets.bottom,
+      }),
+    [windowHeight, sheetTopInset, insets.bottom],
+  );
+  const settingsContainerStyle = useMemo(
+    () => [styles.sheetContainer, { pointerEvents: planSettingsPointerEvents(liveIndex) }],
+    [liveIndex],
+  );
+  const snapPoints = chrome.snapPoints;
+  const commandIndex = planSettingsSheetCommandIndex(visible);
+  const attached = liveIndex >= 0;
+
+  const invokeSheet = useCallback((fn: (sheet: BottomSheet) => void) => {
+    if (!planSheetCanInvoke(mountedRef.current)) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    fn(sheet);
+  }, []);
+
+  const requestClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!planSheetCanInvoke(mountedRef.current)) return;
     if (visible && stop) {
       setAnchorDraft(stop.anchorTime ?? '');
       setError(null);
-      sheetRef.current?.present();
-    } else {
-      sheetRef.current?.dismiss();
+      const epochBumped = prevEpochRef.current !== presentEpoch;
+      prevEpochRef.current = presentEpoch;
+      if (
+        epochBumped &&
+        liveIndexRef.current >= 0 &&
+        planSheetNeedsSnap({
+          mounted: true,
+          openRequested: true,
+          currentIndex: liveIndexRef.current,
+          targetIndex: commandIndex,
+        })
+      ) {
+        invokeSheet((sheet) => sheet.snapToIndex(commandIndex));
+      }
+      return;
     }
-  }, [visible, stop]);
+    prevEpochRef.current = presentEpoch;
+    if (
+      planSheetNeedsClose({
+        mounted: true,
+        openRequested: false,
+        currentIndex: liveIndexRef.current,
+      })
+    ) {
+      invokeSheet((sheet) => sheet.close());
+    }
+  }, [visible, stop?.id, presentEpoch, commandIndex, invokeSheet]);
+
+  const onSheetChange = useCallback(
+    (index: number) => {
+      liveIndexRef.current = index;
+      setLiveIndex(index);
+      onIndexChange?.(index);
+      if (index === planStopSettingsSheetIndex(false)) {
+        onClose();
+      }
+    },
+    [onClose, onIndexChange],
+  );
 
   const days = useMemo(() => trip?.days ?? [], [trip?.days]);
   const busy = patchStop.isPending || deleteStop.isPending || moveStop.isPending;
@@ -177,7 +264,7 @@ export function PlanStopDetailSheet({
       { tripId, stopId: targetId, dto },
       {
         onSuccess: () => {
-          if (opts?.close) onClose();
+          if (opts?.close) requestClose();
         },
         onError: (err) => {
           void queryClient.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
@@ -210,36 +297,37 @@ export function PlanStopDetailSheet({
     [muted, t],
   );
 
-  if (!current) return null;
-
   const stayLonger = () => {
+    if (!current) return;
     applyPatch({ durationMinutes: current.durationMinutes + STAY_LONGER });
   };
 
   const bumpDuration = (delta: number) => {
+    if (!current) return;
     const next = Math.max(DURATION_STEP, current.durationMinutes + delta);
     if (next === current.durationMinutes) return;
     applyPatch({ durationMinutes: next });
   };
 
   const setPriority = (priority: StopPriority) => {
-    if (priority === current.priority) return;
+    if (!current || priority === current.priority) return;
     applyPatch({ priority });
   };
 
   const setStatus = (status: StopStatus) => {
-    if (status === current.status) return;
+    if (!current || status === current.status) return;
     applyPatch({ status });
   };
 
   const toggleTag = (tag: 'entry_point' | 'accommodation') => {
+    if (!current) return;
     const has = current.tags.includes(tag);
     const tags = has ? current.tags.filter((x) => x !== tag) : [...current.tags, tag];
     applyPatch({ tags });
   };
 
   const setMode = (mode: PlanTravelMode | null) => {
-    if (mode === current.travelModeOverride) return;
+    if (!current || mode === current.travelModeOverride) return;
     applyPatch({ travelModeOverride: mode });
   };
 
@@ -249,6 +337,7 @@ export function PlanStopDetailSheet({
   };
 
   const pinArrive = () => {
+    if (!current) return;
     const clock = clockFromIso(current.schedule?.arriveAt);
     if (!clock) return;
     setAnchorDraft(clock);
@@ -269,6 +358,7 @@ export function PlanStopDetailSheet({
   };
 
   const changeDay = (day: TripDayDto | null) => {
+    if (!current) return;
     const toTripDayId = day?.id ?? null;
     if (toTripDayId === current.tripDayId) return;
     setError(null);
@@ -278,13 +368,14 @@ export function PlanStopDetailSheet({
     moveStop.mutate(
       { tripId, stopId: current.id, dto: { toTripDayId, toPosition } },
       {
-        onSuccess: () => onClose(),
+        onSuccess: () => requestClose(),
         onError: (err) => setError(formatApiError(err, t('errorTitle'))),
       },
     );
   };
 
   const confirmDelete = () => {
+    if (!current) return;
     const target = planStopDeleteTarget(current);
     Alert.alert(t(target.titleKey), target.message, [
       { text: t('cancel'), style: 'cancel' },
@@ -295,7 +386,7 @@ export function PlanStopDetailSheet({
           deleteStop.mutate(
             { tripId, stopId: target.stopId },
             {
-              onSuccess: () => onClose(),
+              onSuccess: () => requestClose(),
               onError: (err) => setError(formatApiError(err, t('errorTitle'))),
             },
           );
@@ -304,33 +395,35 @@ export function PlanStopDetailSheet({
     ]);
   };
 
-  const arrive = formatClock(current.schedule?.arriveAt);
-  const start = formatClock(current.schedule?.startAt);
+  const arrive = formatClock(current?.schedule?.arriveAt);
+  const start = formatClock(current?.schedule?.startAt);
   const timeLabel =
-    current.schedule?.skipped || current.status === 'skipped'
+    !current || current.schedule?.skipped || current.status === 'skipped'
       ? '—'
       : current.schedule?.arriveAt
         ? arrive
         : start;
-  const timeCaption = current.schedule?.arriveAt ? t('planArriveAt') : t('planStartAt');
-  const statusOpt = STATUS_OPTS.find((s) => s.value === current.status) ?? STATUS_OPTS[0];
+  const timeCaption = current?.schedule?.arriveAt ? t('planArriveAt') : t('planStartAt');
+  const statusOpt = STATUS_OPTS.find((s) => s.value === current?.status) ?? STATUS_OPTS[0];
 
   return (
-    <BottomSheetModal
+    <BottomSheet
       ref={sheetRef}
-      index={1}
+      index={commandIndex}
       snapPoints={snapPoints}
-      topInset={insets.top}
+      animateOnMount={false}
       enableDynamicSizing={false}
-      enablePanDownToClose
+      enablePanDownToClose={attached}
       enableOverDrag={false}
       enableContentPanningGesture={false}
-      enableHandlePanningGesture
+      enableHandlePanningGesture={attached}
+      activeOffsetY={[-8, 8]}
       android_keyboardInputMode="adjustResize"
-      onDismiss={onClose}
-      stackBehavior="push"
-      containerStyle={{ zIndex: 80, elevation: 80 }}
-      backdropComponent={renderBackdrop}
+      onChange={onSheetChange}
+      bottomInset={chrome.bottomInset}
+      containerStyle={settingsContainerStyle}
+      style={styles.sheet}
+      backdropComponent={attached ? renderBackdrop : undefined}
       handleComponent={renderHandle}
       backgroundStyle={{
         backgroundColor: surface,
@@ -338,6 +431,7 @@ export function PlanStopDetailSheet({
         borderTopWidth: StyleSheet.hairlineWidth,
       }}
       handleIndicatorStyle={{ backgroundColor: muted, width: 40 }}>
+      {current ? (
       <BottomSheetScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -362,7 +456,7 @@ export function PlanStopDetailSheet({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('close')}
-            onPress={onClose}
+            onPress={requestClose}
             style={styles.iconHit}>
             <MaterialIcons name="close" size={22} color={muted} />
           </Pressable>
@@ -653,7 +747,10 @@ export function PlanStopDetailSheet({
           )}
         </Pressable>
       </BottomSheetScrollView>
-    </BottomSheetModal>
+      ) : (
+        <View style={styles.scroll} />
+      )}
+    </BottomSheet>
   );
 }
 
@@ -766,6 +863,15 @@ function ChoiceChip({
 }
 
 const styles = StyleSheet.create({
+  sheetContainer: {
+    pointerEvents: 'box-none',
+    zIndex: 40,
+    elevation: 40,
+  },
+  sheet: {
+    zIndex: 40,
+    elevation: 40,
+  },
   handleCaption: {
     alignItems: 'center',
     paddingBottom: 4,

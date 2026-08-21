@@ -1,4 +1,12 @@
+export const PLAN_SHEET_CLOSED_INDEX = -1;
+export const PLAN_SHEET_MID_INDEX = 1;
 export const PLAN_SHEET_FULL_INDEX = 2;
+
+/** Matches TripBottomNav bar height above safe-area padding. */
+export const PLAN_NAV_BAR_OFFSET = 56;
+
+/** Place cards: thicker than RN hairline so rows read as distinct. */
+export const PLAN_STOP_CARD_BORDER_WIDTH = 1.5;
 
 /** Handle + title/chips + ~1 stop row. Still below mid on typical phones. */
 const PEEK_MIN_PX = 220;
@@ -11,6 +19,9 @@ export type PlanSheetTabKind = 'day' | 'ideas' | 'overview';
 
 /** Avoid remounting RNGH scrollables mid-gesture (snap / chip tap / row drag). */
 export const PLAN_HOST_SWAP_DEBOUNCE_MS = 220;
+
+/** Wait out list remount + camera fit before snapToIndex or applying a pending trip. */
+export const PLAN_SHEET_SNAP_DEBOUNCE_MS = PLAN_HOST_SWAP_DEBOUNCE_MS;
 
 export type PlanSheetGesturePolicy = {
   enableContentPanningGesture: boolean;
@@ -35,6 +46,159 @@ export function planSheetSnapPoints(
 
 export function planSheetPeekHeight(availableHeight: number): number {
   return planSheetSnapPoints(availableHeight)[0];
+}
+
+export function planSheetBottomInset(safeBottom: number): number {
+  return Math.max(safeBottom, 8) + PLAN_NAV_BAR_OFFSET;
+}
+
+export function planSheetAvailableHeight(input: {
+  windowHeight: number;
+  sheetTopInset: number;
+  bottomInset: number;
+}): number {
+  return Math.max(180, input.windowHeight - input.sheetTopInset - input.bottomInset);
+}
+
+/**
+ * Shared chrome for the Plan timeline sheet and the stop-settings sibling.
+ * Full snap fills the gap below search + trip switcher and above the tab bar.
+ */
+export function planSheetChromeLayout(input: {
+  windowHeight: number;
+  sheetTopInset: number;
+  safeBottom: number;
+}): {
+  bottomInset: number;
+  availableHeight: number;
+  snapPoints: [number, number, number];
+} {
+  const bottomInset = planSheetBottomInset(input.safeBottom);
+  const availableHeight = planSheetAvailableHeight({
+    windowHeight: input.windowHeight,
+    sheetTopInset: input.sheetTopInset,
+    bottomInset,
+  });
+  return {
+    bottomInset,
+    availableHeight,
+    snapPoints: planSheetSnapPoints(availableHeight),
+  };
+}
+
+export function planStopSettingsSheetIndex(visible: boolean): number {
+  return visible ? PLAN_SHEET_MID_INDEX : PLAN_SHEET_CLOSED_INDEX;
+}
+
+/**
+ * Controlled Gorhom `index` for the settings sibling. Must *change* on dismiss
+ * (`1` → `-1`). A hardcoded `-1` plus imperative `snapToIndex` leaves a ghost
+ * sheet at index >= 0 after close.
+ */
+export function planSettingsSheetCommandIndex(openRequested: boolean): number {
+  return planStopSettingsSheetIndex(openRequested);
+}
+
+/** Hit-test only while Gorhom still reports the settings sheet attached. */
+export function planSettingsPointerEvents(
+  sheetIndex: number,
+): 'none' | 'box-none' {
+  return sheetIndex >= 0 ? 'box-none' : 'none';
+}
+
+export function planSheetCanInvoke(mounted: boolean): boolean {
+  return mounted;
+}
+
+export function planSheetNeedsSnap(input: {
+  mounted: boolean;
+  openRequested: boolean;
+  currentIndex: number;
+  targetIndex: number;
+}): boolean {
+  return (
+    planSheetCanInvoke(input.mounted) &&
+    input.openRequested &&
+    input.currentIndex !== input.targetIndex
+  );
+}
+
+export function planSheetNeedsClose(input: {
+  mounted: boolean;
+  openRequested: boolean;
+  currentIndex: number;
+}): boolean {
+  return (
+    planSheetCanInvoke(input.mounted) &&
+    !input.openRequested &&
+    input.currentIndex >= 0
+  );
+}
+
+export type PlanTimelineBodyKind = 'list' | 'error' | 'loading';
+
+export function planTimelineBodyKind(input: {
+  hasTrip: boolean;
+  isError: boolean;
+}): PlanTimelineBodyKind {
+  if (input.isError && !input.hasTrip) return 'error';
+  if (!input.hasTrip) return 'loading';
+  return 'list';
+}
+
+/**
+ * Once the itinerary list has mounted inside the timeline BottomSheet, keep it
+ * through subsequent loads so BottomSheetFlatList / DraggableFlatList are not
+ * torn down on trip switch.
+ */
+export function resolvePlanTimelineBody(input: {
+  current: PlanTimelineBodyKind | null;
+  wanted: PlanTimelineBodyKind;
+}): PlanTimelineBodyKind {
+  if (input.current === 'list' && input.wanted !== 'error') {
+    return 'list';
+  }
+  return input.wanted;
+}
+
+export function resolvePendingTripSwap(input: {
+  requestedTripId: string;
+  currentTripId: string | null;
+  settingsSheetIndex: number;
+}): { activeTripId: string; pendingTripId: string | null } {
+  if (input.currentTripId == null) {
+    return { activeTripId: input.requestedTripId, pendingTripId: null };
+  }
+  if (input.requestedTripId === input.currentTripId) {
+    return { activeTripId: input.currentTripId, pendingTripId: null };
+  }
+  if (input.settingsSheetIndex >= 0) {
+    return {
+      activeTripId: input.currentTripId,
+      pendingTripId: input.requestedTripId,
+    };
+  }
+  return { activeTripId: input.requestedTripId, pendingTripId: null };
+}
+
+/** Apply a stashed trip only after settings `onChange(-1)`. */
+export function consumePendingTripAfterDismiss(input: {
+  pendingTripId: string | null;
+  settingsSheetIndex: number;
+}): string | null {
+  if (input.settingsSheetIndex !== PLAN_SHEET_CLOSED_INDEX) return null;
+  return input.pendingTripId;
+}
+
+export function planStopDetailVisible(input: {
+  detailStopId: string | null;
+  stop: { id: string } | null;
+}): boolean {
+  return (
+    input.detailStopId != null &&
+    input.stop != null &&
+    input.stop.id === input.detailStopId
+  );
 }
 
 /**
@@ -82,13 +246,13 @@ export function planSheetGesturePolicy(input: {
   dragging: boolean;
   gesturesEnabled: boolean;
 }): PlanSheetGesturePolicy {
-  const atFull = input.sheetIndex === PLAN_SHEET_FULL_INDEX;
+  const reorderSnap = input.sheetIndex >= PLAN_SHEET_MID_INDEX;
   const handleOn = input.gesturesEnabled && !input.dragging;
   return {
     enableContentPanningGesture: false,
     enableHandlePanningGesture: handleOn,
-    canDragReorder: atFull,
-    listKind: atFull ? 'draggable' : 'sheet-scroll',
+    canDragReorder: reorderSnap && input.gesturesEnabled,
+    listKind: reorderSnap ? 'draggable' : 'sheet-scroll',
   };
 }
 
@@ -100,16 +264,20 @@ export function resolvePlanSheetHost(input: {
   wanted: PlanSheetHostKind;
   current: PlanSheetHostKind | null;
   dragging: boolean;
+  settingsAttached?: boolean;
 }): PlanSheetHostKind {
-  if (input.dragging && input.current != null) {
+  if (
+    (input.dragging || input.settingsAttached) &&
+    input.current != null
+  ) {
     return input.current;
   }
   return input.wanted;
 }
 
 /**
- * Day / Overview / Ideas must share one native scroll host. Only peek/mid vs
- * full (reorder) may remount the list — chip taps must not.
+ * Day / Overview / Ideas must share one native scroll host. Only peek vs
+ * mid/full (reorder) may remount the list — chip taps must not.
  */
 export function wantedPlanSheetHost(input: {
   tabKind: PlanSheetTabKind;

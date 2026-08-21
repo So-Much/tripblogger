@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n, type TranslationKey } from '@/src/i18n';
 import type { ScheduleConflict, TripStopDto } from '../types/plan';
+import { PLAN_STOP_CARD_BORDER_WIDTH } from './plan-sheet-layout';
 import { PLAN_STOP_ROW_ACTION_SIZE } from './plan-stop-delete';
 
 const CONFLICT_KEY: Record<ScheduleConflict['type'], TranslationKey> = {
@@ -199,7 +200,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 2,
     borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: PLAN_STOP_CARD_BORDER_WIDTH,
     gap: 2,
   },
   main: {

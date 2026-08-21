@@ -1,4 +1,8 @@
 import { create } from 'zustand';
+import {
+  PLAN_SHEET_CLOSED_INDEX,
+  resolvePendingTripSwap,
+} from '../plan/plan-sheet-layout';
 
 export type PlanSheetKind = 'day' | 'ideas' | 'overview';
 
@@ -17,7 +21,14 @@ type PlanUiState = {
   revealDayId: string | null;
   /** Create-trip form is covering Plan; hide map search chrome. */
   createOverlayOpen: boolean;
+  /** Live Gorhom index of the stop-settings sibling (-1 = dismissed). */
+  settingsSheetIndex: number;
+  /** Trip chip tapped while settings are still attached; applied after -1. */
+  pendingTripId: string | null;
   setActiveTripId: (id: string | null) => void;
+  /** Switch trips, or stash the id until settings onChange(-1). */
+  requestActiveTripId: (id: string) => void;
+  setSettingsSheetIndex: (index: number) => void;
   setSelectedDayId: (id: string | null) => void;
   setSheetKind: (kind: PlanSheetKind) => void;
   /** Atomic sheetKind + day id so MapCanvas never sees a torn intermediate. */
@@ -27,6 +38,18 @@ type PlanUiState = {
   setRevealDayId: (id: string | null) => void;
   setCreateOverlayOpen: (open: boolean) => void;
 };
+
+function tripSwitchPatch(id: string | null) {
+  return {
+    activeTripId: id,
+    pendingTripId: null,
+    focusedStopId: null,
+    cameraFocusStop: null,
+    selectedDayId: null,
+    sheetKind: 'day' as const,
+    revealDayId: null,
+  };
+}
 
 /**
  * Minimal plan UI state shared by PlanTab, PlaceDetailSheet add-flow,
@@ -40,15 +63,23 @@ export const usePlanStore = create<PlanUiState>((set, get) => ({
   cameraFocusStop: null,
   revealDayId: null,
   createOverlayOpen: false,
-  setActiveTripId: (id) =>
-    set({
-      activeTripId: id,
-      focusedStopId: null,
-      cameraFocusStop: null,
-      selectedDayId: null,
-      sheetKind: 'day',
-      revealDayId: null,
-    }),
+  settingsSheetIndex: PLAN_SHEET_CLOSED_INDEX,
+  pendingTripId: null,
+  setActiveTripId: (id) => set(tripSwitchPatch(id)),
+  requestActiveTripId: (id) => {
+    const { activeTripId, settingsSheetIndex } = get();
+    const resolved = resolvePendingTripSwap({
+      requestedTripId: id,
+      currentTripId: activeTripId,
+      settingsSheetIndex,
+    });
+    if (resolved.pendingTripId) {
+      set({ pendingTripId: resolved.pendingTripId });
+      return;
+    }
+    set(tripSwitchPatch(resolved.activeTripId));
+  },
+  setSettingsSheetIndex: (settingsSheetIndex) => set({ settingsSheetIndex }),
   setSelectedDayId: (id) => set({ selectedDayId: id }),
   setSheetKind: (sheetKind) => set({ sheetKind }),
   setPlanMapSelection: (sheetKind, selectedDayId) => set({ sheetKind, selectedDayId }),
