@@ -7,8 +7,10 @@ import {
   PLAN_SHEET_SNAP_DEBOUNCE_MS,
   PLAN_STOP_CARD_BORDER_WIDTH,
   consumePendingTripAfterDismiss,
+  planSettingsGesturePolicy,
   planSettingsPointerEvents,
   planSettingsSheetCommandIndex,
+  planSettingsSheetInteractive,
   planSheetCanInvoke,
   planSheetChromeLayout,
   planSheetGesturePolicy,
@@ -90,8 +92,8 @@ describe('planStopDetailVisible', () => {
 
 describe('PLAN_STOP_CARD_BORDER_WIDTH', () => {
   it('is bolder than hairline so place cards read as distinct rows', () => {
-    expect(PLAN_STOP_CARD_BORDER_WIDTH).toBeGreaterThan(1);
-    expect(PLAN_STOP_CARD_BORDER_WIDTH).toBeLessThanOrEqual(2);
+    expect(PLAN_STOP_CARD_BORDER_WIDTH).toBeGreaterThanOrEqual(2);
+    expect(PLAN_STOP_CARD_BORDER_WIDTH).toBeLessThanOrEqual(2.5);
   });
 });
 
@@ -284,17 +286,6 @@ describe('resolvePlanSheetHost', () => {
     expect(PLAN_HOST_SWAP_DEBOUNCE_MS).toBeGreaterThanOrEqual(150);
     expect(PLAN_HOST_SWAP_DEBOUNCE_MS).toBeLessThanOrEqual(400);
   });
-
-  it('keeps the current list host while the settings sheet is still attached', () => {
-    expect(
-      resolvePlanSheetHost({
-        wanted: 'sheet-scroll',
-        current: 'draggable',
-        dragging: false,
-        settingsAttached: true,
-      }),
-    ).toBe('draggable');
-  });
 });
 
 describe('planSettingsSheetCommandIndex', () => {
@@ -307,11 +298,101 @@ describe('planSettingsSheetCommandIndex', () => {
   });
 });
 
+describe('planSettingsSheetInteractive', () => {
+  it('is interactive as soon as open is requested, even before Gorhom onChange', () => {
+    expect(
+      planSettingsSheetInteractive({
+        openRequested: true,
+        sheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBe(true);
+  });
+
+  it('stays interactive after dismiss until onChange(-1) so a ghost can still close', () => {
+    expect(
+      planSettingsSheetInteractive({
+        openRequested: false,
+        sheetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe(true);
+  });
+
+  it('is inert only when closed and Gorhom reports -1', () => {
+    expect(
+      planSettingsSheetInteractive({
+        openRequested: false,
+        sheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('planSettingsPointerEvents', () => {
-  it('blocks hits only after onChange(-1), not while a ghost sheet is still attached', () => {
-    expect(planSettingsPointerEvents(PLAN_SHEET_CLOSED_INDEX)).toBe('none');
-    expect(planSettingsPointerEvents(PLAN_SHEET_MID_INDEX)).toBe('box-none');
-    expect(planSettingsPointerEvents(0)).toBe('box-none');
+  it('does not use pointerEvents none while the sheet is visually opening at index 1', () => {
+    expect(
+      planSettingsPointerEvents({
+        openRequested: true,
+        sheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBe('box-none');
+    expect(
+      planSettingsPointerEvents({
+        openRequested: true,
+        sheetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe('box-none');
+  });
+
+  it('blocks hits only after dismiss and onChange(-1)', () => {
+    expect(
+      planSettingsPointerEvents({
+        openRequested: false,
+        sheetIndex: PLAN_SHEET_CLOSED_INDEX,
+      }),
+    ).toBe('none');
+    expect(
+      planSettingsPointerEvents({
+        openRequested: false,
+        sheetIndex: PLAN_SHEET_MID_INDEX,
+      }),
+    ).toBe('box-none');
+    expect(
+      planSettingsPointerEvents({
+        openRequested: false,
+        sheetIndex: 0,
+      }),
+    ).toBe('box-none');
+  });
+});
+
+describe('planSettingsGesturePolicy', () => {
+  it('enables handle drag and pan-down-to-close on open, before onChange', () => {
+    const opening = planSettingsGesturePolicy({
+      openRequested: true,
+      sheetIndex: PLAN_SHEET_CLOSED_INDEX,
+    });
+    expect(opening.enableHandlePanningGesture).toBe(true);
+    expect(opening.enablePanDownToClose).toBe(true);
+    expect(opening.enableContentPanningGesture).toBe(false);
+  });
+
+  it('keeps inner scroll unlocked while the handle pans the sheet', () => {
+    const open = planSettingsGesturePolicy({
+      openRequested: true,
+      sheetIndex: PLAN_SHEET_MID_INDEX,
+    });
+    expect(open.enableContentPanningGesture).toBe(false);
+    expect(open.enableHandlePanningGesture).toBe(true);
+  });
+
+  it('releases gestures only when closed at -1 so the timeline can take over', () => {
+    const closed = planSettingsGesturePolicy({
+      openRequested: false,
+      sheetIndex: PLAN_SHEET_CLOSED_INDEX,
+    });
+    expect(closed.enableHandlePanningGesture).toBe(false);
+    expect(closed.enablePanDownToClose).toBe(false);
+    expect(closed.enableContentPanningGesture).toBe(false);
   });
 });
 

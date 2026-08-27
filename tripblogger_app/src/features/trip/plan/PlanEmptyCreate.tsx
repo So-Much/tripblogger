@@ -22,6 +22,11 @@ import { PlanOptionChips } from './PlanOptionChips';
 import { endDateFromTripDays, isoDateLocal } from './plan-create-dates';
 import { resolveTravelModeForDto } from './plan-create-option';
 import {
+  DEFAULT_CURRENCY,
+  formatMoneyInput,
+  parseMoneyInput,
+} from '@/src/utils/format-currency';
+import {
   firstCatalogCoords,
   joinDestinationLabel,
   type DestinationChip,
@@ -101,6 +106,7 @@ export function PlanEmptyCreate({ onCreated, onCancel }: Props) {
   const [arrivalMode, setArrivalMode] = useState<ArrivalMode | null>(null);
   const [arrivalCustom, setArrivalCustom] = useState<string | null>(null);
   const [arrivalCustomSelected, setArrivalCustomSelected] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
 
   const topPad = insets.top + HEADER_CLEARANCE;
@@ -133,6 +139,8 @@ export function PlanEmptyCreate({ onCreated, onCancel }: Props) {
       return;
     }
 
+    const budgetAmount = parseMoneyInput(budgetInput);
+
     const dto: CreateTripDto = {
       title: title.trim(),
       destinationLabel,
@@ -142,6 +150,9 @@ export function PlanEmptyCreate({ onCreated, onCancel }: Props) {
       endDate,
       defaultTravelMode: resolveTravelModeForDto(defaultTravelMode),
       defaultDayStartTime,
+      ...(budgetAmount != null && budgetAmount > 0
+        ? { budgetAmount, budgetCurrency: DEFAULT_CURRENCY }
+        : {}),
     };
     // Explicitly do NOT include arrivalMode / arrivalCustom (UX-only state above).
 
@@ -237,6 +248,14 @@ export function PlanEmptyCreate({ onCreated, onCancel }: Props) {
             }}
             placeholder={t('planCreateOptionOther')}
             inputA11yLabel={t('planCreateOptionOther')}
+          />
+
+          <FieldLabel color={muted}>{t('planCreateBudget')}</FieldLabel>
+          <ClearableTextInput
+            value={budgetInput}
+            onChangeText={(v) => setBudgetInput(formatMoneyInput(v))}
+            placeholder={t('planBudgetPlaceholder')}
+            keyboardType="number-pad"
           />
 
           <FieldLabel color={muted}>{t('planCreateMode')}</FieldLabel>

@@ -6,7 +6,7 @@ export const PLAN_SHEET_FULL_INDEX = 2;
 export const PLAN_NAV_BAR_OFFSET = 56;
 
 /** Place cards: thicker than RN hairline so rows read as distinct. */
-export const PLAN_STOP_CARD_BORDER_WIDTH = 1.5;
+export const PLAN_STOP_CARD_BORDER_WIDTH = 2;
 
 /** Handle + title/chips + ~1 stop row. Still below mid on typical phones. */
 const PEEK_MIN_PX = 220;
@@ -99,11 +99,45 @@ export function planSettingsSheetCommandIndex(openRequested: boolean): number {
   return planStopSettingsSheetIndex(openRequested);
 }
 
-/** Hit-test only while Gorhom still reports the settings sheet attached. */
-export function planSettingsPointerEvents(
-  sheetIndex: number,
-): 'none' | 'box-none' {
-  return sheetIndex >= 0 ? 'box-none' : 'none';
+export type PlanSettingsGesturePolicy = {
+  enableContentPanningGesture: boolean;
+  enableHandlePanningGesture: boolean;
+  enablePanDownToClose: boolean;
+};
+
+/**
+ * Interactive while opening (index already 1, onChange may still be -1) or
+ * while a ghost sheet is still attached after dismiss.
+ */
+export function planSettingsSheetInteractive(input: {
+  openRequested: boolean;
+  sheetIndex: number;
+}): boolean {
+  return input.openRequested || input.sheetIndex >= 0;
+}
+
+/** Hit-test on open immediately — waiting for onChange(-1→1) freezes the sheet. */
+export function planSettingsPointerEvents(input: {
+  openRequested: boolean;
+  sheetIndex: number;
+}): 'none' | 'box-none' {
+  return planSettingsSheetInteractive(input) ? 'box-none' : 'none';
+}
+
+/**
+ * Handle pans the sheet like the timeline; content pan stays off so
+ * BottomSheetScrollView can scroll at mid. Do not wait for onChange.
+ */
+export function planSettingsGesturePolicy(input: {
+  openRequested: boolean;
+  sheetIndex: number;
+}): PlanSettingsGesturePolicy {
+  const on = planSettingsSheetInteractive(input);
+  return {
+    enableContentPanningGesture: false,
+    enableHandlePanningGesture: on,
+    enablePanDownToClose: on,
+  };
 }
 
 export function planSheetCanInvoke(mounted: boolean): boolean {
@@ -264,12 +298,8 @@ export function resolvePlanSheetHost(input: {
   wanted: PlanSheetHostKind;
   current: PlanSheetHostKind | null;
   dragging: boolean;
-  settingsAttached?: boolean;
 }): PlanSheetHostKind {
-  if (
-    (input.dragging || input.settingsAttached) &&
-    input.current != null
-  ) {
+  if (input.dragging && input.current != null) {
     return input.current;
   }
   return input.wanted;

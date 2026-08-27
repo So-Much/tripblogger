@@ -10,6 +10,13 @@ export type { PlanTravelMode, ScheduleConflict, ScheduledStop, StopStatus };
 export type TripStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type StopPriority = 'must' | 'nice';
 
+export type StopCostItem = {
+  id: string;
+  label: string;
+  unitAmount: number;
+  quantity: number;
+};
+
 export type TripSummaryDto = {
   id: string;
   title: string;
@@ -23,6 +30,8 @@ export type TripSummaryDto = {
   defaultDayStartTime: string;
   status: TripStatus;
   version: number;
+  budgetAmount: number | null;
+  budgetCurrency: string | null;
 };
 
 export type TripStopDto = {
@@ -45,6 +54,10 @@ export type TripStopDto = {
   priority: StopPriority;
   status: StopStatus;
   tags: string[];
+  note: string | null;
+  estimatedCostAmount: number | null;
+  estimatedCostCurrency: string | null;
+  costItems: StopCostItem[];
   travelFromPrevSeconds: number | null;
   travelFromPrevDistanceM: number | null;
   travelModeUsed: PlanTravelMode | null;
@@ -76,6 +89,8 @@ export type CreateTripDto = {
   defaultTravelMode?: PlanTravelMode;
   defaultBufferMinutes?: number;
   defaultDayStartTime?: string;
+  budgetAmount?: number | null;
+  budgetCurrency?: string | null;
 };
 
 export type PatchTripDto = Partial<CreateTripDto> & { status?: TripStatus };
@@ -111,6 +126,10 @@ export type PatchStopDto = {
   priority?: StopPriority;
   status?: StopStatus;
   tags?: string[];
+  note?: string | null;
+  estimatedCostAmount?: number | null;
+  estimatedCostCurrency?: string | null;
+  costItems?: StopCostItem[];
 };
 
 export type MoveStopDto = {

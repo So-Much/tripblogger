@@ -1,29 +1,64 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
+  LayoutAnimation,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  UIManager,
   View,
 } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { useAuthStore } from '@/src/store/auth.store';
 import { useTrips } from '../hooks/useTrips';
+import { useTripDetail } from '../hooks/useTripDetail';
 import { usePlanStore } from '../store/plan.store';
 import type { TripDetailDto, TripSummaryDto } from '../types/plan';
 import { formatDateRangeDisplay } from './plan-create-dates';
+import { DEFAULT_CURRENCY, formatCurrency } from '@/src/utils/format-currency';
 import {
   PLAN_SHEET_SNAP_DEBOUNCE_MS,
   consumePendingTripAfterDismiss,
 } from './plan-sheet-layout';
+import { PlanBudgetBar } from './PlanBudgetBar';
 import { PlanEmptyCreate } from './PlanEmptyCreate';
 import { PlanGuestGate } from './PlanGuestGate';
 import { PlanTimeline } from './PlanTimeline';
 
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const PICKER_LAYOUT_ANIM = {
+  duration: 240,
+  create: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+  update: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+  },
+  delete: {
+    type: LayoutAnimation.Types.easeInEaseOut,
+    property: LayoutAnimation.Properties.opacity,
+  },
+};
 /** Matches Explore category chips: below map back + search row. */
 const HEADER_CLEARANCE = 62;
 /** Fallback picker height before onLayout (header + trip chips). */
@@ -162,6 +197,7 @@ function PlanMemberFlow() {
           <TripPickerBar
             trips={tripList}
             activeTripId={active.id}
+            activeTrip={active}
             onSelect={requestActiveTripId}
             onCreate={() => setCreating(true)}
           />
@@ -184,11 +220,13 @@ function PlanMemberFlow() {
 function TripPickerBar({
   trips,
   activeTripId,
+  activeTrip,
   onSelect,
   onCreate,
 }: {
   trips: TripSummaryDto[];
   activeTripId: string;
+  activeTrip: TripSummaryDto;
   onSelect: (id: string) => void;
   onCreate: () => void;
 }) {
@@ -198,12 +236,70 @@ function TripPickerBar({
   const muted = useThemeColor({}, 'textMuted');
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
+  const background = useThemeColor({}, 'background');
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+
+  const [expanded, setExpanded] = useState(true);
+  const [listOpen, setListOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const chevronDeg = useSharedValue(0);
+
+  const toggleExpanded = () => {
+    LayoutAnimation.configureNext(PICKER_LAYOUT_ANIM);
+    setExpanded((v) => {
+      const next = !v;
+      chevronDeg.value = withTiming(next ? 0 : 180, { duration: 220 });
+      return next;
+    });
+  };
+
+  const chevronStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${chevronDeg.value}deg` }],
+  }));
+
+  const activeTrip_ = trips.find((tr) => tr.id === activeTripId);
+  const detailQuery = useTripDetail(activeTripId);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return trips;
+    return trips.filter(
+      (tr) =>
+        tr.title.toLowerCase().includes(q) ||
+        tr.destinationLabel.toLowerCase().includes(q),
+    );
+  }, [query, trips]);
 
   return (
     <View style={[styles.pickerPanel, { backgroundColor: surface, borderColor: border }]}>
       <View style={styles.pickerHeader}>
-        <Text style={[styles.pickerLabel, { color: muted }]}>{t('planPickTrip')}</Text>
+        <Pressable
+          onPress={toggleExpanded}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? t('planPickerCollapse') : t('planPickerExpand')}
+          style={styles.pickerHeaderLeft}>
+          <Animated.View style={chevronStyle}>
+            <MaterialIcons name="expand-less" size={18} color={muted} />
+          </Animated.View>
+          {!expanded && activeTrip_ ? (
+            <Text style={[styles.pickerCollapsedTitle, { color: text }]} numberOfLines={1}>
+              {activeTrip_.title}
+            </Text>
+          ) : (
+            <Text style={[styles.pickerLabel, { color: muted }]}>{t('planPickTrip')}</Text>
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('planPickerAllTrips')}
+          onPress={() => {
+            setQuery('');
+            setListOpen(true);
+          }}
+          hitSlop={8}
+          style={[styles.listBtn, { borderColor: border }]}>
+          <MaterialIcons name="format-list-bulleted" size={18} color={muted} />
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('planCreateNewTrip')}
@@ -213,39 +309,129 @@ function TripPickerBar({
           <MaterialIcons name="add" size={20} color={tint} />
         </Pressable>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pickerRow}>
-        {trips.map((trip) => {
-          const active = trip.id === activeTripId;
-          return (
+
+      {expanded ? (
+        <View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pickerRow}>
+            {trips.map((trip) => {
+              const active = trip.id === activeTripId;
+              return (
+                <Pressable
+                  key={trip.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => onSelect(trip.id)}
+                  style={[
+                    styles.tripChip,
+                    {
+                      borderColor: active ? tint : border,
+                      backgroundColor: active ? `${tint}18` : 'transparent',
+                    },
+                  ]}>
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: active ? tint : text, fontWeight: '600', fontSize: 13 }}>
+                    {trip.title}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: active ? tint : muted, fontSize: 11, fontWeight: '500' }}>
+                    {formatDateRangeDisplay(trip.startDate, trip.endDate, locale)}
+                  </Text>
+                  {trip.budgetAmount != null && trip.budgetAmount > 0 ? (
+                    <Text
+                      numberOfLines={1}
+                      style={{ color: active ? tint : muted, fontSize: 10, fontWeight: '600' }}>
+                      {formatCurrency(trip.budgetAmount, {
+                        language,
+                        currency: trip.budgetCurrency ?? DEFAULT_CURRENCY,
+                      })}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <PlanBudgetBar
+            trips={trips}
+            activeTrip={activeTrip}
+            tripDetail={detailQuery.data ?? null}
+          />
+        </View>
+      ) : null}
+
+      <Modal visible={listOpen} animationType="slide" onRequestClose={() => setListOpen(false)}>
+        <View style={[styles.listModal, { backgroundColor: background }]}>
+          <View style={[styles.listModalHeader, { borderBottomColor: border }]}>
+            <Text style={[styles.listModalTitle, { color: text }]}>{t('planPickerAllTrips')}</Text>
             <Pressable
-              key={trip.id}
               accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              onPress={() => onSelect(trip.id)}
-              style={[
-                styles.tripChip,
-                {
-                  borderColor: active ? tint : border,
-                  backgroundColor: active ? `${tint}18` : 'transparent',
-                },
-              ]}>
-              <Text
-                numberOfLines={1}
-                style={{ color: active ? tint : text, fontWeight: '600', fontSize: 13 }}>
-                {trip.title}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={{ color: active ? tint : muted, fontSize: 11, fontWeight: '500' }}>
-                {formatDateRangeDisplay(trip.startDate, trip.endDate, locale)}
-              </Text>
+              accessibilityLabel={t('close')}
+              onPress={() => setListOpen(false)}
+              hitSlop={8}
+              style={styles.listCloseBtn}>
+              <MaterialIcons name="close" size={22} color={muted} />
             </Pressable>
-          );
-        })}
-      </ScrollView>
+          </View>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t('planPickerSearch')}
+            placeholderTextColor={muted}
+            style={[styles.searchInput, { color: text, borderColor: border, backgroundColor: surface }]}
+          />
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => item.id}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <Text style={{ color: muted, textAlign: 'center', marginTop: 24 }}>
+                {t('planPickerSearchEmpty')}
+              </Text>
+            }
+            renderItem={({ item }) => {
+              const active = item.id === activeTripId;
+              return (
+                <Pressable
+                  onPress={() => {
+                    onSelect(item.id);
+                    setListOpen(false);
+                    setExpanded(false);
+                  }}
+                  style={[
+                    styles.listRow,
+                    {
+                      borderColor: active ? tint : border,
+                      backgroundColor: active ? `${tint}12` : surface,
+                    },
+                  ]}>
+                  <View style={styles.listRowBody}>
+                    <Text style={{ color: active ? tint : text, fontWeight: '700', fontSize: 15 }}>
+                      {item.title}
+                    </Text>
+                    <Text style={{ color: muted, fontSize: 12 }}>{item.destinationLabel}</Text>
+                    <Text style={{ color: muted, fontSize: 12 }}>
+                      {formatDateRangeDisplay(item.startDate, item.endDate, locale)}
+                    </Text>
+                  </View>
+                  {item.budgetAmount != null && item.budgetAmount > 0 ? (
+                    <Text style={{ color: active ? tint : muted, fontWeight: '700', fontSize: 12 }}>
+                      {formatCurrency(item.budgetAmount, {
+                        language,
+                        currency: item.budgetCurrency ?? DEFAULT_CURRENCY,
+                      })}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -303,7 +489,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
+  pickerHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   pickerLabel: { fontSize: 11, fontWeight: '600' },
+  pickerCollapsedTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  listBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   addBtn: {
     width: 32,
     height: 32,
@@ -319,6 +520,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     maxWidth: 220,
+    gap: 2,
+  },
+  listModal: {
+    flex: 1,
+    paddingTop: 48,
+  },
+  listModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  listModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  listCloseBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchInput: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    gap: 8,
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  listRowBody: {
+    flex: 1,
     gap: 2,
   },
 });

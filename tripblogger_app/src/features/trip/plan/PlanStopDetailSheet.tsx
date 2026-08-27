@@ -1,30 +1,26 @@
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetHandle,
+import {
   BottomSheetScrollView,
-  type BottomSheetBackdropProps,
-  type BottomSheetHandleProps,
+  BottomSheetTextInput,
 } from '@gorhom/bottom-sheet';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n, type TranslationKey } from '@/src/i18n';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { DEFAULT_CURRENCY } from '@/src/utils/format-currency';
 import { tripKeys } from '../hooks/trip-query-keys';
 import {
-  useDeleteStopMutation,
   useMoveStopMutation,
   usePatchStopMutation,
 } from '../hooks/useTripMutations';
@@ -33,6 +29,7 @@ import type {
   PlanTravelMode,
   StopPriority,
   StopStatus,
+  StopCostItem,
   TripDayDto,
   TripDetailDto,
   TripStopDto,
@@ -43,17 +40,9 @@ import {
   patchAffectsLocalSchedule,
 } from './applyLocalDaySchedule';
 import { PlanMinuteStepper } from './PlanMinuteStepper';
-import {
-  PLAN_SHEET_CLOSED_INDEX,
-  planSettingsPointerEvents,
-  planSettingsSheetCommandIndex,
-  planSheetCanInvoke,
-  planSheetChromeLayout,
-  planSheetNeedsClose,
-  planSheetNeedsSnap,
-  planStopSettingsSheetIndex,
-} from './plan-sheet-layout';
-import { planStopDeleteTarget } from './plan-stop-delete';
+import { PlanStopCostEditor } from './PlanStopCostEditor';
+import { computeDepartNowDuration } from './plan-depart-now';
+import { deriveStopDisplayStatus } from './plan-stop-status';
 import {
   clampBufferMinutes,
   formatTravelMinutes,
@@ -81,7 +70,7 @@ const MODE_KEY: Record<
   bike: 'planModeBike',
 };
 
-const STATUS_OPTS: {
+const STATUS_DISPLAY: {
   value: StopStatus;
   key: TranslationKey;
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -93,18 +82,11 @@ const STATUS_OPTS: {
 ];
 
 type Props = {
-  visible: boolean;
   tripId: string;
   trip: TripDetailDto | null;
-  stop: TripStopDto | null;
+  stop: TripStopDto;
   prevStop?: TripStopDto | null;
-  /** Same top chrome as PlanTimeline so full snap sits below search + trip chips. */
-  sheetTopInset: number;
-  /** Bump on every settings tap so the same stop can re-open after a hung close. */
-  presentEpoch: number;
   onClose: () => void;
-  /** Live Gorhom index so trip swaps wait for onChange(-1). */
-  onIndexChange?: (index: number) => void;
 };
 
 function formatClock(iso: string | null | undefined): string {
@@ -114,147 +96,92 @@ function formatClock(iso: string | null | undefined): string {
 }
 
 /**
- * Stop settings: sibling Gorhom BottomSheet (same layout math as the timeline).
- * Not a BottomSheetModal — nesting a modal on the Plan sheet left a portal hung
- * and crashed when days/trips changed after close.
+ * Compact stop settings inside the Plan timeline BottomSheet.
+ * Title lives on the sheet handle; this panel groups controls into dense cards.
  */
-export function PlanStopDetailSheet({
-  visible,
+export function PlanStopSettingsPanel({
   tripId,
   trip,
   stop,
   prevStop = null,
-  sheetTopInset,
-  presentEpoch,
   onClose,
-  onIndexChange,
 }: Props) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
   const queryClient = useQueryClient();
   const patchStop = usePatchStopMutation();
-  const deleteStop = useDeleteStopMutation();
   const moveStop = useMoveStopMutation();
-  const sheetRef = useRef<BottomSheet>(null);
-  const stopRef = useRef(stop);
-  if (stop) stopRef.current = stop;
-  const mountedRef = useRef(false);
-  const liveIndexRef = useRef(PLAN_SHEET_CLOSED_INDEX);
-  const prevEpochRef = useRef(presentEpoch);
-  const [liveIndex, setLiveIndex] = useState(PLAN_SHEET_CLOSED_INDEX);
 
-  const surface = useThemeColor({}, 'surface');
   const background = useThemeColor({}, 'background');
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const border = useThemeColor({}, 'border');
   const tint = useThemeColor({}, 'tint');
   const danger = useThemeColor({}, 'danger');
-  const cta = useThemeColor({}, 'cta');
-  const onCta = useThemeColor({}, 'onCta');
-  const primary = useThemeColor({}, 'primary');
 
   const [anchorDraft, setAnchorDraft] = useState('');
+  const [noteDraft, setNoteDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
-
-  const current = stop ?? stopRef.current;
-  const chrome = useMemo(
-    () =>
-      planSheetChromeLayout({
-        windowHeight,
-        sheetTopInset,
-        safeBottom: insets.bottom,
-      }),
-    [windowHeight, sheetTopInset, insets.bottom],
+  const [keyboardPad, setKeyboardPad] = useState(0);
+  const scrollRef = useRef<{ scrollTo: (opts: { y: number; animated?: boolean }) => void } | null>(
+    null,
   );
-  const settingsContainerStyle = useMemo(
-    () => [styles.sheetContainer, { pointerEvents: planSettingsPointerEvents(liveIndex) }],
-    [liveIndex],
-  );
-  const snapPoints = chrome.snapPoints;
-  const commandIndex = planSettingsSheetCommandIndex(visible);
-  const attached = liveIndex >= 0;
-
-  const invokeSheet = useCallback((fn: (sheet: BottomSheet) => void) => {
-    if (!planSheetCanInvoke(mountedRef.current)) return;
-    const sheet = sheetRef.current;
-    if (!sheet) return;
-    fn(sheet);
-  }, []);
-
-  const requestClose = useCallback(() => {
-    onClose();
-  }, [onClose]);
+  const scrollY = useRef(0);
+  const fieldOffsets = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    mountedRef.current = true;
+    setAnchorDraft(stop.anchorTime ?? '');
+    setNoteDraft(stop.note ?? '');
+    setError(null);
+  }, [stop.id, stop.anchorTime, stop.note]);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardPad(Math.max(0, e.endCoordinates.height - insets.bottom));
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardPad(0));
     return () => {
-      mountedRef.current = false;
+      showSub.remove();
+      hideSub.remove();
     };
-  }, []);
+  }, [insets.bottom]);
 
-  useEffect(() => {
-    if (!planSheetCanInvoke(mountedRef.current)) return;
-    if (visible && stop) {
-      setAnchorDraft(stop.anchorTime ?? '');
-      setError(null);
-      const epochBumped = prevEpochRef.current !== presentEpoch;
-      prevEpochRef.current = presentEpoch;
-      if (
-        epochBumped &&
-        liveIndexRef.current >= 0 &&
-        planSheetNeedsSnap({
-          mounted: true,
-          openRequested: true,
-          currentIndex: liveIndexRef.current,
-          targetIndex: commandIndex,
-        })
-      ) {
-        invokeSheet((sheet) => sheet.snapToIndex(commandIndex));
-      }
-      return;
-    }
-    prevEpochRef.current = presentEpoch;
-    if (
-      planSheetNeedsClose({
-        mounted: true,
-        openRequested: false,
-        currentIndex: liveIndexRef.current,
-      })
-    ) {
-      invokeSheet((sheet) => sheet.close());
-    }
-  }, [visible, stop?.id, presentEpoch, commandIndex, invokeSheet]);
+  const scrollFieldIntoView = (fieldKey: string) => {
+    const y = fieldOffsets.current[fieldKey];
+    if (y == null) return;
+    // Keep focused field ~120px below the top of the visible scroll area.
+    const target = Math.max(0, y - 120);
+    const run = () => scrollRef.current?.scrollTo({ y: target, animated: true });
+    // Wait for keyboard + sheet extend animation.
+    setTimeout(run, Platform.OS === 'ios' ? 80 : 160);
+    setTimeout(run, 320);
+  };
 
-  const onSheetChange = useCallback(
-    (index: number) => {
-      liveIndexRef.current = index;
-      setLiveIndex(index);
-      onIndexChange?.(index);
-      if (index === planStopSettingsSheetIndex(false)) {
-        onClose();
-      }
-    },
-    [onClose, onIndexChange],
-  );
+  const onFieldFocus = (fieldKey: string) => {
+    scrollFieldIntoView(fieldKey);
+  };
 
   const days = useMemo(() => trip?.days ?? [], [trip?.days]);
-  const busy = patchStop.isPending || deleteStop.isPending || moveStop.isPending;
-  const showTravel = current != null && current.tripDayId != null && prevStop != null;
-  const travelMinutes = current ? formatTravelMinutes(current.travelFromPrevSeconds) : null;
+  const busy = patchStop.isPending || moveStop.isPending;
+  const showTravel = stop.tripDayId != null && prevStop != null;
+  const travelMinutes = formatTravelMinutes(stop.travelFromPrevSeconds);
   const bufferMinutes =
     prevStop != null ? (prevStop.bufferAfterMinutes ?? trip?.defaultBufferMinutes ?? 0) : 0;
+  const displayStatus = deriveStopDisplayStatus(stop);
+  const statusMeta = STATUS_DISPLAY.find((s) => s.value === displayStatus) ?? STATUS_DISPLAY[0];
 
   const applyPatch = (dto: PatchStopDto, opts?: { close?: boolean; stopId?: string }) => {
-    if (!current) return;
-    const targetId = opts?.stopId ?? current.id;
+    const targetId = opts?.stopId ?? stop.id;
     setError(null);
     if (
       patchAffectsLocalSchedule(dto) ||
       dto.tags !== undefined ||
       dto.priority !== undefined ||
-      dto.travelModeOverride !== undefined
+      dto.travelModeOverride !== undefined ||
+      dto.note !== undefined ||
+      dto.costItems !== undefined
     ) {
       queryClient.setQueryData<TripDetailDto>(tripKeys.detail(tripId), (old) =>
         old ? applyLocalStopPatch(old, targetId, dto) : old,
@@ -264,7 +191,7 @@ export function PlanStopDetailSheet({
       { tripId, stopId: targetId, dto },
       {
         onSuccess: () => {
-          if (opts?.close) requestClose();
+          if (opts?.close) onClose();
         },
         onError: (err) => {
           void queryClient.invalidateQueries({ queryKey: tripKeys.detail(tripId) });
@@ -274,60 +201,25 @@ export function PlanStopDetailSheet({
     );
   };
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        pressBehavior="close"
-      />
-    ),
-    [],
-  );
-
-  const renderHandle = useCallback(
-    (handleProps: BottomSheetHandleProps) => (
-      <BottomSheetHandle {...handleProps}>
-        <View style={styles.handleCaption}>
-          <Text style={[styles.handleHint, { color: muted }]}>{t('planStopEditorHint')}</Text>
-        </View>
-      </BottomSheetHandle>
-    ),
-    [muted, t],
-  );
-
-  const stayLonger = () => {
-    if (!current) return;
-    applyPatch({ durationMinutes: current.durationMinutes + STAY_LONGER });
-  };
-
   const bumpDuration = (delta: number) => {
-    if (!current) return;
-    const next = Math.max(DURATION_STEP, current.durationMinutes + delta);
-    if (next === current.durationMinutes) return;
+    const next = Math.max(DURATION_STEP, stop.durationMinutes + delta);
+    if (next === stop.durationMinutes) return;
     applyPatch({ durationMinutes: next });
   };
 
   const setPriority = (priority: StopPriority) => {
-    if (!current || priority === current.priority) return;
+    if (priority === stop.priority) return;
     applyPatch({ priority });
   };
 
-  const setStatus = (status: StopStatus) => {
-    if (!current || status === current.status) return;
-    applyPatch({ status });
-  };
-
-  const toggleTag = (tag: 'entry_point' | 'accommodation') => {
-    if (!current) return;
-    const has = current.tags.includes(tag);
-    const tags = has ? current.tags.filter((x) => x !== tag) : [...current.tags, tag];
+  const toggleTag = (tag: 'accommodation') => {
+    const has = stop.tags.includes(tag);
+    const tags = has ? stop.tags.filter((x) => x !== tag) : [...stop.tags, tag];
     applyPatch({ tags });
   };
 
   const setMode = (mode: PlanTravelMode | null) => {
-    if (!current || mode === current.travelModeOverride) return;
+    if (mode === stop.travelModeOverride) return;
     applyPatch({ travelModeOverride: mode });
   };
 
@@ -337,11 +229,15 @@ export function PlanStopDetailSheet({
   };
 
   const pinArrive = () => {
-    if (!current) return;
-    const clock = clockFromIso(current.schedule?.arriveAt);
+    const clock = clockFromIso(stop.schedule?.arriveAt);
     if (!clock) return;
     setAnchorDraft(clock);
     applyPatch({ anchorTime: clock });
+  };
+
+  const departNow = () => {
+    const next = computeDepartNowDuration(stop, new Date(), DURATION_STEP);
+    applyPatch({ durationMinutes: next });
   };
 
   const saveAnchorDraft = () => {
@@ -357,323 +253,290 @@ export function PlanStopDetailSheet({
     applyPatch({ anchorTime: trimmed });
   };
 
+  const saveNoteDraft = () => {
+    const trimmed = noteDraft.trim();
+    const next = trimmed || null;
+    if (next === (stop.note ?? null)) return;
+    applyPatch({ note: next });
+  };
+
+  const saveCostItems = (items: StopCostItem[]) => {
+    applyPatch({
+      costItems: items,
+      estimatedCostCurrency: items.length > 0 ? DEFAULT_CURRENCY : null,
+    });
+  };
+
   const changeDay = (day: TripDayDto | null) => {
-    if (!current) return;
     const toTripDayId = day?.id ?? null;
-    if (toTripDayId === current.tripDayId) return;
+    if (toTripDayId === stop.tripDayId) return;
     setError(null);
     const toPosition = day
-      ? day.stops.filter((s) => s.id !== current.id).length
-      : (trip?.ideaStops.filter((s) => s.id !== current.id).length ?? 0);
+      ? day.stops.filter((s) => s.id !== stop.id).length
+      : (trip?.ideaStops.filter((s) => s.id !== stop.id).length ?? 0);
     moveStop.mutate(
-      { tripId, stopId: current.id, dto: { toTripDayId, toPosition } },
+      { tripId, stopId: stop.id, dto: { toTripDayId, toPosition } },
       {
-        onSuccess: () => requestClose(),
+        onSuccess: () => onClose(),
         onError: (err) => setError(formatApiError(err, t('errorTitle'))),
       },
     );
   };
 
-  const confirmDelete = () => {
-    if (!current) return;
-    const target = planStopDeleteTarget(current);
-    Alert.alert(t(target.titleKey), target.message, [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t('planDeleteStop'),
-        style: 'destructive',
-        onPress: () => {
-          deleteStop.mutate(
-            { tripId, stopId: target.stopId },
-            {
-              onSuccess: () => requestClose(),
-              onError: (err) => setError(formatApiError(err, t('errorTitle'))),
-            },
-          );
-        },
-      },
-    ]);
-  };
-
-  const arrive = formatClock(current?.schedule?.arriveAt);
-  const start = formatClock(current?.schedule?.startAt);
+  const arrive = formatClock(stop.schedule?.arriveAt);
+  const start = formatClock(stop.schedule?.startAt);
   const timeLabel =
-    !current || current.schedule?.skipped || current.status === 'skipped'
+    stop.schedule?.skipped || stop.status === 'skipped'
       ? '—'
-      : current.schedule?.arriveAt
+      : stop.schedule?.arriveAt
         ? arrive
         : start;
-  const timeCaption = current?.schedule?.arriveAt ? t('planArriveAt') : t('planStartAt');
-  const statusOpt = STATUS_OPTS.find((s) => s.value === current?.status) ?? STATUS_OPTS[0];
+  const timeCaption = stop.schedule?.arriveAt ? t('planArriveAt') : t('planStartAt');
 
   return (
-    <BottomSheet
-      ref={sheetRef}
-      index={commandIndex}
-      snapPoints={snapPoints}
-      animateOnMount={false}
-      enableDynamicSizing={false}
-      enablePanDownToClose={attached}
-      enableOverDrag={false}
-      enableContentPanningGesture={false}
-      enableHandlePanningGesture={attached}
-      activeOffsetY={[-8, 8]}
-      android_keyboardInputMode="adjustResize"
-      onChange={onSheetChange}
-      bottomInset={chrome.bottomInset}
-      containerStyle={settingsContainerStyle}
-      style={styles.sheet}
-      backdropComponent={attached ? renderBackdrop : undefined}
-      handleComponent={renderHandle}
-      backgroundStyle={{
-        backgroundColor: surface,
-        borderTopColor: border,
-        borderTopWidth: StyleSheet.hairlineWidth,
+    <BottomSheetScrollView
+      ref={scrollRef as never}
+      style={styles.scroll}
+      contentContainerStyle={[
+        styles.scrollContent,
+        { paddingBottom: Math.max(insets.bottom, 8) + 16 + keyboardPad },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      onScroll={(e) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
       }}
-      handleIndicatorStyle={{ backgroundColor: muted, width: 40 }}>
-      {current ? (
-      <BottomSheetScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: Math.max(insets.bottom, 12) + 24 },
-        ]}
-        keyboardShouldPersistTaps="handled">
-        <View style={styles.headerRow}>
-          <View style={[styles.heroIcon, { backgroundColor: primary }]}>
-            <MaterialIcons name="place" size={22} color={tint} />
-          </View>
-          <View style={styles.headerText}>
-            <Text style={[styles.title, { color: text }]} numberOfLines={2}>
-              {current.name}
-            </Text>
-            {current.address ? (
-              <Text style={[styles.address, { color: muted }]} numberOfLines={2}>
-                {current.address}
-              </Text>
-            ) : null}
-          </View>
+      scrollEventThrottle={16}>
+      {stop.address ? (
+        <Text style={[styles.address, { color: muted }]} numberOfLines={2}>
+          {stop.address}
+        </Text>
+      ) : null}
+
+      <View style={styles.priorityRow}>
+        <ToggleChip
+          active={stop.priority === 'must'}
+          label={t('planPriorityMust')}
+          icon="star"
+          tint={tint}
+          border={border}
+          text={text}
+          disabled={busy}
+          onPress={() => setPriority('must')}
+        />
+        <ToggleChip
+          active={stop.priority === 'nice'}
+          label={t('planPriorityNice')}
+          icon="star-border"
+          tint={tint}
+          border={border}
+          text={text}
+          disabled={busy}
+          onPress={() => setPriority('nice')}
+        />
+        {displayStatus !== 'done' && displayStatus !== 'skipped' ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('close')}
-            onPress={requestClose}
-            style={styles.iconHit}>
-            <MaterialIcons name="close" size={22} color={muted} />
-          </Pressable>
-        </View>
-
-        <View style={[styles.metaRow, { backgroundColor: background, borderColor: border }]}>
-          <MetaCell
-            icon="schedule"
-            caption={timeCaption}
-            value={timeLabel}
-            text={text}
-            muted={muted}
-            tint={tint}
-          />
-          <View style={[styles.metaSplit, { backgroundColor: border }]} />
-          <MetaCell
-            icon="hourglass-empty"
-            caption={t('planDuration')}
-            value={`${current.durationMinutes}′`}
-            text={text}
-            muted={muted}
-            tint={tint}
-          />
-          <View style={[styles.metaSplit, { backgroundColor: border }]} />
-          <MetaCell
-            icon={statusOpt.icon}
-            caption={t('planSectionStatus')}
-            value={t(statusOpt.key)}
-            text={text}
-            muted={muted}
-            tint={tint}
-          />
-        </View>
-
-        <SectionLabel icon="hotel" color={muted}>
-          {t('planSectionStay')}
-        </SectionLabel>
-        <Pressable
-          disabled={busy}
-          onPress={stayLonger}
-          style={[styles.primaryBtn, { backgroundColor: cta }]}>
-          {patchStop.isPending ? (
-            <ActivityIndicator color={onCta} />
-          ) : (
-            <>
-              <MaterialIcons name="more-time" size={20} color={onCta} />
-              <Text style={[styles.primaryBtnText, { color: onCta }]}>{t('planStayLonger')}</Text>
-            </>
-          )}
-        </Pressable>
-        <View style={styles.row}>
-          <StepperBtn
-            icon="remove"
-            border={border}
-            text={text}
-            disabled={busy || current.durationMinutes <= DURATION_STEP}
-            onPress={() => bumpDuration(-DURATION_STEP)}
-            label={`−${DURATION_STEP}`}
-          />
-          <Text style={[styles.durationValue, { color: text }]}>{current.durationMinutes}′</Text>
-          <StepperBtn
-            icon="add"
-            border={border}
-            text={text}
+            accessibilityLabel={t('planDepartNow')}
             disabled={busy}
-            onPress={() => bumpDuration(DURATION_STEP)}
-            label={`+${DURATION_STEP}`}
-          />
+            onPress={departNow}
+            style={[styles.departChip, { borderColor: tint, backgroundColor: `${tint}14` }]}>
+            <MaterialIcons name="directions-walk" size={16} color={tint} />
+            <Text style={{ color: tint, fontWeight: '700', fontSize: 12 }}>{t('planDepartNow')}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      <View
+        onLayout={(e) => {
+          fieldOffsets.current.time = e.nativeEvent.layout.y;
+        }}>
+      <CompactCard title={t('planStopSectionTimeStay')} border={border} muted={muted}>
+        <View style={styles.splitRow}>
+          <InfoPill icon="schedule" label={timeCaption} value={timeLabel} tint={tint} text={text} muted={muted} />
+          <View style={styles.durationCluster}>
+            <PlanMinuteStepper
+              compact
+              editable
+              sheetAware
+              value={stop.durationMinutes}
+              min={DURATION_STEP}
+              disabled={busy}
+              accessibilityValueLabel={t('planDuration')}
+              onChange={(minutes) => applyPatch({ durationMinutes: minutes })}
+              onInputFocus={() => onFieldFocus('time')}
+            />
+            <Pressable
+              disabled={busy}
+              onPress={() => applyPatch({ durationMinutes: stop.durationMinutes + STAY_LONGER })}
+              style={[styles.miniChip, { borderColor: border }]}>
+              <MaterialIcons name="more-time" size={14} color={tint} />
+              <Text style={[styles.miniChipText, { color: tint }]}>+{STAY_LONGER}′</Text>
+            </Pressable>
+          </View>
         </View>
 
-        <SectionLabel icon="event" color={muted}>
-          {t('planSectionSchedule')}
-        </SectionLabel>
-        <Text style={[styles.fieldLabel, { color: muted }]}>{t('planAnchorLabel')}</Text>
-        <View style={styles.row}>
-          <TextInput
+        <View style={styles.anchorRow}>
+          <MaterialIcons name="confirmation-number" size={14} color={muted} />
+          <BottomSheetTextInput
             value={anchorDraft}
             onChangeText={setAnchorDraft}
-            placeholder="HH:mm"
+            onFocus={() => onFieldFocus('time')}
+            onBlur={saveAnchorDraft}
+            placeholder={t('planAnchorLabel')}
             placeholderTextColor={muted}
-            style={[styles.input, { color: text, borderColor: border, backgroundColor: background }]}
+            style={[styles.anchorInput, { color: text, borderColor: border, backgroundColor: background }]}
             editable={!busy}
           />
-          <Pressable
-            disabled={busy}
-            onPress={saveAnchorDraft}
-            style={[styles.iconHit, styles.outlineHit, { borderColor: tint }]}>
-            <MaterialIcons name="save" size={20} color={tint} />
-          </Pressable>
-        </View>
-        <View style={[styles.row, { marginTop: 8 }]}>
-          <ChoiceChip
-            active={false}
-            label={t('planAnchorPinArrive')}
-            icon="push-pin"
-            tint={tint}
-            border={border}
-            text={text}
-            disabled={busy || !current.schedule?.arriveAt}
-            onPress={pinArrive}
-          />
-          {current.anchorTime ? (
-            <ChoiceChip
-              active={false}
-              label={t('planResolveClearAnchor')}
-              icon="highlight-off"
+          {stop.schedule?.arriveAt ? (
+            <IconBtn
+              icon="schedule"
+              label={t('planAnchorPinArrive')}
               tint={tint}
               border={border}
-              text={muted}
+              disabled={busy}
+              onPress={pinArrive}
+            />
+          ) : null}
+          {stop.anchorTime ? (
+            <IconBtn
+              icon="highlight-off"
+              label={t('planResolveClearAnchor')}
+              tint={muted}
+              border={border}
               disabled={busy}
               onPress={clearAnchor}
             />
           ) : null}
         </View>
+        <Text style={[styles.hint, { color: muted }]}>{t('planAnchorHint')}</Text>
+      </CompactCard>
+      </View>
 
-        {showTravel ? (
-          <>
-            <SectionLabel icon="directions" color={muted}>
-              {t('planSectionTravel')}
-            </SectionLabel>
-            <Text style={[styles.fieldLabel, { color: muted }]}>{t('planTravelEdit')}</Text>
-            <PlanMinuteStepper
-              icon="directions"
-              value={travelMinutes ?? 1}
-              min={1}
-              unknown={travelMinutes == null}
-              disabled={busy}
-              accessibilityValueLabel={
-                travelMinutes == null
-                  ? t('planSetTravel')
-                  : t('planTravelMinutes', { minutes: travelMinutes })
+      <View
+        onLayout={(e) => {
+          fieldOffsets.current.note = e.nativeEvent.layout.y;
+        }}>
+      <CompactCard title={t('planStopNote')} border={border} muted={muted}>
+        <BottomSheetTextInput
+          value={noteDraft}
+          onChangeText={setNoteDraft}
+          onFocus={() => onFieldFocus('note')}
+          onBlur={saveNoteDraft}
+          placeholder={t('planStopNotePlaceholder')}
+          placeholderTextColor={muted}
+          multiline
+          textAlignVertical="top"
+          style={[styles.noteInput, { color: text, borderColor: border, backgroundColor: background }]}
+          editable={!busy}
+        />
+      </CompactCard>
+      </View>
+
+      <View
+        onLayout={(e) => {
+          fieldOffsets.current.cost = e.nativeEvent.layout.y;
+        }}>
+      <CompactCard title={t('planStopCost')} border={border} muted={muted}>
+        <PlanStopCostEditor
+          items={stop.costItems ?? []}
+          currency={stop.estimatedCostCurrency}
+          disabled={busy}
+          onChange={saveCostItems}
+          onFieldFocus={() => onFieldFocus('cost')}
+        />
+      </CompactCard>
+      </View>
+
+      {showTravel ? (
+        <CompactCard title={t('planSectionTravel')} border={border} muted={muted}>
+          <View style={styles.splitRow}>
+            <LabeledStepper
+              label={t('planTravelEdit')}
+              muted={muted}
+              stepper={
+                <PlanMinuteStepper
+                  compact
+                  icon="directions"
+                  value={travelMinutes ?? 1}
+                  min={1}
+                  unknown={travelMinutes == null}
+                  disabled={busy}
+                  accessibilityValueLabel={
+                    travelMinutes == null
+                      ? t('planSetTravel')
+                      : t('planTravelMinutes', { minutes: travelMinutes })
+                  }
+                  onChange={(minutes) =>
+                    applyPatch({ travelFromPrevSeconds: travelMinutesToSeconds(minutes) })
+                  }
+                />
               }
-              onChange={(minutes) =>
-                applyPatch({ travelFromPrevSeconds: travelMinutesToSeconds(minutes) })
+            />
+            <LabeledStepper
+              label={t('planBufferEdit')}
+              muted={muted}
+              stepper={
+                <PlanMinuteStepper
+                  compact
+                  icon="schedule"
+                  value={bufferMinutes}
+                  min={0}
+                  disabled={busy || !prevStop}
+                  accessibilityValueLabel={t('planBufferMinutes', { minutes: bufferMinutes })}
+                  onChange={(minutes) => {
+                    if (!prevStop) return;
+                    applyPatch(
+                      { bufferAfterMinutes: clampBufferMinutes(minutes) },
+                      { stopId: prevStop.id },
+                    );
+                  }}
+                />
               }
             />
-            <Text style={[styles.fieldLabel, { color: muted, marginTop: 10 }]}>
-              {t('planBufferEdit')}
-            </Text>
-            <PlanMinuteStepper
-              icon="schedule"
-              value={bufferMinutes}
-              min={0}
-              disabled={busy || !prevStop}
-              accessibilityValueLabel={t('planBufferMinutes', { minutes: bufferMinutes })}
-              onChange={(minutes) => {
-                if (!prevStop) return;
-                applyPatch(
-                  { bufferAfterMinutes: clampBufferMinutes(minutes) },
-                  { stopId: prevStop.id },
-                );
-              }}
-            />
-          </>
-        ) : null}
+          </View>
+          <View style={styles.iconRow}>
+            {MODES.map((mode) => {
+              const active = stop.travelModeOverride === mode.value;
+              const label = mode.value ? t(MODE_KEY[mode.value]) : t('planTravelModeDefault');
+              return (
+                <Pressable
+                  key={mode.value ?? 'default'}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: active }}
+                  disabled={busy}
+                  onPress={() => setMode(mode.value)}
+                  style={[
+                    styles.iconChip,
+                    {
+                      borderColor: active ? tint : border,
+                      backgroundColor: active ? `${tint}18` : background,
+                    },
+                  ]}>
+                  <MaterialIcons name={mode.icon} size={18} color={active ? tint : text} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </CompactCard>
+      ) : null}
 
-        <SectionLabel icon="flag" color={muted}>
-          {`${t('planPriorityMust')} / ${t('planPriorityNice')}`}
-        </SectionLabel>
-        <View style={styles.row}>
-          <ChoiceChip
-            active={current.priority === 'must'}
-            label={t('planPriorityMust')}
-            icon="star"
-            tint={tint}
-            border={border}
-            text={text}
-            disabled={busy}
-            onPress={() => setPriority('must')}
-          />
-          <ChoiceChip
-            active={current.priority === 'nice'}
-            label={t('planPriorityNice')}
-            icon="star-border"
-            tint={tint}
-            border={border}
-            text={text}
-            disabled={busy}
-            onPress={() => setPriority('nice')}
-          />
+      <CompactCard title={t('planStopSectionClassify')} border={border} muted={muted}>
+        <View style={styles.statusRow}>
+          <View
+            style={[
+              styles.statusBadge,
+              { borderColor: border, backgroundColor: `${tint}12` },
+            ]}>
+            <MaterialIcons name={statusMeta.icon} size={16} color={tint} />
+            <Text style={[styles.statusLabel, { color: text }]}>{t(statusMeta.key)}</Text>
+          </View>
+          <Text style={[styles.hint, { color: muted, flex: 1 }]}>{t('planStopStatusAuto')}</Text>
         </View>
-
-        <SectionLabel icon="task-alt" color={muted}>
-          {t('planSectionStatus')}
-        </SectionLabel>
-        <View style={styles.wrap}>
-          {STATUS_OPTS.map((s) => (
-            <ChoiceChip
-              key={s.value}
-              active={current.status === s.value}
-              label={t(s.key)}
-              icon={s.icon}
-              tint={tint}
-              border={border}
-              text={text}
-              disabled={busy}
-              onPress={() => setStatus(s.value)}
-            />
-          ))}
-        </View>
-
-        <SectionLabel icon="label-outline" color={muted}>
-          {t('planTagEntryPoint')}
-        </SectionLabel>
-        <View style={styles.row}>
-          <ChoiceChip
-            active={current.tags.includes('entry_point')}
-            label={t('planTagEntryPoint')}
-            icon="login"
-            tint={tint}
-            border={border}
-            text={text}
-            disabled={busy}
-            onPress={() => toggleTag('entry_point')}
-          />
-          <ChoiceChip
-            active={current.tags.includes('accommodation')}
+        <View style={styles.iconRow}>
+          <ToggleChip
+            active={stop.tags.includes('accommodation')}
             label={t('planTagAccommodation')}
             icon="hotel"
             tint={tint}
@@ -683,34 +546,15 @@ export function PlanStopDetailSheet({
             onPress={() => toggleTag('accommodation')}
           />
         </View>
+      </CompactCard>
 
-        <SectionLabel icon="commute" color={muted}>
-          {t('planTravelModeOverride')}
-        </SectionLabel>
-        <View style={styles.wrap}>
-          {MODES.map((mode) => (
-            <ChoiceChip
-              key={mode.value ?? 'default'}
-              active={current.travelModeOverride === mode.value}
-              label={mode.value ? t(MODE_KEY[mode.value]) : t('planTravelModeDefault')}
-              icon={mode.icon}
-              tint={tint}
-              border={border}
-              text={text}
-              disabled={busy}
-              onPress={() => setMode(mode.value)}
-            />
-          ))}
-        </View>
-
-        <SectionLabel icon="calendar-today" color={muted}>
-          {t('planPickDay')}
-        </SectionLabel>
-        <View style={styles.wrap}>
+      <View style={styles.dayRow}>
+        <Text style={[styles.dayLabel, { color: muted }]}>{t('planPickDay')}</Text>
+        <View style={styles.dayChips}>
           {days.map((day) => (
-            <ChoiceChip
+            <DayChip
               key={day.id}
-              active={current.tripDayId === day.id}
+              active={stop.tripDayId === day.id}
               label={t('planDayChip', { day: day.dayIndex + 1 })}
               tint={tint}
               border={border}
@@ -719,8 +563,8 @@ export function PlanStopDetailSheet({
               onPress={() => changeDay(day)}
             />
           ))}
-          <ChoiceChip
-            active={current.tripDayId == null}
+          <DayChip
+            active={stop.tripDayId == null}
             label={t('planIdeaBucket')}
             icon="lightbulb-outline"
             tint={tint}
@@ -730,85 +574,93 @@ export function PlanStopDetailSheet({
             onPress={() => changeDay(null)}
           />
         </View>
+      </View>
 
-        {error ? <Text style={{ color: danger, marginTop: 8 }}>{error}</Text> : null}
-
-        <Pressable
-          disabled={busy}
-          onPress={confirmDelete}
-          style={[styles.deleteBtn, { borderColor: danger }]}>
-          {deleteStop.isPending ? (
-            <ActivityIndicator color={danger} />
-          ) : (
-            <>
-              <MaterialIcons name="delete-outline" size={20} color={danger} />
-              <Text style={{ color: danger, fontWeight: '700' }}>{t('planDeleteStop')}</Text>
-            </>
-          )}
-        </Pressable>
-      </BottomSheetScrollView>
-      ) : (
-        <View style={styles.scroll} />
-      )}
-    </BottomSheet>
+      {error ? <Text style={[styles.error, { color: danger }]}>{error}</Text> : null}
+    </BottomSheetScrollView>
   );
 }
 
-function SectionLabel({
-  color,
-  icon,
+function CompactCard({
+  title,
+  border,
+  muted,
   children,
 }: {
-  color: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  children: string;
-}) {
-  return (
-    <View style={styles.sectionRow}>
-      <MaterialIcons name={icon} size={14} color={color} />
-      <Text style={[styles.section, { color }]}>{children}</Text>
-    </View>
-  );
-}
-
-function MetaCell({
-  icon,
-  caption,
-  value,
-  text,
-  muted,
-  tint,
-}: {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  caption: string;
-  value: string;
-  text: string;
+  title: string;
+  border: string;
   muted: string;
-  tint: string;
+  children: ReactNode;
 }) {
   return (
-    <View style={styles.metaCell}>
-      <MaterialIcons name={icon} size={16} color={tint} />
-      <Text style={[styles.metaCaption, { color: muted }]}>{caption}</Text>
-      <Text style={[styles.metaValue, { color: text }]} numberOfLines={1}>
-        {value}
-      </Text>
+    <View style={[styles.card, { borderColor: border }]}>
+      <Text style={[styles.cardTitle, { color: muted }]}>{title}</Text>
+      {children}
     </View>
   );
 }
 
-function StepperBtn({
+function InfoPill({
   icon,
   label,
-  border,
+  value,
+  tint,
   text,
+  muted,
+}: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  label: string;
+  value: string;
+  tint: string;
+  text: string;
+  muted: string;
+}) {
+  return (
+    <View style={styles.infoPill}>
+      <MaterialIcons name={icon} size={14} color={tint} />
+      <View style={styles.infoText}>
+        <Text style={[styles.infoCaption, { color: muted }]} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text style={[styles.infoValue, { color: text }]} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function LabeledStepper({
+  label,
+  muted,
+  stepper,
+}: {
+  label: string;
+  muted: string;
+  stepper: ReactNode;
+}) {
+  return (
+    <View style={styles.labeledStepper}>
+      <Text style={[styles.fieldCaption, { color: muted }]} numberOfLines={1}>
+        {label}
+      </Text>
+      {stepper}
+    </View>
+  );
+}
+
+function IconBtn({
+  icon,
+  label,
+  tint,
+  border,
   disabled,
   onPress,
 }: {
   icon: keyof typeof MaterialIcons.glyphMap;
   label: string;
+  tint: string;
   border: string;
-  text: string;
   disabled?: boolean;
   onPress: () => void;
 }) {
@@ -818,14 +670,55 @@ function StepperBtn({
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
-      style={[styles.stepper, { borderColor: border, opacity: disabled ? 0.4 : 1 }]}>
-      <MaterialIcons name={icon} size={20} color={text} />
-      <Text style={{ color: text, fontWeight: '700', fontSize: 14 }}>{label}</Text>
+      style={[styles.iconBtn, { borderColor: border, opacity: disabled ? 0.4 : 1 }]}>
+      <MaterialIcons name={icon} size={16} color={tint} />
     </Pressable>
   );
 }
 
-function ChoiceChip({
+function ToggleChip({
+  active,
+  label,
+  icon,
+  tint,
+  border,
+  text,
+  disabled,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  icon: keyof typeof MaterialIcons.glyphMap;
+  tint: string;
+  border: string;
+  text: string;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[
+        styles.toggleChip,
+        {
+          borderColor: active ? tint : border,
+          backgroundColor: active ? `${tint}18` : 'transparent',
+          opacity: disabled ? 0.5 : 1,
+        },
+      ]}>
+      <MaterialIcons name={icon} size={14} color={active ? tint : text} />
+      <Text style={[styles.toggleChipText, { color: active ? tint : text }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function DayChip({
   active,
   label,
   icon,
@@ -849,153 +742,241 @@ function ChoiceChip({
       disabled={disabled}
       onPress={onPress}
       style={[
-        styles.chip,
+        styles.dayChip,
         {
           borderColor: active ? tint : border,
           backgroundColor: active ? `${tint}18` : 'transparent',
           opacity: disabled ? 0.5 : 1,
         },
       ]}>
-      {icon ? <MaterialIcons name={icon} size={16} color={active ? tint : text} /> : null}
-      <Text style={{ color: active ? tint : text, fontWeight: '600', fontSize: 13 }}>{label}</Text>
+      {icon ? <MaterialIcons name={icon} size={12} color={active ? tint : text} /> : null}
+      <Text style={[styles.dayChipText, { color: active ? tint : text }]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  sheetContainer: {
-    pointerEvents: 'box-none',
-    zIndex: 40,
-    elevation: 40,
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 12, gap: 8 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 2,
   },
-  sheet: {
-    zIndex: 40,
-    elevation: 40,
+  topBarEnd: {
+    justifyContent: 'flex-end',
   },
-  handleCaption: {
+  topActions: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingBottom: 4,
   },
-  handleHint: {
+  address: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  priorityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  departChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  iconHit: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  splitRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  infoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 100,
+  },
+  infoText: { flex: 1, gap: 0 },
+  infoCaption: { fontSize: 10, fontWeight: '600' },
+  infoValue: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  durationCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 140,
+  },
+  miniChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    height: 32,
+  },
+  miniChipText: { fontSize: 11, fontWeight: '700' },
+  anchorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  anchorInput: {
+    flex: 1,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 13,
+    fontVariant: ['tabular-nums'],
+  },
+  hint: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  noteInput: {
+    minHeight: 72,
+    maxHeight: 120,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  costInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+    fontVariant: ['tabular-nums'],
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 28,
+  },
+  statusLabel: {
     fontSize: 11,
     fontWeight: '600',
   },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 12,
-  },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: { flex: 1, gap: 2 },
-  title: { fontSize: 18, fontWeight: '700' },
-  address: { fontSize: 12, lineHeight: 16 },
-  iconHit: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outlineHit: {
+  iconBtn: {
+    width: 32,
+    height: 32,
     borderWidth: 1,
-    borderRadius: 10,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingVertical: 10,
-    marginBottom: 4,
-  },
-  metaCell: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 6,
-  },
-  metaSplit: { width: StyleSheet.hairlineWidth },
-  metaCaption: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase' },
-  metaValue: { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  primaryBtn: {
-    borderRadius: 12,
-    minHeight: 44,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
   },
-  primaryBtnText: { fontWeight: '700', fontSize: 15 },
-  sectionRow: {
+  labeledStepper: {
+    flex: 1,
+    minWidth: 120,
+    gap: 4,
+  },
+  fieldCaption: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  iconRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  iconChip: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 16,
-    marginBottom: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 32,
+    maxWidth: '48%',
+    flexGrow: 1,
   },
-  section: {
-    fontSize: 12,
+  toggleChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  dayRow: {
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  dayLabel: {
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
-  fieldLabel: {
-    fontSize: 12,
+  dayChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  dayChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    height: 28,
+  },
+  dayChipText: {
+    fontSize: 11,
     fontWeight: '600',
-    marginBottom: 6,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  durationValue: { fontSize: 18, fontWeight: '700', minWidth: 56, textAlign: 'center' },
-  stepper: {
-    borderWidth: 1,
-    borderRadius: 10,
-    minHeight: 44,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    fontVariant: ['tabular-nums'],
-  },
-  chip: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  deleteBtn: {
-    marginTop: 24,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
+  error: {
+    fontSize: 12,
+    paddingHorizontal: 2,
   },
 });
+
+/** @deprecated Use PlanStopSettingsPanel inside PlanTimeline. */
+export const PlanStopDetailSheet = PlanStopSettingsPanel;

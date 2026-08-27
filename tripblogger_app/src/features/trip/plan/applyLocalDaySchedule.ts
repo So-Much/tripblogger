@@ -1,5 +1,6 @@
 import { computeDaySchedule } from '@tripblogger/itinerary-engine';
 import type { PatchStopDto, TripDetailDto, TripStopDto } from '../types/plan';
+import { stopCostTotal } from './plan-stop-cost';
 
 /** Extract `HH:mm` from schedule ISO (`…T09:37:00+07:00`). */
 export function clockFromIso(iso: string | null | undefined): string | null {
@@ -26,6 +27,23 @@ function mapStopWithPatch(stop: TripStopDto, stopId: string, patch: PatchStopDto
     ...(patch.priority !== undefined ? { priority: patch.priority } : {}),
     ...(patch.status !== undefined ? { status: patch.status } : {}),
     ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+    ...(patch.note !== undefined ? { note: patch.note } : {}),
+    ...(patch.estimatedCostAmount !== undefined
+      ? { estimatedCostAmount: patch.estimatedCostAmount }
+      : {}),
+    ...(patch.estimatedCostCurrency !== undefined
+      ? { estimatedCostCurrency: patch.estimatedCostCurrency }
+      : {}),
+    ...(patch.costItems !== undefined
+      ? {
+          costItems: patch.costItems,
+          estimatedCostAmount:
+            stopCostTotal({ costItems: patch.costItems, estimatedCostAmount: null }) || null,
+          ...(patch.estimatedCostCurrency !== undefined
+            ? { estimatedCostCurrency: patch.estimatedCostCurrency }
+            : {}),
+        }
+      : {}),
   };
 }
 

@@ -6,7 +6,7 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,17 +41,19 @@ import { PlanConflictActions } from './PlanConflictActions';
 import { PlanDayChips, type PlanDaySelection } from './PlanDayChips';
 import { PlanOverview } from './PlanOverview';
 import { PlanStopCard } from './PlanStopCard';
-import { PlanStopDetailSheet } from './PlanStopDetailSheet';
+import { PlanStopSettingsPanel } from './PlanStopDetailSheet';
 import { PlanTravelConnector } from './PlanTravelConnector';
+import { computeDepartNowDuration } from './plan-depart-now';
 import { planDayColor } from './plan-day-color';
 import { planStopDeleteTarget } from './plan-stop-delete';
 import { clampBufferMinutes, travelMinutesToSeconds } from './plan-travel-minutes';
 import {
   PLAN_HOST_SWAP_DEBOUNCE_MS,
   PLAN_SHEET_CLOSED_INDEX,
+  PLAN_SHEET_FULL_INDEX,
+  PLAN_SHEET_MID_INDEX,
   planSheetChromeLayout,
   planSheetGesturePolicy,
-  planStopDetailVisible,
   planTimelineBodyKind,
   resolvePlanSheetHost,
   resolvePlanTimelineBody,
@@ -144,10 +146,9 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
   /** Local order while move is in flight; null = follow server. */
   const [optimisticStops, setOptimisticStops] = useState<TripStopDto[] | null>(null);
   const [detailStopId, setDetailStopId] = useState<string | null>(null);
-  const [detailEpoch, setDetailEpoch] = useState(0);
   const pendingTripId = usePlanStore((s) => s.pendingTripId);
-  const settingsSheetIndex = usePlanStore((s) => s.settingsSheetIndex);
   const setSettingsSheetIndex = usePlanStore((s) => s.setSettingsSheetIndex);
+  const sheetRef = useRef<BottomSheet>(null);
   const [conflictTarget, setConflictTarget] = useState<{
     stopId: string;
     conflict: ScheduleConflict;
@@ -254,10 +255,11 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
     if (!focusedStopId) return;
     if (allStops.some((s) => s.id === focusedStopId)) {
       setDetailStopId(focusedStopId);
-      setDetailEpoch((n) => n + 1);
+      setSettingsSheetIndex(PLAN_SHEET_FULL_INDEX);
+      sheetRef.current?.snapToIndex(PLAN_SHEET_FULL_INDEX);
     }
     setFocusedStopId(null);
-  }, [allStops, focusedStopId, setFocusedStopId]);
+  }, [allStops, focusedStopId, setFocusedStopId, setSettingsSheetIndex]);
 
   const detailPrevStop = useMemo(() => {
     if (!detailStop || !trip || detailStop.tripDayId == null) return null;
@@ -329,28 +331,27 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
   const bottomInset = sheetChrome.bottomInset;
   const snapPoints = sheetChrome.snapPoints;
   const sheetContainerHeight = Math.max(0, windowHeight - bottomInset);
-  const gesturesEnabled = planTabActive && !searchOverlay && detailStopId == null;
+  const settingsOpen = detailStopId != null;
+  const gesturesEnabled = planTabActive && !searchOverlay;
   const policy = planSheetGesturePolicy({
     sheetIndex,
     dragging,
     gesturesEnabled,
   });
-  const canDrag = policy.canDragReorder;
+  const canDrag = policy.canDragReorder && !settingsOpen;
   const wantedHost: PlanSheetHostKind = wantedPlanSheetHost({
     tabKind: resolvedSelection.kind,
     listKind: policy.listKind,
   });
   const [listHost, setListHost] = useState<PlanSheetHostKind>(wantedHost);
-  const settingsAttached = settingsSheetIndex >= 0;
 
   useEffect(() => {
-    if (dragging || settingsAttached) {
+    if (dragging) {
       setListHost((current) =>
         resolvePlanSheetHost({
           wanted: wantedHost,
           current,
           dragging,
-          settingsAttached,
         }),
       );
       return;
@@ -361,31 +362,43 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
           wanted: wantedHost,
           current,
           dragging: false,
-          settingsAttached,
         }),
       );
     }, PLAN_HOST_SWAP_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [dragging, wantedHost, settingsAttached]);
+  }, [dragging, wantedHost]);
 
-  const openStopSettings = useCallback((stopId: string) => {
-    setDetailStopId(stopId);
-    setDetailEpoch((n) => n + 1);
-  }, []);
-
-  const closeStopSettings = useCallback(() => {
-    setDetailStopId(null);
-  }, []);
-
-  const onSettingsIndexChange = useCallback(
-    (index: number) => {
-      setSettingsSheetIndex(index);
-      if (index === PLAN_SHEET_CLOSED_INDEX) {
-        setDetailStopId(null);
-      }
+  const openStopSettings = useCallback(
+    (stopId: string) => {
+      setDetailStopId(stopId);
+      setSettingsSheetIndex(PLAN_SHEET_FULL_INDEX);
+      sheetRef.current?.snapToIndex(PLAN_SHEET_FULL_INDEX);
     },
     [setSettingsSheetIndex],
   );
+
+  const closeStopSettings = useCallback(() => {
+    setDetailStopId(null);
+    setSettingsSheetIndex(PLAN_SHEET_CLOSED_INDEX);
+  }, [setSettingsSheetIndex]);
+
+  const confirmDeleteStop = useCallback(() => {
+    if (!detailStop) return;
+    const target = planStopDeleteTarget(detailStop);
+    Alert.alert(t(target.titleKey), target.message, [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('planDeleteStop'),
+        style: 'destructive',
+        onPress: () => {
+          deleteStop.mutate(
+            { tripId, stopId: target.stopId },
+            { onSuccess: () => closeStopSettings() },
+          );
+        },
+      },
+    ]);
+  }, [closeStopSettings, deleteStop, detailStop, t, tripId]);
 
   const endDrag = useCallback(() => setDragging(false), []);
 
@@ -464,6 +477,11 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
           }}
           onSettingsPress={() => openStopSettings(item.id)}
           onDeletePress={() => requestDelete(item)}
+          onDepartPress={() =>
+            applyStopPatch(item.id, {
+              durationMinutes: computeDepartNowDuration(item, new Date(), 15),
+            })
+          }
           onConflictPress={(conflict) =>
             setConflictTarget({ stopId: item.id, conflict })
           }
@@ -480,6 +498,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
               calculating={calculating}
               editable={!calculating}
               disabled={patchStop.isPending}
+              travelMode={item.travelModeOverride ?? item.travelModeUsed}
               onTravelMinutesChange={(minutes) =>
                 applyStopPatch(item.id, {
                   travelFromPrevSeconds: travelMinutesToSeconds(minutes),
@@ -559,21 +578,60 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
       <View collapsable={false} onLayout={onHandleLayout}>
         <BottomSheetHandle {...handleProps}>
           <View style={styles.header}>
-            <Text style={[styles.title, { color: text }]} numberOfLines={1}>
-              {tripTitle.trim() || t('mapTabPlan')}
-            </Text>
+            {settingsOpen && detailStop ? (
+              <View style={styles.settingsHeaderRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('back')}
+                  onPress={closeStopSettings}
+                  hitSlop={8}
+                  style={styles.headerIconBtn}>
+                  <MaterialIcons name="arrow-back" size={22} color={text} />
+                </Pressable>
+                <Text style={[styles.title, styles.titleFlex, { color: text }]} numberOfLines={1}>
+                  {detailStop.name}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('planDeleteStop')}
+                  onPress={confirmDeleteStop}
+                  hitSlop={8}
+                  style={styles.headerIconBtn}>
+                  <MaterialIcons name="delete-outline" size={20} color={danger} />
+                </Pressable>
+              </View>
+            ) : (
+              <Text style={[styles.title, { color: text }]} numberOfLines={1}>
+                {tripTitle.trim() || t('mapTabPlan')}
+              </Text>
+            )}
             <Text style={[styles.sub, { color: muted }]}>
-              {isOverview
-                ? t('planOverviewHint')
-                : canDrag
-                  ? t('planPrototypeHintFull')
-                  : t('planPrototypeHintPeek')}
+              {settingsOpen
+                ? t('planStopEditorHint')
+                : isOverview
+                  ? t('planOverviewHint')
+                  : canDrag
+                    ? t('planPrototypeHintFull')
+                    : t('planPrototypeHintPeek')}
             </Text>
           </View>
         </BottomSheetHandle>
       </View>
     ),
-    [canDrag, isOverview, muted, onHandleLayout, t, text, tripTitle],
+    [
+      canDrag,
+      closeStopSettings,
+      confirmDeleteStop,
+      danger,
+      detailStop,
+      isOverview,
+      muted,
+      onHandleLayout,
+      settingsOpen,
+      t,
+      text,
+      tripTitle,
+    ],
   );
 
   const chipsHeader =
@@ -583,6 +641,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
         selection={resolvedSelection}
         onSelect={(next) => {
           if (samePlanSheetTab(resolvedSelection, next)) return;
+          closeStopSettings();
           setOptimisticStops(null);
           setSelection(next);
         }}
@@ -592,6 +651,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
 
   const selectOverviewDay = (dayId: string) => {
     if (samePlanSheetTab(resolvedSelection, { kind: 'day', dayId })) return;
+    closeStopSettings();
     setOptimisticStops(null);
     setSelection({ kind: 'day', dayId });
   };
@@ -601,14 +661,11 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
   ) : null;
 
   const itineraryData = isOverview ? [] : stops;
-  const settingsVisible = planStopDetailVisible({
-    detailStopId,
-    stop: detailStop,
-  });
 
   return (
     <View style={styles.sheetStack} pointerEvents="box-none">
       <BottomSheet
+        ref={sheetRef}
         index={1}
         snapPoints={snapPoints}
         onChange={setSheetIndex}
@@ -619,6 +676,9 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
         enableContentPanningGesture={policy.enableContentPanningGesture}
         enableHandlePanningGesture={policy.enableHandlePanningGesture}
         activeOffsetY={[-8, 8]}
+        keyboardBehavior={settingsOpen ? 'extend' : 'interactive'}
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
         handleComponent={renderHandle}
         containerStyle={styles.sheetContainer}
         bottomInset={bottomInset}
@@ -639,6 +699,18 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
             <ActivityIndicator color={tint} />
             <Text style={{ color: muted }}>{t('planTripsLoading')}</Text>
           </View>
+        ) : settingsOpen && detailStop ? (
+          <PlanVisibleListFrame
+            containerHeight={sheetContainerHeight}
+            handleHeight={handleHeight}>
+            <PlanStopSettingsPanel
+              tripId={tripId}
+              trip={trip ?? null}
+              stop={detailStop}
+              prevStop={detailPrevStop}
+              onClose={closeStopSettings}
+            />
+          </PlanVisibleListFrame>
         ) : (
           <PlanVisibleListFrame
             containerHeight={sheetContainerHeight}
@@ -692,18 +764,6 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
         )}
       </BottomSheet>
 
-      <PlanStopDetailSheet
-        visible={settingsVisible}
-        tripId={tripId}
-        trip={trip ?? null}
-        stop={detailStop}
-        prevStop={detailPrevStop}
-        sheetTopInset={sheetTopInset}
-        presentEpoch={detailEpoch}
-        onClose={closeStopSettings}
-        onIndexChange={onSettingsIndexChange}
-      />
-
       {trip ? (
         <PlanConflictActions
           visible={conflictTarget != null && conflictStop != null}
@@ -736,6 +796,22 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 4,
     gap: 2,
+  },
+  settingsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleFlex: {
+    flex: 1,
+    paddingHorizontal: 0,
   },
   title: {
     fontSize: 18,
