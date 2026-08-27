@@ -30,5 +30,7 @@ export interface MeResponse {
     email: string | null;
     displayName: string | null;
     avatarUrl: string | null;
+    totalTravelBudgetAmount: number | null;
+    totalTravelBudgetCurrency: string | null;
   } | null;
 }

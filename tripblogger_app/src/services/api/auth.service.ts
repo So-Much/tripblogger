@@ -56,6 +56,8 @@ export const authService = {
     email?: string;
     removeAvatar?: boolean;
     avatarFile?: { uri: string; name: string; type: string };
+    totalTravelBudgetAmount?: number | null;
+    totalTravelBudgetCurrency?: string | null;
   }): Promise<MeResponse> {
     const body = new FormData();
     if (payload.displayName !== undefined) {
@@ -69,6 +71,15 @@ export const authService = {
     }
     if (payload.avatarFile) {
       body.append('avatar', payload.avatarFile as unknown as Blob);
+    }
+    if (payload.totalTravelBudgetAmount !== undefined) {
+      body.append(
+        'totalTravelBudgetAmount',
+        payload.totalTravelBudgetAmount == null ? '' : String(payload.totalTravelBudgetAmount),
+      );
+    }
+    if (payload.totalTravelBudgetCurrency !== undefined) {
+      body.append('totalTravelBudgetCurrency', payload.totalTravelBudgetCurrency ?? '');
     }
     const response = await apiClient.patch<MeResponse>('/users/me/profile', body, {
       headers: { 'Content-Type': 'multipart/form-data' },
