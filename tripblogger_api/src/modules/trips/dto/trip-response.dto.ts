@@ -6,6 +6,7 @@ import type {
 } from '@tripblogger/itinerary-engine';
 import type { TripStatus } from '../entities/trip.entity';
 import type { StopPriority } from '../entities/trip-stop.entity';
+import type { StopCostItemDto } from './stop-cost-item.dto';
 
 export type TripSummaryDto = {
   id: string;
@@ -20,6 +21,8 @@ export type TripSummaryDto = {
   defaultDayStartTime: string;
   status: TripStatus;
   version: number;
+  budgetAmount: number | null;
+  budgetCurrency: string | null;
 };
 
 export type TripStopDto = {
@@ -42,6 +45,10 @@ export type TripStopDto = {
   priority: StopPriority;
   status: StopStatus;
   tags: string[];
+  note: string | null;
+  estimatedCostAmount: number | null;
+  estimatedCostCurrency: string | null;
+  costItems: StopCostItemDto[];
   travelFromPrevSeconds: number | null;
   travelFromPrevDistanceM: number | null;
   travelModeUsed: PlanTravelMode | null;

@@ -108,6 +108,10 @@ export class TripStopEntity {
   @Column({ name: 'estimated_cost_currency', type: 'nvarchar', length: 8, nullable: true })
   estimatedCostCurrency!: string | null;
 
+  /** JSON array of { id, label, unitAmount, quantity }. */
+  @Column({ name: 'cost_items_json', type: 'nvarchar', length: 'max', nullable: true })
+  costItemsJson!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

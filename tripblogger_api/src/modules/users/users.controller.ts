@@ -68,6 +68,8 @@ export class UsersController {
     @UploadedFile() avatar?: { filename: string; mimetype: string },
     @Body('displayName') displayName?: string,
     @Body('email') email?: string,
+    @Body('totalTravelBudgetAmount') totalTravelBudgetAmountRaw?: string,
+    @Body('totalTravelBudgetCurrency') totalTravelBudgetCurrency?: string,
     @Body('removeAvatar') removeAvatarRaw?: string | boolean,
   ) {
     if (avatar && !AVATAR_MIME.has(avatar.mimetype)) {
@@ -78,10 +80,27 @@ export class UsersController {
     const host = req.headers.host;
     const avatarUrl = avatar ? `${proto}://${host}/uploads/avatars/${avatar.filename}` : removeAvatar ? null : undefined;
 
+    let totalTravelBudgetAmount: number | null | undefined;
+    if (totalTravelBudgetAmountRaw !== undefined) {
+      const trimmed = totalTravelBudgetAmountRaw.trim();
+      if (trimmed === '' || trimmed === 'null') {
+        totalTravelBudgetAmount = null;
+      } else {
+        const parsed = Number(trimmed);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          throw new BadRequestException('Invalid total travel budget amount');
+        }
+        totalTravelBudgetAmount = parsed;
+      }
+    }
+
     return this.usersService.updateMyProfile(req.user.sub, {
       displayName,
       email: email !== undefined ? email : undefined,
       avatarUrl,
+      totalTravelBudgetAmount,
+      totalTravelBudgetCurrency:
+        totalTravelBudgetCurrency !== undefined ? totalTravelBudgetCurrency : undefined,
     });
   }
 

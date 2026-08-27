@@ -40,7 +40,13 @@ export class UsersService {
 
   async updateMyProfile(
     userId: string,
-    payload: { displayName?: string; avatarUrl?: string | null; email?: string | null },
+    payload: {
+      displayName?: string;
+      avatarUrl?: string | null;
+      email?: string | null;
+      totalTravelBudgetAmount?: number | null;
+      totalTravelBudgetCurrency?: string | null;
+    },
   ) {
     const profile = await this.memberProfilesRepo.findOne({ where: { userId } });
     if (!profile) throw new NotFoundException('Member profile not found');
@@ -55,6 +61,21 @@ export class UsersService {
     if (payload.email !== undefined) {
       const trimmed = payload.email?.trim() ?? '';
       profile.email = trimmed.length > 0 ? trimmed : null;
+    }
+    if (payload.totalTravelBudgetAmount !== undefined) {
+      profile.totalTravelBudgetAmount =
+        payload.totalTravelBudgetAmount != null && payload.totalTravelBudgetAmount > 0
+          ? String(payload.totalTravelBudgetAmount)
+          : null;
+      if (payload.totalTravelBudgetAmount == null || payload.totalTravelBudgetAmount <= 0) {
+        profile.totalTravelBudgetCurrency = null;
+      } else if (payload.totalTravelBudgetCurrency !== undefined) {
+        profile.totalTravelBudgetCurrency = payload.totalTravelBudgetCurrency;
+      } else if (!profile.totalTravelBudgetCurrency) {
+        profile.totalTravelBudgetCurrency = 'VND';
+      }
+    } else if (payload.totalTravelBudgetCurrency !== undefined) {
+      profile.totalTravelBudgetCurrency = payload.totalTravelBudgetCurrency;
     }
 
     await this.memberProfilesRepo.save(profile);
@@ -92,6 +113,10 @@ export class UsersService {
             email: user.memberProfile.email ?? null,
             displayName: user.memberProfile.displayName ?? null,
             avatarUrl: user.memberProfile.avatarUrl ?? null,
+            totalTravelBudgetAmount: user.memberProfile.totalTravelBudgetAmount
+              ? Number(user.memberProfile.totalTravelBudgetAmount)
+              : null,
+            totalTravelBudgetCurrency: user.memberProfile.totalTravelBudgetCurrency ?? null,
           }
         : null,
       createdAt: user.createdAt,

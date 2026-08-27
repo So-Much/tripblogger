@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { computeDaySchedule } from '@tripblogger/itinerary-engine';
 import type { ScheduleConflict, ScheduledStop } from '@tripblogger/itinerary-engine';
 import { In, Repository } from 'typeorm';
+import type { StopCostItemDto } from './dto/stop-cost-item.dto';
 import { AddStopDto } from './dto/add-stop.dto';
 import { CreateTripDto } from './dto/create-trip.dto';
 import { MoveStopDto } from './dto/move-stop.dto';
@@ -58,6 +59,44 @@ function toDateString(value: string | Date): string {
   return String(value).slice(0, 10);
 }
 
+function parseMoney(value: string | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseCostItems(json: string | null | undefined): StopCostItemDto[] {
+  if (!json?.trim()) return [];
+  try {
+    const raw = JSON.parse(json) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const row = item as Record<string, unknown>;
+        const id = typeof row.id === 'string' ? row.id : '';
+        const label = typeof row.label === 'string' ? row.label.trim() : '';
+        const unitAmount = Number(row.unitAmount);
+        const quantity = Number(row.quantity);
+        if (!id || !label || !Number.isFinite(unitAmount) || unitAmount < 0) return null;
+        if (!Number.isFinite(quantity) || quantity < 1) return null;
+        return { id, label, unitAmount, quantity: Math.floor(quantity) };
+      })
+      .filter((item): item is StopCostItemDto => item != null);
+  } catch {
+    return [];
+  }
+}
+
+function serializeCostItems(items: StopCostItemDto[]): string | null {
+  if (!items.length) return null;
+  return JSON.stringify(items);
+}
+
+function sumCostItems(items: StopCostItemDto[]): number {
+  return items.reduce((sum, item) => sum + item.unitAmount * item.quantity, 0);
+}
+
 @Injectable()
 export class TripsService {
   constructor(
@@ -88,6 +127,12 @@ export class TripsService {
       defaultDayStartTime: dto.defaultDayStartTime ?? '08:00',
       status: 'draft',
       version: 1,
+      budgetAmount:
+        dto.budgetAmount != null && dto.budgetAmount > 0 ? String(dto.budgetAmount) : null,
+      budgetCurrency:
+        dto.budgetAmount != null && dto.budgetAmount > 0
+          ? (dto.budgetCurrency ?? 'VND')
+          : null,
     });
     const saved = await this.tripsRepo.save(trip);
 
@@ -155,6 +200,19 @@ export class TripsService {
         trip.defaultDayStartTime = dto.defaultDayStartTime;
       }
       if (dto.status !== undefined) trip.status = dto.status;
+      if (dto.budgetAmount !== undefined) {
+        trip.budgetAmount =
+          dto.budgetAmount != null && dto.budgetAmount > 0 ? String(dto.budgetAmount) : null;
+        if (dto.budgetAmount == null || dto.budgetAmount <= 0) {
+          trip.budgetCurrency = null;
+        } else if (dto.budgetCurrency !== undefined) {
+          trip.budgetCurrency = dto.budgetCurrency;
+        } else if (!trip.budgetCurrency) {
+          trip.budgetCurrency = 'VND';
+        }
+      } else if (dto.budgetCurrency !== undefined) {
+        trip.budgetCurrency = dto.budgetCurrency;
+      }
 
       trip.startDate = nextStart;
       trip.endDate = nextEnd;
@@ -381,6 +439,25 @@ export class TripsService {
     if (dto.anchorTime !== undefined) stop.anchorTime = dto.anchorTime;
     if (dto.priority !== undefined) stop.priority = dto.priority;
     if (dto.status !== undefined) stop.status = dto.status;
+    if (dto.note !== undefined) stop.note = dto.note;
+    if (dto.estimatedCostAmount !== undefined)
+      stop.estimatedCostAmount = dto.estimatedCostAmount != null
+        ? String(dto.estimatedCostAmount)
+        : null;
+    if (dto.estimatedCostCurrency !== undefined)
+      stop.estimatedCostCurrency = dto.estimatedCostCurrency;
+    if (dto.costItems !== undefined) {
+      const items = (dto.costItems ?? []).map((item) => ({
+        id: item.id,
+        label: item.label.trim(),
+        unitAmount: item.unitAmount,
+        quantity: item.quantity,
+      }));
+      stop.costItemsJson = serializeCostItems(items);
+      const total = sumCostItems(items);
+      stop.estimatedCostAmount = total > 0 ? String(total) : null;
+      stop.estimatedCostCurrency = total > 0 ? (stop.estimatedCostCurrency ?? 'VND') : null;
+    }
 
     await this.stopsRepo.save(stop);
 
@@ -600,6 +677,8 @@ export class TripsService {
       defaultDayStartTime: trip.defaultDayStartTime,
       status: trip.status,
       version: trip.version,
+      budgetAmount: parseMoney(trip.budgetAmount),
+      budgetCurrency: trip.budgetCurrency,
     };
   }
 
@@ -701,6 +780,11 @@ export class TripsService {
       priority: stop.priority,
       status: stop.status,
       tags,
+      note: stop.note,
+      estimatedCostAmount:
+        stop.estimatedCostAmount != null ? Number(stop.estimatedCostAmount) : null,
+      estimatedCostCurrency: stop.estimatedCostCurrency,
+      costItems: parseCostItems(stop.costItemsJson),
       travelFromPrevSeconds: stop.travelFromPrevSeconds,
       travelFromPrevDistanceM: stop.travelFromPrevDistanceM,
       travelModeUsed: stop.travelModeUsed,

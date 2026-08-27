@@ -3,14 +3,18 @@ import {
   IsArray,
   IsIn,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import type { PlanTravelMode } from '../entities/trip.entity';
 import type { StopPriority, StopStatus } from '../entities/trip-stop.entity';
+import { StopCostItemInput } from './stop-cost-item.dto';
 
 const PLAN_TRAVEL_MODES = ['motorbike', 'car', 'foot', 'bike'] as const;
 const STOP_PRIORITIES = ['must', 'nice'] as const;
@@ -60,4 +64,28 @@ export class PatchStopDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(2000)
+  note?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  estimatedCostAmount?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  estimatedCostCurrency?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StopCostItemInput)
+  costItems?: StopCostItemInput[];
 }

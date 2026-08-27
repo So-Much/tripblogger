@@ -27,4 +27,10 @@ export class MemberProfileEntity {
 
   @Column({ name: 'is_verified_seller', type: 'bit', default: false })
   isVerifiedSeller!: boolean;
+
+  @Column({ name: 'total_travel_budget_amount', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  totalTravelBudgetAmount!: string | null;
+
+  @Column({ name: 'total_travel_budget_currency', type: 'nvarchar', length: 8, nullable: true })
+  totalTravelBudgetCurrency!: string | null;
 }

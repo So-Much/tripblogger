@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import { TripStopEntity } from './trip-stop.entity';
 
-export type SystemStopTag = 'entry_point' | 'accommodation';
+export type SystemStopTag = 'accommodation';
 
 @Entity('trip_stop_tags')
 export class TripStopTagEntity {

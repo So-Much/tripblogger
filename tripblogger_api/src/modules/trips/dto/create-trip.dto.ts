@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import type { PlanTravelMode } from '../entities/trip.entity';
 
@@ -55,4 +56,17 @@ export class CreateTripDto {
   @IsString()
   @Matches(/^\d{2}:\d{2}$/)
   defaultDayStartTime?: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  budgetAmount?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(8)
+  budgetCurrency?: string | null;
 }

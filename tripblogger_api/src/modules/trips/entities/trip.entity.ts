@@ -57,6 +57,12 @@ export class TripEntity {
   @Column({ type: 'int', default: 1 })
   version!: number;
 
+  @Column({ name: 'budget_amount', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  budgetAmount!: string | null;
+
+  @Column({ name: 'budget_currency', type: 'nvarchar', length: 8, nullable: true })
+  budgetCurrency!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

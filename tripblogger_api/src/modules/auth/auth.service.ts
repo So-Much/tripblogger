@@ -260,6 +260,10 @@ export class AuthService {
             email: user.memberProfile.email,
             displayName: user.memberProfile.displayName ?? null,
             avatarUrl: user.memberProfile.avatarUrl ?? null,
+            totalTravelBudgetAmount: user.memberProfile.totalTravelBudgetAmount
+              ? Number(user.memberProfile.totalTravelBudgetAmount)
+              : null,
+            totalTravelBudgetCurrency: user.memberProfile.totalTravelBudgetCurrency ?? null,
           }
         : null,
       createdAt: user.createdAt,

@@ -447,7 +447,7 @@ describe('TripsService.addStop', () => {
     const dto: AddStopDto = {
       place: placeDb,
       tripDayId: 'day-0',
-      tags: ['entry_point', 'custom'],
+      tags: ['accommodation', 'custom'],
       priority: 'must',
     };
 
@@ -469,7 +469,7 @@ describe('TripsService.addStop', () => {
       }),
     );
     expect(tags.create).toHaveBeenCalledWith(
-      expect.objectContaining({ tag: 'entry_point', isSystem: true }),
+      expect.objectContaining({ tag: 'accommodation', isSystem: true }),
     );
     expect(tags.create).toHaveBeenCalledWith(
       expect.objectContaining({ tag: 'custom', isSystem: false }),

@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import type { PlanTravelMode, TripStatus } from '../entities/trip.entity';
 
@@ -66,4 +67,17 @@ export class PatchTripDto {
   @IsOptional()
   @IsIn(TRIP_STATUSES)
   status?: TripStatus;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  budgetAmount?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(8)
+  budgetCurrency?: string | null;
 }
