@@ -2,8 +2,8 @@ export const PLAN_SHEET_CLOSED_INDEX = -1;
 export const PLAN_SHEET_MID_INDEX = 1;
 export const PLAN_SHEET_FULL_INDEX = 2;
 
-/** Matches TripBottomNav bar height above safe-area padding. */
-export const PLAN_NAV_BAR_OFFSET = 56;
+/** Matches TripBottomNav height above safe-area padding (padTop 8 + icon 24 + gap 2 + label ~14). */
+export const PLAN_NAV_BAR_OFFSET = 48;
 
 /** Place cards: thicker than RN hairline so rows read as distinct. */
 export const PLAN_STOP_CARD_BORDER_WIDTH = 2;

@@ -3,9 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
-
-/** Matches TripBottomNav bar height above safe-area padding. */
-const NAV_BAR_OFFSET = 56;
+import { PLAN_NAV_BAR_OFFSET } from './plan-sheet-layout';
 
 /** Invite guests to sign in — no trips API calls. */
 export function PlanGuestGate() {
@@ -19,7 +17,7 @@ export function PlanGuestGate() {
   const cta = useThemeColor({}, 'cta');
   const onCta = useThemeColor({}, 'onCta');
 
-  const bottom = Math.max(insets.bottom, 8) + NAV_BAR_OFFSET;
+  const bottom = Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET;
 
   return (
     <View

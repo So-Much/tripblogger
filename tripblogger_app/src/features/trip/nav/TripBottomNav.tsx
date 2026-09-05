@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { PLAN_NAV_BAR_OFFSET } from '../plan/plan-sheet-layout';
 import { useMapStore } from '../store/map.store';
 import type { TripBottomTab } from '../types/map';
 
@@ -40,6 +41,8 @@ export function TripBottomNav({ onExplorePress }: Props) {
         {
           backgroundColor: surface,
           borderTopColor: border,
+          // Keep content column height aligned with PLAN_NAV_BAR_OFFSET (safe area is extra).
+          minHeight: PLAN_NAV_BAR_OFFSET + Math.max(insets.bottom, 8),
           paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}>

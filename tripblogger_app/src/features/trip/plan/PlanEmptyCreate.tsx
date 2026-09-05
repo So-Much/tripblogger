@@ -31,9 +31,8 @@ import {
   joinDestinationLabel,
   type DestinationChip,
 } from './plan-create-destination';
+import { PLAN_NAV_BAR_OFFSET } from './plan-sheet-layout';
 
-/** Matches TripBottomNav bar height above safe-area padding. */
-const NAV_BAR_OFFSET = 56;
 /** Space below status bar for the map back + search row. */
 const HEADER_CLEARANCE = 62;
 
@@ -110,7 +109,7 @@ export function PlanEmptyCreate({ onCreated, onCancel }: Props) {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const topPad = insets.top + HEADER_CLEARANCE;
-  const tabBarBlock = Math.max(insets.bottom, 8) + NAV_BAR_OFFSET;
+  const tabBarBlock = Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET;
 
   const submit = () => {
     setLocalError(null);

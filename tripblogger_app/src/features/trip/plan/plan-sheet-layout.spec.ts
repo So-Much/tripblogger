@@ -54,11 +54,11 @@ describe('planSheetChromeLayout', () => {
       sheetTopInset: 170,
       safeBottom: 34,
     });
-    expect(PLAN_NAV_BAR_OFFSET).toBe(56);
-    expect(layout.bottomInset).toBe(90);
-    expect(layout.availableHeight).toBe(540);
-    expect(layout.snapPoints).toEqual(planSheetSnapPoints(540));
-    expect(layout.snapPoints[2]).toBe(540);
+    expect(PLAN_NAV_BAR_OFFSET).toBe(48);
+    expect(layout.bottomInset).toBe(82);
+    expect(layout.availableHeight).toBe(548);
+    expect(layout.snapPoints).toEqual(planSheetSnapPoints(548));
+    expect(layout.snapPoints[2]).toBe(548);
   });
 
   it('gives the stop-settings sheet the same snaps as the timeline sheet', () => {

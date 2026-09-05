@@ -22,7 +22,7 @@ import {
   type CoalescedInvoker,
   type DeferredRunner,
 } from '../plan/plan-camera';
-import { planSheetPeekHeight } from '../plan/plan-sheet-layout';
+import { planSheetPeekHeight, PLAN_NAV_BAR_OFFSET } from '../plan/plan-sheet-layout';
 import { isPlanTripInProgress } from '../plan/plan-trip-progress';
 import { usePlanRouteChains } from '../plan/usePlanRouteChains';
 import { MARKER_PAINT_FREEZE_MS } from '../store/category-change';
@@ -322,7 +322,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     }
 
     const topChrome = insets.top + 56 + 92 + 8 + 12;
-    const bottomNav = Math.max(insets.bottom, 8) + 56;
+    const bottomNav = Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET;
     const sheetTopInset = insets.top + 56 + 92 + 8;
     const available = Math.max(180, windowHeight - sheetTopInset - bottomNav);
     const sheetPeek = planSheetPeekHeight(available) + bottomNav;

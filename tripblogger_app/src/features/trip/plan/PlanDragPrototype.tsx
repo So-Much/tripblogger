@@ -9,6 +9,7 @@ import DraggableFlatList, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { PLAN_NAV_BAR_OFFSET } from './plan-sheet-layout';
 
 type ProtoStop = { id: string; title: string };
 
@@ -23,8 +24,6 @@ const INITIAL_STOPS: ProtoStop[] = [
 
 const FULL_INDEX = 2;
 const SNAP_POINTS = ['18%', '50%', '92%'] as const;
-/** Matches TripBottomNav bar height above safe-area padding. */
-const NAV_BAR_OFFSET = 56;
 
 type Props = {
   /** Active trip title when wired from PlanTab; falls back to mapTabPlan. */
@@ -53,7 +52,7 @@ export function PlanDragPrototype({ tripTitle }: Props) {
   // While dragging a row: lock both content and handle pan.
   const enableContentPanning = sheetIndex !== FULL_INDEX && !dragging;
   const enableHandlePanning = !dragging;
-  const bottomInset = Math.max(insets.bottom, 8) + NAV_BAR_OFFSET;
+  const bottomInset = Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET;
 
   const endDrag = useCallback(() => setDragging(false), []);
 

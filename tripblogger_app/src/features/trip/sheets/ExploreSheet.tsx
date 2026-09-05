@@ -14,6 +14,7 @@ import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
 import { resolvePlaceCategoryVisual } from '@/src/utils/location-type-display';
 import { PlaceRatingLabel } from '../components/PlaceRatingLabel';
+import { PLAN_NAV_BAR_OFFSET } from '../plan/plan-sheet-layout';
 import { useMapStore } from '../store/map.store';
 import type { MapPlace } from '../types/map';
 import { formatDistance } from '../utils/geo';
@@ -183,7 +184,7 @@ export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
         {
           backgroundColor: surface,
           borderColor: border,
-          paddingBottom: Math.max(insets.bottom, 8) + 56,
+          paddingBottom: Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET,
           opacity: visible ? 1 : 0,
         },
       ]}>
