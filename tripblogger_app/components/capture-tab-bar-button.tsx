@@ -1,17 +1,21 @@
-import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
-import { PlatformPressable } from '@react-navigation/elements';
+import { PlatformPressable } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
+import type { ComponentProps, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 
+type TabBarButtonProps = ComponentProps<typeof PlatformPressable> & {
+  children?: ReactNode;
+};
+
 /**
  * Center FAB for capture. Does not render `props.children` so the default tab label
  * Text is never shown (tabBarShowLabel alone still injects children on some versions).
  */
-export function CaptureTabBarButton(props: BottomTabBarButtonProps) {
+export function CaptureTabBarButton(props: TabBarButtonProps) {
   const { t } = useI18n();
   const cta = useThemeColor({}, 'cta');
   const { children: _children, style, ...pressableRest } = props;

@@ -44,6 +44,7 @@ const MAPPING = {
   minus: 'remove',
   plus: 'add',
   'square.grid.2x2': 'apps',
+  'square.grid.2x2.fill': 'apps',
   'slider.horizontal.3': 'tune',
   'bag.fill': 'work',
   airplane: 'flight',

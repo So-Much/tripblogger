@@ -16,7 +16,7 @@ export function CompositionToggleButton({ visible, onToggle }: Props) {
       style={[styles.btn, !visible && styles.btnDim]}
       accessibilityRole="button"
       accessibilityLabel={t('compositionToggleFrame')}>
-      <IconSymbol name={visible ? 'square.grid.3x3' : 'square.grid.3x3.fill'} size={22} color="#F2F2F7" />
+      <IconSymbol name={visible ? 'square.grid.2x2' : 'square.grid.2x2.fill'} size={22} color="#F2F2F7" />
     </Pressable>
   );
 }

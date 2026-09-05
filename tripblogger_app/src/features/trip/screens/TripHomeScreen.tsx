@@ -379,7 +379,7 @@ export function TripHomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   planLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 30,
   },
   backBtn: {

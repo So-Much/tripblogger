@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   img: { width: '100%', aspectRatio: 4 / 5 },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   oosOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   buySpinner: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconSpinner: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.55)',

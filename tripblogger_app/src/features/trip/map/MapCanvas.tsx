@@ -568,7 +568,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
     <View style={styles.root}>
       <MapView
         ref={mapRef}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
         mapType={mapType}
         showsUserLocation

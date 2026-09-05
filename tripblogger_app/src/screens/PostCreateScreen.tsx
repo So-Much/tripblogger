@@ -326,6 +326,7 @@ export function PostCreateScreen() {
         ...base,
         media: submitMedia ?? [],
         status: 'DRAFT',
+        location: base.location ?? undefined,
       });
     },
     onSuccess: (data, variables) => {

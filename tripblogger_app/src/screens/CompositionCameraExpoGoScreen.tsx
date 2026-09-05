@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cameraShell: { flex: 1, position: 'relative', overflow: 'hidden' },
-  pinchLayer: { ...StyleSheet.absoluteFillObject },
+  pinchLayer: { ...StyleSheet.absoluteFill },
   controlsDock: {
     position: 'absolute',
     left: 8,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   },
   presetBar: { backgroundColor: 'rgba(0,0,0,0.58)' },
   busyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.32)',
     alignItems: 'center',
     justifyContent: 'center',

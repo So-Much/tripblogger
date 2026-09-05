@@ -17,7 +17,9 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
+        // Expo Router / React Navigation pressColor type mismatch (ColorValue vs string).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tabBarButton: ((props: any) => <HapticTab {...props} />) as never,
       }}>
       <Tabs.Screen
         name="index"
@@ -39,7 +41,8 @@ export default function TabLayout() {
           title: t('tabCapture'),
           tabBarShowLabel: false,
           tabBarLabel: () => null,
-          tabBarButton: (props) => <CaptureTabBarButton {...props} />,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          tabBarButton: ((props: any) => <CaptureTabBarButton {...props} />) as never,
           tabBarIcon: () => <IconSymbol size={28} name="camera.fill" color="#FFFFFF" />,
         }}
       />

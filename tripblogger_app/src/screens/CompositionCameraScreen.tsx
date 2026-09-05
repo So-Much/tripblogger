@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
   },
   presetBar: { backgroundColor: 'rgba(0,0,0,0.58)' },
   busyOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.32)',
     alignItems: 'center',
     justifyContent: 'center',

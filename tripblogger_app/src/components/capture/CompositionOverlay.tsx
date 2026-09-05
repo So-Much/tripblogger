@@ -82,7 +82,7 @@ export function CompositionOverlay({
 
 const styles = StyleSheet.create({
   wrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     bottom: 120,
     zIndex: 2,
   },

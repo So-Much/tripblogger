@@ -106,7 +106,7 @@ export function SearchFocusView({ onSelect, loading, error }: Props) {
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 35,
     elevation: 35,
   },

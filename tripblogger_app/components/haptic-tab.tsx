@@ -1,8 +1,9 @@
-import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
-import { PlatformPressable } from '@react-navigation/elements';
+import { PlatformPressable } from 'expo-router/react-navigation';
 import * as Haptics from 'expo-haptics';
+import type { ComponentProps } from 'react';
 
-export function HapticTab(props: BottomTabBarButtonProps) {
+/** Expo Router and @react-navigation disagree on pressColor (ColorValue vs string). */
+export function HapticTab(props: ComponentProps<typeof PlatformPressable>) {
   return (
     <PlatformPressable
       {...props}

@@ -50,7 +50,7 @@ export function ComposerBottomSheet({ visible, title, onClose, children, footer,
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(2,6,23,0.45)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(2,6,23,0.45)' },
   sheet: {
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,

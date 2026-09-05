@@ -303,7 +303,7 @@ export function PlanStopSettingsPanel({
       ]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
-      onScroll={(e) => {
+      onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => {
         scrollY.current = e.nativeEvent.contentOffset.y;
       }}
       scrollEventThrottle={16}>

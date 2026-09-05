@@ -438,11 +438,11 @@ function TripPickerBar({
 
 const styles = StyleSheet.create({
   memberRoot: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 30,
   },
   loading: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     elevation: 32,
   },
   timelineSlot: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 30,
   },
   timelineHidden: {

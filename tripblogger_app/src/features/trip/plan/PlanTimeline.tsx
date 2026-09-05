@@ -724,14 +724,20 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
                   extraData={{ selection: resolvedSelection, canDrag, tripId }}
                   contentContainerStyle={styles.listContent}
                   keyboardShouldPersistTaps="handled"
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item: { id: string }) => item.id}
                   ListHeaderComponent={overviewHeader}
                   ListEmptyComponent={
                     isOverview ? null : (
                       <Text style={[styles.empty, { color: muted }]}>—</Text>
                     )
                   }
-                  renderItem={({ item, index }) => renderStop(item, index)}
+                  renderItem={({
+                    item,
+                    index,
+                  }: {
+                    item: (typeof itineraryData)[number];
+                    index: number;
+                  }) => renderStop(item, index)}
                 />
               ) : (
                 <DraggableFlatList
@@ -779,7 +785,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
 
 const styles = StyleSheet.create({
   sheetStack: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     pointerEvents: 'box-none',
   },
   sheetContainer: {
@@ -836,7 +842,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   listOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
