@@ -1,6 +1,6 @@
 export type OpeningHoursParseResult =
   | { known: false }
-  | { known: true; isOpenAt: (at: Date) => boolean };
+  | { known: true; isOpenAt: (at: Date, tzOffsetHours?: number) => boolean };
 
 /** OSM weekday tokens → JS getDay() (0=Su … 6=Sa) */
 const DAY_INDEX: Record<string, number> = {
@@ -121,10 +121,26 @@ export function parseOpeningHours(
 
   return {
     known: true,
-    isOpenAt: (at: Date) => {
-      const rule = dayRules.get(at.getDay());
+    isOpenAt: (at: Date, tzOffsetHours?: number) => {
+      let day: number;
+      let hours: number;
+      let minutes: number;
+      
+      if (tzOffsetHours !== undefined) {
+        const localMs = at.getTime() + tzOffsetHours * 60 * 60 * 1000;
+        const local = new Date(localMs);
+        day = local.getUTCDay();
+        hours = local.getUTCHours();
+        minutes = local.getUTCMinutes();
+      } else {
+        day = at.getDay();
+        hours = at.getHours();
+        minutes = at.getMinutes();
+      }
+      
+      const rule = dayRules.get(day);
       if (!rule || rule.kind === 'off') return false;
-      const mins = minutesOfDay(at.getHours(), at.getMinutes());
+      const mins = minutesOfDay(hours, minutes);
       return rule.ranges.some((r) => mins >= r.startMin && mins < r.endMin);
     },
   };

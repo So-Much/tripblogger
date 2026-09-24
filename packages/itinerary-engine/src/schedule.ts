@@ -105,7 +105,7 @@ export function computeDaySchedule(args: {
     }
 
     const hours = parseOpeningHours(stop.openingHoursRaw);
-    if (hours.known && !hours.isOpenAt(arriveAt)) {
+    if (hours.known && !hours.isOpenAt(arriveAt, parseOffsetHours(tz))) {
       conflicts.push({
         stopId: stop.id,
         type: 'closed_on_arrival',

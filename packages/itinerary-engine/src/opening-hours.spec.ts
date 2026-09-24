@@ -15,7 +15,7 @@ describe('parseOpeningHours', () => {
     const r = parseOpeningHours('24/7');
     expect(r.known).toBe(true);
     if (r.known) {
-      expect(r.isOpenAt(new Date('2026-08-08T03:00:00+07:00'))).toBe(true);
+      expect(r.isOpenAt(new Date('2026-08-08T03:00:00Z'))).toBe(true);
     }
   });
 
@@ -23,11 +23,11 @@ describe('parseOpeningHours', () => {
     const r = parseOpeningHours('Mo-Fr 08:00-17:00');
     expect(r.known).toBe(true);
     if (r.known) {
-      // Saturday 2026-08-08
-      expect(r.isOpenAt(new Date('2026-08-08T10:00:00+07:00'))).toBe(false);
-      // Monday 2026-08-10
-      expect(r.isOpenAt(new Date('2026-08-10T10:00:00+07:00'))).toBe(true);
-      expect(r.isOpenAt(new Date('2026-08-10T18:00:00+07:00'))).toBe(false);
+      // Saturday 2026-08-08 (UTC)
+      expect(r.isOpenAt(new Date('2026-08-08T10:00:00Z'))).toBe(false);
+      // Monday 2026-08-10 (UTC)
+      expect(r.isOpenAt(new Date('2026-08-10T10:00:00Z'))).toBe(true);
+      expect(r.isOpenAt(new Date('2026-08-10T18:00:00Z'))).toBe(false);
     }
   });
 
@@ -35,9 +35,9 @@ describe('parseOpeningHours', () => {
     const r = parseOpeningHours('Mo-Fr 08:00-12:00,13:30-18:00; Sa off');
     expect(r.known).toBe(true);
     if (r.known) {
-      expect(r.isOpenAt(new Date('2026-08-10T12:30:00+07:00'))).toBe(false);
-      expect(r.isOpenAt(new Date('2026-08-10T14:00:00+07:00'))).toBe(true);
-      expect(r.isOpenAt(new Date('2026-08-08T14:00:00+07:00'))).toBe(false);
+      expect(r.isOpenAt(new Date('2026-08-10T12:30:00Z'))).toBe(false);
+      expect(r.isOpenAt(new Date('2026-08-10T14:00:00Z'))).toBe(true);
+      expect(r.isOpenAt(new Date('2026-08-08T14:00:00Z'))).toBe(false);
     }
   });
 });
