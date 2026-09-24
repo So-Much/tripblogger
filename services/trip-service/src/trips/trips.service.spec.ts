@@ -462,7 +462,7 @@ describe('TripsService.addStop', () => {
         category: 'cafe',
         externalPlaceId: placeDb.id,
         openingHoursRaw: 'Mo-Su 08:00-22:00',
-        locationId: placeDb.id,
+        placeId: placeDb.id,
         durationMinutes: 60,
         priority: 'must',
         bufferAfterMinutes: null,
@@ -507,7 +507,7 @@ describe('TripsService.addStop', () => {
     expect(stops.create).toHaveBeenCalledWith(
       expect.objectContaining({
         externalPlaceId: 'node/123',
-        locationId: null,
+        placeId: null,
         openingHoursRaw: null,
       }),
     );

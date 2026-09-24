@@ -28,6 +28,7 @@ function stop(
     note: null,
     estimatedCostAmount: null,
     estimatedCostCurrency: null,
+    costItemsJson: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     trip: null as any,
