@@ -1,6 +1,7 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('place_reviews')
+@Index(['placeId'])
 export class PlaceReviewEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

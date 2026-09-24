@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -15,6 +16,8 @@ export type StopPriority = 'must' | 'nice';
 export type StopStatus = 'todo' | 'doing' | 'done' | 'skipped';
 
 @Entity('trip_stops')
+@Index(['tripId'])
+@Index(['tripDayId'])
 export class TripStopEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

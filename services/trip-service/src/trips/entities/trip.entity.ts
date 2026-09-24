@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -10,6 +11,7 @@ export type PlanTravelMode = 'motorbike' | 'car' | 'foot' | 'bike';
 export type TripStatus = 'draft' | 'active' | 'completed' | 'archived';
 
 @Entity('trips')
+@Index(['userId', 'updatedAt'])
 export class TripEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
