@@ -6,10 +6,17 @@ import type {
   ScheduledStop,
 } from './types';
 
-const TZ = '+07:00';
+const DEFAULT_TZ = '+07:00';
 
-function atWallClock(dayDate: string, hhmm: string): Date {
-  return new Date(`${dayDate}T${hhmm}:00${TZ}`);
+function parseOffsetHours(offset: string): number {
+  const m = offset.match(/^([+-])(\d{2}):(\d{2})$/);
+  if (!m) return 7;
+  const sign = m[1] === '-' ? -1 : 1;
+  return sign * (Number(m[2]) + Number(m[3]) / 60);
+}
+
+function atWallClock(dayDate: string, hhmm: string, tz: string): Date {
+  return new Date(`${dayDate}T${hhmm}:00${tz}`);
 }
 
 function addSeconds(d: Date, seconds: number): Date {
@@ -21,15 +28,16 @@ function addMinutes(d: Date, minutes: number): Date {
 }
 
 /** Format instant as ISO local wall-clock in +07:00 (phase-1 VN convention). */
-function formatIsoPlus07(d: Date): string {
-  const shifted = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+function formatIso(d: Date, tz: string): string {
+  const hours = parseOffsetHours(tz);
+  const shifted = new Date(d.getTime() + hours * 60 * 60 * 1000);
   const y = shifted.getUTCFullYear();
   const mo = String(shifted.getUTCMonth() + 1).padStart(2, '0');
   const day = String(shifted.getUTCDate()).padStart(2, '0');
   const h = String(shifted.getUTCHours()).padStart(2, '0');
   const mi = String(shifted.getUTCMinutes()).padStart(2, '0');
   const s = String(shifted.getUTCSeconds()).padStart(2, '0');
-  return `${y}-${mo}-${day}T${h}:${mi}:${s}${TZ}`;
+  return `${y}-${mo}-${day}T${h}:${mi}:${s}${tz}`;
 }
 
 function minutesBetween(later: Date, earlier: Date): number {
@@ -40,9 +48,11 @@ export function computeDaySchedule(args: {
   dayDate: string;
   dayStartTime: string;
   stops: EngineStopInput[];
+  timezoneOffset?: string;
 }): DayScheduleResult {
   const { dayDate, dayStartTime, stops } = args;
-  let cursor = atWallClock(dayDate, dayStartTime);
+  const tz = args.timezoneOffset ?? DEFAULT_TZ;
+  let cursor = atWallClock(dayDate, dayStartTime, tz);
   const scheduled: ScheduledStop[] = [];
   const conflicts: ScheduleConflict[] = [];
 
@@ -79,7 +89,7 @@ export function computeDaySchedule(args: {
     let idleMinutes = 0;
 
     if (stop.anchorTime) {
-      const anchor = atWallClock(dayDate, stop.anchorTime);
+      const anchor = atWallClock(dayDate, stop.anchorTime, tz);
       if (arriveAt.getTime() <= anchor.getTime()) {
         startAt = anchor;
         idleMinutes = minutesBetween(anchor, arriveAt);
@@ -109,10 +119,10 @@ export function computeDaySchedule(args: {
 
     scheduled.push({
       id: stop.id,
-      arriveAt: formatIsoPlus07(arriveAt),
-      startAt: formatIsoPlus07(startAt),
-      endAt: formatIsoPlus07(endAt),
-      departAt: formatIsoPlus07(departAt),
+      arriveAt: formatIso(arriveAt, tz),
+      startAt: formatIso(startAt, tz),
+      endAt: formatIso(endAt, tz),
+      departAt: formatIso(departAt, tz),
       idleMinutes,
       skipped: false,
     });

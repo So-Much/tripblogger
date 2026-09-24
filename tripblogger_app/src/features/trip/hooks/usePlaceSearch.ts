@@ -19,7 +19,7 @@ export function usePlaceSearch(
   const appliedQueryRef = useRef(debounced);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), 300);
+    const t = setTimeout(() => setDebounced(query.trim()), 180);
     return () => clearTimeout(t);
   }, [query]);
 

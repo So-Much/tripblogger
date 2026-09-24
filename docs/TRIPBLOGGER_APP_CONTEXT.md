@@ -148,6 +148,8 @@ tripblogger/
 
 ## 6. Domain: Trips / Planner (feat/trip)
 
+**2026-09:** HTTP `/api/trips` được Traefik chuyển tới **Trip Service** (`services/trip-service`, DB `tripblogger_trips`). Map/search `/api/map` `/api/places` tới **Geo Service** (Typesense + Photon VN). Base URL app không đổi. JWT access có `statuses`; RS256 JWKS khi có key. Xem `docs/PROGRESS.md`.
+
 ### Luồng tạo chuyến đi (map-first)
 
 - `TripCreateScreen`: search → **điểm đầu** (không bắt buộc chỗ ở) → thêm điểm trên map/filter; `addAccommodation` chỉ khi `locationType.code === accommodation`.

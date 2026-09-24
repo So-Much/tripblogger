@@ -125,6 +125,8 @@ Chi tiết stack có bằng chứng trong repo: [`TECH_STACK.md`](./TECH_STACK.m
 
 ## Kiến trúc
 
+**Services (2026-09):** Traefik gateway + Core API + Trip Service + Geo Service (Typesense + Photon, Việt Nam). Tiến độ sống: [`docs/PROGRESS.md`](docs/PROGRESS.md). Compose: `docker compose --profile infra --profile apps up`.
+
 ```mermaid
 flowchart LR
   subgraph Client

@@ -13,6 +13,7 @@
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.compose.example
 
 # Certificates, keystores, Google/Firebase local (điều chỉnh nếu bạn chủ đích commit prod config)
 **/google-services.json
@@ -103,6 +104,24 @@
 # -----------------------------------------------------------------------------
 docs/superpowers/
 docs/**
+
+# Versioned platform / architecture docs (exceptions)
+!docs/PROGRESS.md
+!docs/architecture/
+!docs/architecture/**
+!docs/adr/
+!docs/adr/**
+!docs/runbooks/
+!docs/runbooks/**
+!docs/superpowers/specs/
+!docs/superpowers/specs/**
+!docs/superpowers/plans/
+!docs/superpowers/plans/**
+!docs/TRIPBLOGGER_APP_CONTEXT.md
+
+# JWT PEMs and bulky geo data
+infra/jwt/*.pem
+infra/jwt/*.key
 
 # -----------------------------------------------------------------------------
 # Local project structure map (personal reference — not versioned)

@@ -26,6 +26,7 @@ export const PLAN_SHEET_SNAP_DEBOUNCE_MS = PLAN_HOST_SWAP_DEBOUNCE_MS;
 export type PlanSheetGesturePolicy = {
   enableContentPanningGesture: boolean;
   enableHandlePanningGesture: boolean;
+  enablePanDownToClose: boolean;
   canDragReorder: boolean;
   listKind: PlanSheetListKind;
 };
@@ -285,6 +286,8 @@ export function planSheetGesturePolicy(input: {
   return {
     enableContentPanningGesture: false,
     enableHandlePanningGesture: handleOn,
+    // Same as Explore: drag past peek to dismiss; reopen via the collapsed bar.
+    enablePanDownToClose: handleOn,
     canDragReorder: reorderSnap && input.gesturesEnabled,
     listKind: reorderSnap ? 'draggable' : 'sheet-scroll',
   };

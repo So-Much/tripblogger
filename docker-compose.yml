@@ -1,0 +1,206 @@
+name: tripblogger
+
+services:
+  mssql:
+    profiles: ['infra']
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: 'Y'
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}
+    ports:
+      - '1433:1433'
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  mssql-init:
+    profiles: ['infra']
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}
+    volumes:
+      - ./infra/mssql/init-databases.sql:/init/init-databases.sql:ro
+    entrypoint: ['/bin/bash', '-c']
+    command:
+      - |
+        set -e
+        for i in $(seq 1 30); do
+          /opt/mssql-tools18/bin/sqlcmd -S mssql -U sa -P "$$MSSQL_SA_PASSWORD" -C -i /init/init-databases.sql && exit 0
+          sleep 5
+        done
+        exit 1
+    restart: 'no'
+
+  redis:
+    profiles: ['infra']
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  traefik:
+    profiles: ['infra']
+    image: traefik:v3.3
+    ports:
+      - '3000:3000'
+      - '8080:8080'
+    volumes:
+      - ./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  typesense:
+    profiles: ['infra']
+    image: typesense/typesense:27.1
+    ports:
+      - '8108:8108'
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz_typesense_dev_key_change_me}
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_ENABLE_CORS: 'true'
+    command: ['--data-dir', '/data', '--api-key', '${TYPESENSE_API_KEY:-xyz_typesense_dev_key_change_me}', '--enable-cors']
+    volumes:
+      - typesense_data:/data
+
+  photon:
+    profiles: ['infra']
+    image: rtuszik/photon-docker:latest
+    ports:
+      - '2322:2322'
+    environment:
+      UPDATE_STRATEGY: DISABLED
+      REGION: vietnam
+    volumes:
+      - ${DATA_ROOT:-D:/tripblogger-data}/photon:/photon/data
+
+  core:
+    profiles: ['apps']
+    build:
+      context: .
+      dockerfile: tripblogger_api/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mssql
+      DB_PORT: 1433
+      DB_USERNAME: sa
+      DB_PASSWORD: ${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}
+      DB_NAME: tripblogger
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_this_access_secret_123456}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_this_refresh_secret_123456}
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 7d
+      ADMIN_SECRET: ${ADMIN_SECRET:-change_this_admin_secret_123456}
+      GOOGLE_OAUTH_AUDIENCES: ${GOOGLE_OAUTH_AUDIENCES:-your_google_web_client_id}
+      GEO_DELEGATE: '1'
+      TRIP_DELEGATE: '1'
+      JWT_ACCESS_PRIVATE_KEY_PATH: /run/secrets/jwt_access_private.pem
+      JWT_ACCESS_PUBLIC_KEY_PATH: /run/secrets/jwt_access_public.pem
+    volumes:
+      - ./infra/jwt/dev-private.pem:/run/secrets/jwt_access_private.pem:ro
+      - ./infra/jwt/dev-public.pem:/run/secrets/jwt_access_public.pem:ro
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.core.rule=PathPrefix(`/api`) || PathPrefix(`/uploads`)
+      - traefik.http.routers.core.entrypoints=web
+      - traefik.http.routers.core.middlewares=rateLimit@file
+      - traefik.http.services.core.loadbalancer.server.port=3000
+    # Geo/Trip routers override /api/trips and /api/map* when those services are up
+    # (higher priority labels on those services).
+
+  geo:
+    profiles: ['apps']
+    build:
+      context: .
+      dockerfile: services/geo-service/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mssql
+      DB_PORT: 1433
+      DB_USERNAME: sa
+      DB_PASSWORD: ${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}
+      DB_NAME: tripblogger_geo
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: 8108
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz_typesense_dev_key_change_me}
+      PHOTON_URL: http://photon:2322
+      OSRM_BASE_URL: https://routing.openstreetmap.de
+      CORE_JWKS_URL: http://core:3000/api/auth/.well-known/jwks.json
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_this_access_secret_123456}
+      GEO_INTERNAL_TOKEN: ${GEO_INTERNAL_TOKEN:-change_this_geo_internal_token_123456}
+      ADMIN_SECRET: ${ADMIN_SECRET:-change_this_admin_secret_123456}
+      DB_SYNC: '1'
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.geo.rule=PathPrefix(`/api/map`) || PathPrefix(`/api/places`) || PathPrefix(`/api/locations`) || PathPrefix(`/api/saved-locations`) || PathPrefix(`/api/checkins`)
+      - traefik.http.routers.geo.entrypoints=web
+      - traefik.http.routers.geo.priority=20
+      - traefik.http.routers.geo.middlewares=rateLimit@file
+      - traefik.http.services.geo.loadbalancer.server.port=3000
+
+  trip:
+    profiles: ['apps']
+    build:
+      context: .
+      dockerfile: services/trip-service/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: mssql
+      DB_PORT: 1433
+      DB_USERNAME: sa
+      DB_PASSWORD: ${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}
+      DB_NAME: tripblogger_trips
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CORE_JWKS_URL: http://core:3000/api/auth/.well-known/jwks.json
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_this_access_secret_123456}
+      GEO_BASE_URL: http://geo:3000
+      GEO_INTERNAL_TOKEN: ${GEO_INTERNAL_TOKEN:-change_this_geo_internal_token_123456}
+      DB_SYNC: '1'
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.trip.rule=PathPrefix(`/api/trips`)
+      - traefik.http.routers.trip.entrypoints=web
+      - traefik.http.routers.trip.priority=20
+      - traefik.http.routers.trip.middlewares=rateLimit@file
+      - traefik.http.services.trip.loadbalancer.server.port=3000
+
+volumes:
+  mssql_data:
+  redis_data:
+  typesense_data:

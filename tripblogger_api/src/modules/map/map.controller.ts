@@ -47,6 +47,7 @@ export class MapController {
       query.limit ?? 15,
       query.biasLat,
       query.biasLng,
+      query.roadDistance === 1,
     );
   }
 

@@ -136,6 +136,7 @@ describe('planSheetGesturePolicy', () => {
     });
     expect(policy.enableContentPanningGesture).toBe(false);
     expect(policy.enableHandlePanningGesture).toBe(true);
+    expect(policy.enablePanDownToClose).toBe(true);
     expect(policy.canDragReorder).toBe(false);
     expect(policy.listKind).toBe('sheet-scroll');
   });
@@ -148,6 +149,7 @@ describe('planSheetGesturePolicy', () => {
     });
     expect(policy.enableContentPanningGesture).toBe(false);
     expect(policy.enableHandlePanningGesture).toBe(true);
+    expect(policy.enablePanDownToClose).toBe(true);
     expect(policy.listKind).toBe('draggable');
     expect(policy.canDragReorder).toBe(true);
   });
@@ -159,6 +161,7 @@ describe('planSheetGesturePolicy', () => {
       gesturesEnabled: false,
     });
     expect(policy.canDragReorder).toBe(false);
+    expect(policy.enablePanDownToClose).toBe(false);
     expect(policy.listKind).toBe('draggable');
   });
 
@@ -170,6 +173,7 @@ describe('planSheetGesturePolicy', () => {
     });
     expect(policy.enableContentPanningGesture).toBe(false);
     expect(policy.enableHandlePanningGesture).toBe(true);
+    expect(policy.enablePanDownToClose).toBe(true);
     expect(policy.canDragReorder).toBe(true);
     expect(policy.listKind).toBe('draggable');
   });
@@ -181,6 +185,7 @@ describe('planSheetGesturePolicy', () => {
       gesturesEnabled: true,
     });
     expect(policy.enableHandlePanningGesture).toBe(false);
+    expect(policy.enablePanDownToClose).toBe(false);
     expect(policy.enableContentPanningGesture).toBe(false);
   });
 
@@ -191,6 +196,7 @@ describe('planSheetGesturePolicy', () => {
       gesturesEnabled: false,
     });
     expect(policy.enableHandlePanningGesture).toBe(false);
+    expect(policy.enablePanDownToClose).toBe(false);
     expect(policy.enableContentPanningGesture).toBe(false);
   });
 });

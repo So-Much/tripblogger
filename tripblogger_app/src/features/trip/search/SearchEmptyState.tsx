@@ -5,6 +5,7 @@ import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
 import { resolvePlaceCategoryVisual } from '@/src/utils/location-type-display';
 import { useMapStore } from '../store/map.store';
+import { apiClient } from '@/src/services/api/client';
 import { useRecentSearchesStore } from './recent-searches.store';
 import { POI_CATEGORIES, type MapPlace, type PoiCategoryId } from '../types/map';
 
@@ -45,6 +46,21 @@ export function SearchEmptyState({ onSelectRecent }: Props) {
           </Pressable>
         ))}
       </ScrollView>
+
+      <Pressable
+        onPress={() => {
+          const { lat, lng } = useMapStore.getState().mapCenter ?? { lat: 16.0544, lng: 108.2208 };
+          void apiClient
+            .post('/places', { name: t('mapAddMissingPlace'), lat, lng, category: 'other' })
+            .then(() => {
+              /* sheet feedback via i18n */
+            })
+            .catch(() => undefined);
+        }}
+        style={[styles.chip, { backgroundColor: surface, borderColor: border, marginHorizontal: 16, marginBottom: 8 }]}>
+        <MaterialIcons name="add-location-alt" size={16} color={text} />
+        <Text style={[styles.chipLabel, { color: text }]}>{t('mapAddMissingPlace')}</Text>
+      </Pressable>
 
       <Text style={[styles.section, { color: muted }]}>{t('mapRecentSearches')}</Text>
       {recent.map((item) => {

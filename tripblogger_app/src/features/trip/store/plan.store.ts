@@ -25,10 +25,16 @@ type PlanUiState = {
   settingsSheetIndex: number;
   /** Trip chip tapped while settings are still attached; applied after -1. */
   pendingTripId: string | null;
+  /**
+   * Bumped when the Plan tab is pressed so a dismissed timeline sheet can reopen
+   * (Explore-style: dismiss fully, reopen from the tab).
+   */
+  planSheetRevealNonce: number;
   setActiveTripId: (id: string | null) => void;
   /** Switch trips, or stash the id until settings onChange(-1). */
   requestActiveTripId: (id: string) => void;
   setSettingsSheetIndex: (index: number) => void;
+  revealPlanSheet: () => void;
   setSelectedDayId: (id: string | null) => void;
   setSheetKind: (kind: PlanSheetKind) => void;
   /** Atomic sheetKind + day id so MapCanvas never sees a torn intermediate. */
@@ -65,6 +71,7 @@ export const usePlanStore = create<PlanUiState>((set, get) => ({
   createOverlayOpen: false,
   settingsSheetIndex: PLAN_SHEET_CLOSED_INDEX,
   pendingTripId: null,
+  planSheetRevealNonce: 0,
   setActiveTripId: (id) => set(tripSwitchPatch(id)),
   requestActiveTripId: (id) => {
     const { activeTripId, settingsSheetIndex } = get();
@@ -80,6 +87,8 @@ export const usePlanStore = create<PlanUiState>((set, get) => ({
     set(tripSwitchPatch(resolved.activeTripId));
   },
   setSettingsSheetIndex: (settingsSheetIndex) => set({ settingsSheetIndex }),
+  revealPlanSheet: () =>
+    set((s) => ({ planSheetRevealNonce: s.planSheetRevealNonce + 1 })),
   setSelectedDayId: (id) => set({ selectedDayId: id }),
   setSheetKind: (sheetKind) => set({ sheetKind }),
   setPlanMapSelection: (sheetKind, selectedDayId) => set({ sheetKind, selectedDayId }),

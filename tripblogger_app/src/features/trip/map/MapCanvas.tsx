@@ -611,28 +611,32 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
             if (followMode !== 'free') setFollowMode('free');
           });
         }}>
-        {visiblePois.map((p) => (
+        {visiblePois.map((p) => {
+          const isSelected =
+            !!selectedPlace &&
+            selectedPlace.id === p.id &&
+            (activeSheet === 'place' || activeSheet === 'directions');
+          return (
           <Marker
-            key={p.id}
+            key={isSelected ? `sel:${p.id}` : p.id}
             coordinate={{ latitude: p.lat, longitude: p.lng }}
             title={p.name}
             description={p.address ?? undefined}
             anchor={{ x: 0.5, y: 1 }}
             // Permanent false: pulsing tracksViewChanges while markers remount crashes.
             tracksViewChanges={false}
-            // Do not bind zIndex/selected to store selection: with tracksViewChanges
-            // false the bitmap won't update anyway, but zIndex churn on tag/place
-            // close still hits the native map and contributes to crashes.
-            zIndex={1}
+            // Selected pin floats above siblings; key remount refreshes bitmap once.
+            zIndex={isSelected ? 5 : 1}
             onPress={(e) => {
               safeInvoke(() => {
                 e.stopPropagation?.();
                 onPoiPress?.(p.id);
               });
             }}>
-            <CategoryMapMarker category={p.category} selected={false} />
+            <CategoryMapMarker category={p.category} selected={isSelected} />
           </Marker>
-        ))}
+          );
+        })}
 
         {/* Orphan selected pin only while place/directions is open — dropped pins
             / search picks that are not in the painted nearby list. */}
@@ -647,7 +651,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
             title={selectedPlace.name}
             anchor={{ x: 0.5, y: 1 }}
             tracksViewChanges={false}
-            zIndex={2}>
+            zIndex={5}>
             <CategoryMapMarker category={selectedPlace.category} selected />
           </Marker>
         ) : null}

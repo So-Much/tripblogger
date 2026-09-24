@@ -3,11 +3,18 @@
   "private": true,
   "workspaces": [
     "packages/*",
+    "services/*",
     "tripblogger_api",
     "tripblogger_app"
   ],
   "scripts": {
-    "test:engine": "npm test -w @tripblogger/itinerary-engine"
+    "test:engine": "npm test -w @tripblogger/itinerary-engine",
+    "test:api": "npm test -w tripblogger-api",
+    "test:app-plan": "npm test -w tripblogger_app",
+    "test:contracts": "npm test -w @tripblogger/contracts",
+    "test:auth": "npm test -w @tripblogger/auth",
+    "test:events": "npm test -w @tripblogger/events",
+    "lint:api": "npm run lint -w tripblogger-api"
   },
   "overrides": {
     "react": "19.2.3",

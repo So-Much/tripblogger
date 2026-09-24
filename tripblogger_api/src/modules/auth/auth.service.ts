@@ -18,6 +18,7 @@ import { GuestProfileEntity } from '../users/entities/guest-profile.entity';
 import { OAuth2Client } from 'google-auth-library';
 import { OAuthIdentityEntity, OAuthProvider } from './entities/oauth-identity.entity';
 import { sanitizePlainText } from '../../common/utils/html-sanitize';
+import { jwtKid, loadAccessPrivateKey } from './jwt-keys';
 
 @Injectable()
 export class AuthService {
@@ -299,13 +300,27 @@ export class AuthService {
   }
 
   private async issueTokenPair(userId: string, roleCode: string, deviceId: string) {
-    const accessPayload = { sub: userId, role: roleCode };
-    const refreshPayload = { ...accessPayload, jti: randomUUID() };
+    const statuses = await this.getActiveStatuses(userId);
+    const accessPayload = {
+      sub: userId,
+      role: roleCode,
+      statuses,
+      iss: 'tripblogger-core',
+    };
+    const refreshPayload = { sub: userId, role: roleCode, jti: randomUUID() };
 
-    const accessToken = await this.jwtService.signAsync(accessPayload, {
-      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-      expiresIn: (this.configService.get<string>('JWT_ACCESS_TTL') ?? '15m') as any,
-    });
+    const privateKey = loadAccessPrivateKey();
+    const accessToken = privateKey
+      ? await this.jwtService.signAsync(accessPayload, {
+          privateKey,
+          algorithm: 'RS256',
+          keyid: jwtKid(),
+          expiresIn: (this.configService.get<string>('JWT_ACCESS_TTL') ?? '15m') as any,
+        })
+      : await this.jwtService.signAsync(accessPayload, {
+          secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+          expiresIn: (this.configService.get<string>('JWT_ACCESS_TTL') ?? '15m') as any,
+        });
 
     const refreshToken = await this.jwtService.signAsync(refreshPayload, {
       secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),

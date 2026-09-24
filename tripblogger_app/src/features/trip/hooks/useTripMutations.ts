@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { tripsService } from '../services/trips.service';
 import type {
   AddStopDto,
@@ -50,10 +51,17 @@ export function usePatchTripMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: ['trips', 'patch'],
-    mutationFn: ({ tripId, dto }: { tripId: string; dto: PatchTripDto }) =>
-      tripsService.patchTrip(tripId, dto),
+    mutationFn: ({ tripId, dto }: { tripId: string; dto: PatchTripDto }) => {
+      const current = queryClient.getQueryData<TripDetailDto>(tripKeys.detail(tripId));
+      return tripsService.patchTrip(tripId, dto, current?.version);
+    },
     onSuccess: (trip) => {
       cacheTripDetail(queryClient, trip);
+    },
+    onError: (err, vars) => {
+      if (isAxiosError(err) && err.response?.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: tripKeys.detail(vars.tripId) });
+      }
     },
   });
 }

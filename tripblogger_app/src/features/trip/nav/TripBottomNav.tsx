@@ -5,6 +5,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { PLAN_NAV_BAR_OFFSET } from '../plan/plan-sheet-layout';
 import { useMapStore } from '../store/map.store';
+import { usePlanStore } from '../store/plan.store';
 import type { TripBottomTab } from '../types/map';
 
 type Props = {
@@ -60,6 +61,8 @@ export function TripBottomNav({ onExplorePress }: Props) {
               } else if (tab.id === 'plan') {
                 setActiveSheet('none');
                 useMapStore.getState().setSearchOpen(false);
+                // Explore-style: dismissed sheet reopens from the tab press.
+                usePlanStore.getState().revealPlanSheet();
               }
             }}>
             <MaterialIcons name={tab.icon} size={24} color={active ? tint : muted} />

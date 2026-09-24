@@ -74,6 +74,12 @@ export class MapSearchQueryDto {
   @Min(1)
   @Max(30)
   limit?: number;
+
+  /** Opt-in OSRM road distances (default off for snappy search). Accepts 1/true. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn([0, 1])
+  roadDistance?: number;
 }
 
 export class MapReverseQueryDto {

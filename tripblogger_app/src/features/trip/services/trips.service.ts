@@ -27,8 +27,21 @@ export const tripsService = {
     return res.data;
   },
 
-  async patchTrip(tripId: string, dto: PatchTripDto): Promise<TripDetailDto> {
-    const res = await apiClient.patch<TripDetailDto>(`/trips/${tripId}`, dto);
+  async patchTrip(tripId: string, dto: PatchTripDto, expectedVersion?: number): Promise<TripDetailDto> {
+    const res = await apiClient.patch<TripDetailDto>(`/trips/${tripId}`, {
+      ...dto,
+      expectedVersion,
+    });
+    return res.data;
+  },
+
+  async getBudget(): Promise<{ amount: number | null; currency: string | null }> {
+    const res = await apiClient.get<{ amount: number | null; currency: string | null }>('/trips/budget');
+    return res.data;
+  },
+
+  async putBudget(dto: { amount: number | null; currency?: string }) {
+    const res = await apiClient.put<{ amount: number | null; currency: string | null }>('/trips/budget', dto);
     return res.data;
   },
 

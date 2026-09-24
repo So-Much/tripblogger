@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'feat/**']
+  pull_request:
+    branches: [main, develop, 'feat/**']
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:engine
+      - run: npm test -w @tripblogger/contracts
+      - run: npm test -w @tripblogger/auth
+      - run: npm test -w @tripblogger/events
+      - run: npm run test:api
+      - run: npm test -w geo-service
+      - run: npm test -w trip-service -- --testPathPattern=travel-legs
+      - run: npm run test:app-plan
+      - run: npx tsc --noEmit -p tripblogger_app
+      - run: npm run lint:api
+      - run: docker build -f tripblogger_api/Dockerfile .
+      - run: docker build -f services/geo-service/Dockerfile .
+      - run: docker build -f services/trip-service/Dockerfile .

@@ -1,0 +1,20 @@
+{"type":"Feature","id":"node/1001","properties":{"name":"Phở Cỏ","amenity":"restaurant","addr:city":"Hà Nội"},"geometry":{"type":"Point","coordinates":[105.852,21.033]}}
+{"type":"Feature","id":"node/1002","properties":{"name":"Highlands Coffee","amenity":"cafe","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.221,16.054]}}
+{"type":"Feature","id":"node/1003","properties":{"name":"Chợ Hàn","shop":"mall","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.223,16.069]}}
+{"type":"Feature","id":"node/1004","properties":{"name":"Bà Nà Hills","tourism":"attraction","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[107.995,15.995]}}
+{"type":"Feature","id":"node/1005","properties":{"name":"Khách sạn Novotel","tourism":"hotel","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.226,16.061]}}
+{"type":"Feature","id":"node/1006","properties":{"name":"Homestay Hội An","tourism":"guest_house","addr:city":"Hội An"},"geometry":{"type":"Point","coordinates":[108.338,15.88]}}
+{"type":"Feature","id":"node/1007","properties":{"name":"ATM Vietcombank","amenity":"atm","addr:city":"Huế"},"geometry":{"type":"Point","coordinates":[107.585,16.463]}}
+{"type":"Feature","id":"node/1008","properties":{"name":"Bệnh viện Đà Nẵng","amenity":"hospital","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.216,16.074]}}
+{"type":"Feature","id":"node/1009","properties":{"name":"Trạm xăng Petrolimex","amenity":"fuel","addr:city":"Nha Trang"},"geometry":{"type":"Point","coordinates":[109.196,12.238]}}
+{"type":"Feature","id":"node/1010","properties":{"name":"Bãi đỗ xe sân bay","amenity":"parking","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.202,16.044]}}
+{"type":"Feature","id":"node/1011","properties":{"name":"Phở Thìn","amenity":"restaurant","addr:city":"Hà Nội"},"geometry":{"type":"Point","coordinates":[105.851,21.036]}}
+{"type":"Feature","id":"node/1012","properties":{"name":"Chùa Linh Ứng","tourism":"attraction","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.265,16.106]}}
+{"type":"Feature","id":"node/1013","properties":{"name":"Circle K","shop":"supermarket","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[108.219,16.06]}}
+{"type":"Feature","id":"node/1014","properties":{"name":"Bún Bò Huế","amenity":"restaurant","addr:city":"Huế"},"geometry":{"type":"Point","coordinates":[107.59,16.47]}}
+{"type":"Feature","id":"node/1015","properties":{"name":"Nhà hàng Bé Mặn","amenity":"restaurant","addr:city":"Đà Lạt"},"geometry":{"type":"Point","coordinates":[108.442,11.94]}}
+{"type":"Feature","id":"node/1016","properties":{"name":"Cafe Trung Nguyên","amenity":"cafe","addr:city":"Buôn Ma Thuột"},"geometry":{"type":"Point","coordinates":[108.05,12.666]}}
+{"type":"Feature","id":"node/1017","properties":{"name":"Bảo tàng Dân tộc học","tourism":"museum","addr:city":"Hà Nội"},"geometry":{"type":"Point","coordinates":[105.8,21.04]}}
+{"type":"Feature","id":"node/1018","properties":{"name":"Vincom Plaza","shop":"mall","addr:city":"Hồ Chí Minh"},"geometry":{"type":"Point","coordinates":[106.702,10.777]}}
+{"type":"Feature","id":"node/1019","properties":{"name":"Phở Lý Quốc Sư","amenity":"restaurant","addr:city":"Hà Nội"},"geometry":{"type":"Point","coordinates":[105.847,21.031]}}
+{"type":"Feature","id":"node/1020","properties":{"name":"Cầu Vàng","tourism":"viewpoint","addr:city":"Đà Nẵng"},"geometry":{"type":"Point","coordinates":[107.996,15.997]}}

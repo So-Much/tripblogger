@@ -1,5 +1,5 @@
 import { apiClient } from '@/src/services/api/client';
-import type { MapPlace, MapRouteResponse, PoiCategoryId, TravelMode } from '../types/map';
+import type { MapPlace, MapRouteResponse, PlaceDetail, PoiCategoryId, TravelMode } from '../types/map';
 
 export const mapService = {
   async search(
@@ -17,6 +17,10 @@ export const mapService = {
     return res.data;
   },
 
+  async getPlaceDetail(id: string, signal?: AbortSignal): Promise<PlaceDetail> {
+    const res = await apiClient.get<PlaceDetail>(`/places/${id}`, { signal });
+    return res.data;
+  },
 
   async nearby(
     params: {

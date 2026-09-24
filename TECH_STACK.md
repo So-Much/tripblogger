@@ -11,10 +11,13 @@ Version theo khai báo trong `package.json` (có thể là range `^` / `~`).
 
 | Thành phần | Path | Vai trò |
 |------------|------|---------|
-| Root monorepo | `/` | npm **workspaces** (`packages/*`, `tripblogger_api`, `tripblogger_app`) |
-| API | `tripblogger_api/` | Backend NestJS + TypeORM + SQL Server |
+| Root monorepo | `/` | npm **workspaces** (`packages/*`, `services/*`, `tripblogger_api`, `tripblogger_app`) |
+| Core API | `tripblogger_api/` | Auth, users, posts, commerce (NestJS + TypeORM + SQL Server) |
+| Trip Service | `services/trip-service/` | Plan/itinerary, own DB `tripblogger_trips` |
+| Geo Service | `services/geo-service/` | Search/nearby/reverse/contribute; Typesense + Photon |
 | App | `tripblogger_app/` | Client Expo / React Native (mobile + web) |
-| Shared package | `packages/itinerary-engine/` | Logic lịch trình (schedule, opening hours, travel mode) |
+| Shared packages | `packages/*` | itinerary-engine, contracts, auth (JWKS), events (Redis Streams) |
+| Gateway | Traefik v3 | PathPrefix `/api/*` on `:3000` |
 
 **Mục tiêu sản phẩm (README):** nền tảng nội dung du lịch + gợi ý thương mại (feed, profile, deals, map/trips).
 

@@ -129,4 +129,21 @@ describe('computeDaySchedule', () => {
     });
     expect(r.conflicts.filter((c) => c.type === 'closed_on_arrival')).toHaveLength(0);
   });
+
+  it('uses timezoneOffset in ISO suffix (default +07:00)', () => {
+    const vn = computeDaySchedule({
+      dayDate: '2026-08-10',
+      dayStartTime: '08:00',
+      stops: [{ id: 'a', durationMinutes: 30, ...base }],
+    });
+    const utc = computeDaySchedule({
+      dayDate: '2026-08-10',
+      dayStartTime: '08:00',
+      timezoneOffset: '+00:00',
+      stops: [{ id: 'a', durationMinutes: 30, ...base }],
+    });
+    expect(vn.stops[0].startAt).toContain('+07:00');
+    expect(utc.stops[0].startAt).toContain('+00:00');
+    expect(vn.stops[0].startAt).not.toBe(utc.stops[0].startAt);
+  });
 });

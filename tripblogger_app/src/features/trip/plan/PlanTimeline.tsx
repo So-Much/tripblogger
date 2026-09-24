@@ -402,6 +402,23 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
 
   const endDrag = useCallback(() => setDragging(false), []);
 
+  const onSheetChange = useCallback(
+    (index: number) => {
+      setSheetIndex(index);
+      if (index === PLAN_SHEET_CLOSED_INDEX) {
+        setDetailStopId(null);
+        setSettingsSheetIndex(PLAN_SHEET_CLOSED_INDEX);
+      }
+    },
+    [setSettingsSheetIndex],
+  );
+
+  const planSheetRevealNonce = usePlanStore((s) => s.planSheetRevealNonce);
+  useEffect(() => {
+    if (planSheetRevealNonce === 0) return;
+    sheetRef.current?.snapToIndex(PLAN_SHEET_MID_INDEX);
+  }, [planSheetRevealNonce]);
+
   const onDragEnd = useCallback(
     ({ data: next, from, to }: { data: TripStopDto[]; from: number; to: number }) => {
       setDragging(false);
@@ -453,11 +470,6 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
       dragOpts?: { drag: () => void; isActive: boolean },
     ) => {
       const isActive = dragOpts?.isActive ?? false;
-      const prev = index > 0 ? stops[index - 1] : null;
-      const bufferMinutes = prev ? (prev.bufferAfterMinutes ?? defaultBuffer) : 0;
-      const showConnector = index > 0 && !isIdeas;
-      const calculating =
-        showConnector && travelPending && item.travelFromPrevSeconds == null;
       const swipeEnabled = !canDrag && !isActive;
 
       const card = (
@@ -489,71 +501,81 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
         />
       );
 
-      const row = (
-        <View>
-          {showConnector ? (
-            <PlanTravelConnector
-              travelFromPrevSeconds={item.travelFromPrevSeconds}
-              bufferMinutes={bufferMinutes}
-              calculating={calculating}
-              editable={!calculating}
-              disabled={patchStop.isPending}
-              travelMode={item.travelModeOverride ?? item.travelModeUsed}
-              onTravelMinutesChange={(minutes) =>
-                applyStopPatch(item.id, {
-                  travelFromPrevSeconds: travelMinutesToSeconds(minutes),
-                })
-              }
-              onBufferMinutesChange={
-                prev
-                  ? (minutes) =>
-                      applyStopPatch(prev.id, {
-                        bufferAfterMinutes: clampBufferMinutes(minutes),
-                      })
-                  : undefined
-              }
-            />
-          ) : null}
-          {swipeEnabled ? (
-            <Swipeable
-              overshootRight={false}
-              friction={2}
-              renderRightActions={() => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('planDeleteStop')}
-                  onPress={() => requestDelete(item)}
-                  style={[styles.swipeDelete, { backgroundColor: danger }]}>
-                  <MaterialIcons name="delete-outline" size={22} color={onCta} />
-                  <Text style={[styles.swipeDeleteText, { color: onCta }]}>
-                    {t('planSwipeDelete')}
-                  </Text>
-                </Pressable>
-              )}>
-              {card}
-            </Swipeable>
-          ) : (
-            card
-          )}
-        </View>
+      const stopBody = swipeEnabled ? (
+        <Swipeable
+          overshootRight={false}
+          friction={2}
+          renderRightActions={() => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('planDeleteStop')}
+              onPress={() => requestDelete(item)}
+              style={[styles.swipeDelete, { backgroundColor: danger }]}>
+              <MaterialIcons name="delete-outline" size={22} color={onCta} />
+              <Text style={[styles.swipeDeleteText, { color: onCta }]}>
+                {t('planSwipeDelete')}
+              </Text>
+            </Pressable>
+          )}>
+          {card}
+        </Swipeable>
+      ) : (
+        card
       );
 
-      return dragOpts ? <ScaleDecorator>{row}</ScaleDecorator> : row;
+      // Card-only cell: travel legs are ItemSeparators so they never float with a drag.
+      return dragOpts ? <ScaleDecorator>{stopBody}</ScaleDecorator> : stopBody;
     },
     [
       applyStopPatch,
       canDrag,
       danger,
-      defaultBuffer,
       isIdeas,
       onCta,
       openStopSettings,
-      patchStop.isPending,
       requestDelete,
       selectedDay,
       setCameraFocusStop,
-      stops,
       t,
+    ],
+  );
+
+  const renderTravelSeparator = useCallback(
+    ({ leadingItem }: { leadingItem: TripStopDto | null }) => {
+      if (isIdeas || leadingItem == null) return null;
+      const index = stops.findIndex((s) => s.id === leadingItem.id);
+      if (index < 0 || index >= stops.length - 1) return null;
+      const next = stops[index + 1];
+      if (!next) return null;
+      const bufferMinutes = leadingItem.bufferAfterMinutes ?? defaultBuffer;
+      const calculating = travelPending && next.travelFromPrevSeconds == null;
+      return (
+        <PlanTravelConnector
+          travelFromPrevSeconds={next.travelFromPrevSeconds}
+          bufferMinutes={bufferMinutes}
+          calculating={calculating}
+          editable={!calculating}
+          disabled={patchStop.isPending}
+          travelMode={next.travelModeOverride ?? next.travelModeUsed}
+          onTravelMinutesChange={(minutes) =>
+            applyStopPatch(next.id, {
+              travelFromPrevSeconds: travelMinutesToSeconds(minutes),
+            })
+          }
+          onBufferMinutesChange={(minutes) =>
+            applyStopPatch(leadingItem.id, {
+              bufferAfterMinutes: clampBufferMinutes(minutes),
+            })
+          }
+        />
+      );
+    },
+    [
+      applyStopPatch,
+      defaultBuffer,
+      isIdeas,
+      patchStop.isPending,
+      stops,
       travelPending,
     ],
   );
@@ -668,10 +690,10 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
         ref={sheetRef}
         index={1}
         snapPoints={snapPoints}
-        onChange={setSheetIndex}
+        onChange={onSheetChange}
         enableDynamicSizing={false}
-        enablePanDownToClose={false}
-        enableOverDrag={false}
+        enablePanDownToClose={policy.enablePanDownToClose && !settingsOpen}
+        enableOverDrag
         // Content panning off: gorhom otherwise locks list scroll until full snap.
         enableContentPanningGesture={policy.enableContentPanningGesture}
         enableHandlePanningGesture={policy.enableHandlePanningGesture}
@@ -726,6 +748,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
                   keyboardShouldPersistTaps="handled"
                   keyExtractor={(item: { id: string }) => item.id}
                   ListHeaderComponent={overviewHeader}
+                  ItemSeparatorComponent={renderTravelSeparator as never}
                   ListEmptyComponent={
                     isOverview ? null : (
                       <Text style={[styles.empty, { color: muted }]}>—</Text>
@@ -752,6 +775,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
                   contentContainerStyle={styles.listContent}
                   keyboardShouldPersistTaps="handled"
                   ListHeaderComponent={overviewHeader}
+                  ItemSeparatorComponent={renderTravelSeparator as never}
                   ListEmptyComponent={
                     isOverview ? null : (
                       <Text style={[styles.empty, { color: muted }]}>—</Text>

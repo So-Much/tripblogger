@@ -31,6 +31,9 @@ export type MapPlaceDto = {
   reviewCount: number | null;
   /** Raw OSM opening_hours; null for db/photon/nominatim in v1. */
   openingHours: string | null;
+  phone: string | null;
+  website: string | null;
+  imageUrl: string | null;
 };
 
 const NEARBY_TTL_S = 7 * 24 * 60 * 60;
@@ -108,6 +111,9 @@ export class MapService {
         rating: null,
         reviewCount: null,
         openingHours: p.openingHours ?? null,
+        phone: null,
+        website: null,
+        imageUrl: null,
       })),
     ]);
 
@@ -131,6 +137,7 @@ export class MapService {
     limit = 15,
     biasLat?: number,
     biasLng?: number,
+    roadDistance = false,
   ): Promise<MapPlaceDto[]> {
     const trimmed = q.trim();
     if (trimmed.length < 2) return [];
@@ -142,8 +149,8 @@ export class MapService {
           ? { lat, lng }
           : null;
 
-    // v5: includes openingHours; composite ranking + bias in key.
-    const cacheKey = `map:search:v5:${trimmed.toLowerCase()}:${lat?.toFixed(2) ?? ''}:${lng?.toFixed(2) ?? ''}:${bias ? `${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : ''}:${limit}`;
+    // v6: haversine distance by default (no OSRM); enriched phone/website/imageUrl nulls.
+    const cacheKey = `map:search:v6:${trimmed.toLowerCase()}:${lat?.toFixed(2) ?? ''}:${lng?.toFixed(2) ?? ''}:${bias ? `${bias.lat.toFixed(2)},${bias.lng.toFixed(2)}` : ''}:${limit}:${roadDistance ? 1 : 0}`;
     const cached = await this.cacheGet<MapPlaceDto[]>(cacheKey);
     if (cached) return cached;
 
@@ -175,6 +182,9 @@ export class MapService {
         rating,
         reviewCount,
         openingHours: null,
+        phone: null,
+        website: null,
+        imageUrl: null,
       };
     });
 
@@ -203,6 +213,9 @@ export class MapService {
         rating: null,
         reviewCount: null,
         openingHours: null,
+        phone: null,
+        website: null,
+        imageUrl: null,
       }));
     } catch (err) {
       externalOk = false;
@@ -217,8 +230,7 @@ export class MapService {
     const merged = this.dedupePlaces([...dbPlaces, ...external]);
     // Composite ranking replaces the old distance-only sort.
     let result = rankPlaces(trimmed, merged, bias).slice(0, limit);
-    if (lat != null && lng != null) {
-      // Displayed distance stays GPS-origin road distance; ranking order is preserved.
+    if (roadDistance && lat != null && lng != null) {
       result = await this.applyRoadDistances(lat, lng, result);
     }
     if (externalOk) {
@@ -257,6 +269,9 @@ export class MapService {
         rating: null,
         reviewCount: null,
         openingHours: null,
+        phone: null,
+        website: null,
+        imageUrl: null,
       };
     } catch (err) {
       this.logger.warn(`Reverse failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -324,6 +339,9 @@ export class MapService {
           rating,
           reviewCount,
           openingHours: null,
+          phone: null,
+          website: null,
+          imageUrl: null,
         };
       })
       .filter((p) => (p.distanceM ?? Infinity) <= radiusKm * 1000)

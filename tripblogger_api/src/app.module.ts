@@ -19,9 +19,24 @@ import { TripsModule } from './modules/trips/trips.module';
 import { RedisModule } from './config/redis/redis.module';
 import { QueueModule } from './config/queue/queue.module';
 import { OtelModule } from './config/otel/otel.module';
+import { LoggerModule } from 'nestjs-pino';
+
+const pinoImports =
+  process.env.NODE_ENV === 'test'
+    ? []
+    : [
+        LoggerModule.forRoot({
+          pinoHttp: {
+            autoLogging: false,
+            transport:
+              process.env.LOG_HTTP_PRETTY === '1' ? { target: 'pino-pretty' } : undefined,
+          },
+        }),
+      ];
 
 @Module({
   imports: [
+    ...pinoImports,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -40,10 +55,8 @@ import { OtelModule } from './config/otel/otel.module';
     PostsModule,
     CompositionsModule,
     CommerceModule,
-    PlacesModule,
-    LocationsModule,
-    MapModule,
-    TripsModule,
+    ...(process.env.GEO_DELEGATE === '1' ? [] : [PlacesModule, LocationsModule, MapModule]),
+    ...(process.env.TRIP_DELEGATE === '1' ? [] : [TripsModule]),
   ],
   providers: [
     {

@@ -9,9 +9,10 @@ type Props = {
 };
 
 /** Compact circular pin used on the trip map for category-aware POI markers. */
-export function CategoryMapMarker({ category, selected = false, size = 32 }: Props) {
+export function CategoryMapMarker({ category, selected = false, size = 44 }: Props) {
   const visual = resolvePlaceCategoryVisual(category);
-  const iconSize = Math.round(size * 0.5);
+  const resolvedSize = selected ? Math.round(size * 1.14) : size;
+  const iconSize = Math.round(resolvedSize * 0.5);
   const borderW = selected ? 2.5 : 1.5;
 
   return (
@@ -20,17 +21,17 @@ export function CategoryMapMarker({ category, selected = false, size = 32 }: Pro
       style={[
         styles.wrap,
         {
-          width: size + 4,
-          height: size + 8,
+          width: resolvedSize + 4,
+          height: resolvedSize + 8,
         },
       ]}>
       <View
         style={[
           styles.bubble,
           {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
+            width: resolvedSize,
+            height: resolvedSize,
+            borderRadius: resolvedSize / 2,
             backgroundColor: visual.color,
             borderWidth: borderW,
             borderColor: selected ? '#FFFFFF' : `${visual.color}`,

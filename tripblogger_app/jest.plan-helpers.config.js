@@ -6,7 +6,19 @@ module.exports = {
   testMatch: ['**/*.spec.ts'],
   moduleFileExtensions: ['ts', 'js'],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true }],
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        isolatedModules: true,
+        tsconfig: {
+          module: 'commonjs',
+          esModuleInterop: true,
+          isolatedModules: true,
+          rootDir: '.',
+          types: ['jest', 'node'],
+        },
+      },
+    ],
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',

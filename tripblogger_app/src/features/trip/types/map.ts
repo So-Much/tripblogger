@@ -25,6 +25,21 @@ export type MapPlace = {
   reviewCount: number | null;
   /** Raw OSM opening_hours; null when unknown. */
   openingHours: string | null;
+  phone?: string | null;
+  website?: string | null;
+  imageUrl?: string | null;
+};
+
+export type PlaceReview = {
+  id: string;
+  rating: number;
+  body: string | null;
+  createdAt: string;
+};
+
+export type PlaceDetail = MapPlace & {
+  reviews: PlaceReview[];
+  isOpenNow: boolean | null;
 };
 
 export type TravelMode = 'car' | 'bike' | 'foot';
