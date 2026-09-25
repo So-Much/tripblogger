@@ -1,6 +1,7 @@
 import {
   Column,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -8,6 +9,7 @@ import {
 import { TripEntity } from './trip.entity';
 
 @Entity('trip_days')
+@Index(['tripId'])
 export class TripDayEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

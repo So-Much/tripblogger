@@ -1,6 +1,7 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity('place_outbox')
+@Index(['publishedAt'])
 export class PlaceOutboxEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -10,6 +11,9 @@ export type PlaceSource = 'osm' | 'user' | 'seed';
 export type PlaceStatus = 'active' | 'pending' | 'rejected';
 
 @Entity('places')
+@Index(['status', 'category'])
+@Index(['normalizedName'])
+@Index(['osmType', 'osmId'])
 export class PlaceEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
