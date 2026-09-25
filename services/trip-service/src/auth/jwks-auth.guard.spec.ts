@@ -4,12 +4,15 @@ import { JwksAuthGuard } from './jwks-auth.guard';
 import type { Jwks } from '@tripblogger/auth';
 
 const JWKS_URL = 'http://core/.well-known/jwks.json';
+const FRESH_TTL = 10 * 60 * 1000;
+const STALE_TTL = 30 * 60 * 1000;
 
 describe('JwksAuthGuard loadJwks', () => {
   let guard: JwksAuthGuard;
   let config: Pick<ConfigService, 'get'>;
   let warnSpy: jest.SpyInstance;
   let logSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
   let fetchMock: jest.Mock;
 
   beforeEach(() => {
@@ -20,6 +23,7 @@ describe('JwksAuthGuard loadJwks', () => {
 
     warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
     fetchMock = jest.fn();
     global.fetch = fetchMock;
@@ -33,6 +37,7 @@ describe('JwksAuthGuard loadJwks', () => {
     const cachedJwks: Jwks = { keys: [{ kty: 'RSA', kid: 'cached' }] as Jwks['keys'] };
     (guard as any).cachedJwks = cachedJwks;
     (guard as any).cachedAt = 0;
+    (guard as any).lastSuccessAt = Date.now() - 15 * 60 * 1000;
 
     fetchMock.mockImplementation((_url: string, opts?: { signal?: AbortSignal }) => {
       return new Promise((_resolve, reject) => {
@@ -58,6 +63,7 @@ describe('JwksAuthGuard loadJwks', () => {
     expect(elapsed).toBeLessThan(4000);
     expect(result).toBe(cachedJwks);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/JWKS fetch failed:/));
+    expect(warnSpy).toHaveBeenCalledWith('Using stale JWKS cache');
   });
 
   it('logs success on successful fetch', async () => {
@@ -70,13 +76,56 @@ describe('JwksAuthGuard loadJwks', () => {
     const result = await (guard as any).loadJwks();
 
     expect(result).toEqual(freshJwks);
-    expect(logSpy).toHaveBeenCalledWith(`JWKS loaded from ${JWKS_URL}`);
+    expect(logSpy).toHaveBeenCalledWith(`JWKS refreshed successfully from ${JWKS_URL}`);
   });
 
-  it('logs warn and returns cache on non-ok response', async () => {
+  it('uses fresh cache within 10min without refetch', async () => {
+    const cachedJwks: Jwks = { keys: [{ kty: 'RSA', kid: 'cached' }] as Jwks['keys'] };
+    (guard as any).cachedJwks = cachedJwks;
+    (guard as any).cachedAt = Date.now() - FRESH_TTL + 60_000;
+    (guard as any).lastSuccessAt = (guard as any).cachedAt;
+
+    const result = await (guard as any).loadJwks();
+
+    expect(result).toBe(cachedJwks);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses stale cache within 30min when Core is down', async () => {
     const cachedJwks: Jwks = { keys: [{ kty: 'RSA', kid: 'cached' }] as Jwks['keys'] };
     (guard as any).cachedJwks = cachedJwks;
     (guard as any).cachedAt = 0;
+    (guard as any).lastSuccessAt = Date.now() - 15 * 60 * 1000;
+
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await (guard as any).loadJwks();
+
+    expect(result).toBe(cachedJwks);
+    expect(warnSpy).toHaveBeenCalledWith('Using stale JWKS cache');
+  });
+
+  it('returns null when cache older than 30min and Core down', async () => {
+    const cachedJwks: Jwks = { keys: [{ kty: 'RSA', kid: 'cached' }] as Jwks['keys'] };
+    (guard as any).cachedJwks = cachedJwks;
+    (guard as any).cachedAt = 0;
+    (guard as any).lastSuccessAt = Date.now() - STALE_TTL - 60_000;
+
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await (guard as any).loadJwks();
+
+    expect(result).toBeNull();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'JWKS cache too old and Core unreachable - failing auth',
+    );
+  });
+
+  it('logs warn and returns stale cache on non-ok response', async () => {
+    const cachedJwks: Jwks = { keys: [{ kty: 'RSA', kid: 'cached' }] as Jwks['keys'] };
+    (guard as any).cachedJwks = cachedJwks;
+    (guard as any).cachedAt = 0;
+    (guard as any).lastSuccessAt = Date.now() - 5 * 60 * 1000;
 
     fetchMock.mockResolvedValue({ ok: false, status: 503 });
 
@@ -84,5 +133,6 @@ describe('JwksAuthGuard loadJwks', () => {
 
     expect(result).toBe(cachedJwks);
     expect(warnSpy).toHaveBeenCalledWith(`JWKS fetch returned 503 from ${JWKS_URL}`);
+    expect(warnSpy).toHaveBeenCalledWith('Using stale JWKS cache');
   });
 });

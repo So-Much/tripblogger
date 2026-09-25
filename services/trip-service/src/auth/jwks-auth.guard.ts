@@ -6,6 +6,7 @@ import { verifyAccessToken, type Jwks } from '@tripblogger/auth';
 export class JwksAuthGuard implements CanActivate {
   private cachedJwks: Jwks | null = null;
   private cachedAt = 0;
+  private lastSuccessAt = 0;
   private readonly logger = new Logger(JwksAuthGuard.name);
 
   constructor(private readonly config: ConfigService) {}
@@ -34,7 +35,10 @@ export class JwksAuthGuard implements CanActivate {
     if (!url) return null;
 
     const now = Date.now();
-    if (this.cachedJwks && now - this.cachedAt < 10 * 60 * 1000) {
+    const FRESH_TTL = 10 * 60 * 1000;
+    const STALE_TTL = 30 * 60 * 1000;
+
+    if (this.cachedJwks && now - this.cachedAt < FRESH_TTL) {
       return this.cachedJwks;
     }
 
@@ -44,18 +48,28 @@ export class JwksAuthGuard implements CanActivate {
       const res = await fetch(url, { signal: ctrl.signal });
       if (!res.ok) {
         this.logger.warn(`JWKS fetch returned ${res.status} from ${url}`);
-        return this.cachedJwks;
+        return this.returnStaleOrNull(now, STALE_TTL);
       }
       this.cachedJwks = (await res.json()) as Jwks;
       this.cachedAt = now;
-      this.logger.log(`JWKS loaded from ${url}`);
+      this.lastSuccessAt = now;
+      this.logger.log(`JWKS refreshed successfully from ${url}`);
       return this.cachedJwks;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`JWKS fetch failed: ${msg}`);
-      return this.cachedJwks;
+      return this.returnStaleOrNull(now, STALE_TTL);
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private returnStaleOrNull(now: number, staleTtl: number): Jwks | null {
+    if (this.cachedJwks && now - this.lastSuccessAt < staleTtl) {
+      this.logger.warn('Using stale JWKS cache');
+      return this.cachedJwks;
+    }
+    this.logger.error('JWKS cache too old and Core unreachable - failing auth');
+    return null;
   }
 }
