@@ -1,9 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { normalizeVi, type CreatePlaceDto, type PlaceSuggestionDto } from '@tripblogger/contracts';
+import type { DomainEvent } from '@tripblogger/events';
 import { PlaceEntity } from '../entities/place.entity';
 import { PlaceContributionEntity } from '../entities/place-contribution.entity';
+import { PlaceOutboxEntity } from '../entities/place-outbox.entity';
 import { TypesensePlaces } from '../search/typesense.client';
 
 const AUTO_APPROVE_AFTER = 3;
@@ -14,6 +17,7 @@ export class ContributeService {
     @InjectRepository(PlaceEntity) private readonly places: Repository<PlaceEntity>,
     @InjectRepository(PlaceContributionEntity)
     private readonly contributions: Repository<PlaceContributionEntity>,
+    @InjectRepository(PlaceOutboxEntity) private readonly outbox: Repository<PlaceOutboxEntity>,
     private readonly typesense: TypesensePlaces,
   ) {}
 
@@ -48,7 +52,10 @@ export class ContributeService {
         status: auto ? 'approved' : 'pending',
       }),
     );
-    if (auto) await this.typesense.upsertPlaces([place]);
+    if (auto) {
+      await this.typesense.upsertPlaces([place]);
+      await this.enqueuePlaceEvent('place.created', place);
+    }
     return { place, contribution, pending: !auto };
   }
 
@@ -84,6 +91,7 @@ export class ContributeService {
           place.status = 'active';
           await this.places.save(place);
           await this.typesense.upsertPlaces([place]);
+          await this.enqueuePlaceEvent('place.created', place);
         } else {
           await this.applyEdit(place, JSON.parse(row.payloadJson) as PlaceSuggestionDto);
         }
@@ -104,6 +112,28 @@ export class ContributeService {
     if (dto.category !== undefined) place.category = dto.category;
     place.version += 1;
     await this.places.save(place);
-    if (place.status === 'active') await this.typesense.upsertPlaces([place]);
+    if (place.status === 'active') {
+      await this.typesense.upsertPlaces([place]);
+      await this.enqueuePlaceEvent('place.updated', place);
+    }
+  }
+
+  private async enqueuePlaceEvent(
+    type: 'place.created' | 'place.updated',
+    place: PlaceEntity,
+  ): Promise<void> {
+    const event: DomainEvent<{ placeId: string; name: string; category: string }> = {
+      id: randomUUID(),
+      type,
+      occurredAt: new Date().toISOString(),
+      payload: { placeId: place.id, name: place.name, category: place.category },
+    };
+    await this.outbox.save(
+      this.outbox.create({
+        eventType: type,
+        payloadJson: JSON.stringify(event),
+        publishedAt: null,
+      }),
+    );
   }
 }

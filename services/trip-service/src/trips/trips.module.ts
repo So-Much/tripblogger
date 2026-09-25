@@ -25,6 +25,6 @@ import { UserTravelBudgetEntity } from '../budget/user-travel-budget.entity';
   ],
   controllers: [TripsController, BudgetController],
   providers: [TripsService, TravelLegsService, GeoRoutingClient, JwksAuthGuard, RolesGuard, ClaimStatusesGuard],
-  exports: [TripsService],
+  exports: [TripsService, GeoRoutingClient],
 })
 export class TripsModule {}

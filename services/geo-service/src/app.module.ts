@@ -22,6 +22,7 @@ import { InternalController } from './internal/internal.controller';
 import { CompatController } from './aliases/compat.controller';
 import { JwksAuthGuard } from './auth/jwks-auth.guard';
 import { ClaimStatusesGuard, RolesGuard } from './auth/claim-statuses.guard';
+import { OutboxPollerService } from './outbox/outbox-poller.service';
 
 const entities = [
   PlaceEntity,
@@ -65,6 +66,7 @@ const entities = [
     PhotonClient,
     OsrmRoutingProvider,
     ContributeService,
+    OutboxPollerService,
     JwksAuthGuard,
     ClaimStatusesGuard,
     RolesGuard,

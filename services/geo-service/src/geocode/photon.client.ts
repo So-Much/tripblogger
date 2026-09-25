@@ -60,4 +60,16 @@ export class PhotonClient {
       imageUrl: null,
     };
   }
+
+  async healthCheck(): Promise<void> {
+    const base = this.config.get<string>('PHOTON_URL') ?? 'http://127.0.0.1:2322';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    try {
+      const res = await fetch(`${base.replace(/\/$/, '')}/api`, { signal: ctrl.signal });
+      if (!res.ok) throw new Error(`Photon health ${res.status}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }

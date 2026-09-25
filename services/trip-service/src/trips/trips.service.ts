@@ -347,77 +347,91 @@ export class TripsService {
     dto: AddStopDto,
     expectedVersion?: number,
   ): Promise<TripMutationResult> {
-    const trip = await this.requireOwnedTrip(userId, tripId);
-    this.assertVersion(trip, expectedVersion);
+    let dayIdForLegs: string | null = null;
 
-    if (dto.tripDayId) {
-      const day = await this.daysRepo.findOne({
-        where: { id: dto.tripDayId, tripId },
+    await this.tripsRepo.manager.transaction(async (em) => {
+      const tripsRepo = em.getRepository(TripEntity);
+      const daysRepo = em.getRepository(TripDayEntity);
+      const stopsRepo = em.getRepository(TripStopEntity);
+      const tagsRepo = em.getRepository(TripStopTagEntity);
+
+      const trip = await tripsRepo.findOne({ where: { id: tripId } });
+      if (!trip || trip.userId !== userId) {
+        throw new NotFoundException('Trip not found');
+      }
+      this.assertVersion(trip, expectedVersion);
+
+      if (dto.tripDayId) {
+        const day = await daysRepo.findOne({
+          where: { id: dto.tripDayId, tripId },
+        });
+        if (!day) {
+          throw new NotFoundException('Trip day not found');
+        }
+      }
+
+      const siblings = (
+        await stopsRepo.find({
+          where: { tripId },
+          order: { position: 'ASC' },
+        })
+      ).filter((s) =>
+        dto.tripDayId == null ? s.tripDayId == null : s.tripDayId === dto.tripDayId,
+      );
+
+      const insertAt =
+        dto.position !== undefined
+          ? Math.min(Math.max(0, dto.position), siblings.length)
+          : siblings.length;
+
+      for (const s of siblings) {
+        if (s.position >= insertAt) {
+          s.position += 1;
+        }
+      }
+      if (siblings.length) {
+        await stopsRepo.save(siblings);
+      }
+
+      const placeId =
+        dto.place.source === 'db' && UUID_RE.test(dto.place.id) ? dto.place.id : null;
+
+      const stop = stopsRepo.create({
+        tripId,
+        tripDayId: dto.tripDayId ?? null,
+        position: insertAt,
+        name: dto.place.name,
+        address: dto.place.address ?? null,
+        lat: String(dto.place.lat),
+        lng: String(dto.place.lng),
+        category: dto.place.category ?? null,
+        externalPlaceId: dto.place.id,
+        openingHoursRaw: dto.place.openingHours ?? null,
+        placeId,
+        durationMinutes: dto.durationMinutes ?? 60,
+        bufferAfterMinutes: null,
+        travelModeOverride: dto.travelModeOverride ?? null,
+        anchorTime: dto.anchorTime ?? null,
+        priority: dto.priority ?? 'nice',
+        status: 'todo',
+        travelFromPrevSeconds: null,
+        travelFromPrevDistanceM: null,
+        travelModeUsed: null,
       });
-      if (!day) {
-        throw new NotFoundException('Trip day not found');
+      const saved = await stopsRepo.save(stop);
+
+      if (dto.tags?.length) {
+        await this.syncTags(saved.id, dto.tags, tagsRepo);
       }
-    }
 
-    const siblings = (
-      await this.stopsRepo.find({
-        where: { tripId },
-        order: { position: 'ASC' },
-      })
-    ).filter((s) =>
-      dto.tripDayId == null ? s.tripDayId == null : s.tripDayId === dto.tripDayId,
-    );
-
-    const insertAt =
-      dto.position !== undefined
-        ? Math.min(Math.max(0, dto.position), siblings.length)
-        : siblings.length;
-
-    for (const s of siblings) {
-      if (s.position >= insertAt) {
-        s.position += 1;
-      }
-    }
-    if (siblings.length) {
-      await this.stopsRepo.save(siblings);
-    }
-
-    const placeId =
-      dto.place.source === 'db' && UUID_RE.test(dto.place.id) ? dto.place.id : null;
-
-    const stop = this.stopsRepo.create({
-      tripId,
-      tripDayId: dto.tripDayId ?? null,
-      position: insertAt,
-      name: dto.place.name,
-      address: dto.place.address ?? null,
-      lat: String(dto.place.lat),
-      lng: String(dto.place.lng),
-      category: dto.place.category ?? null,
-      externalPlaceId: dto.place.id,
-      openingHoursRaw: dto.place.openingHours ?? null,
-      placeId,
-      durationMinutes: dto.durationMinutes ?? 60,
-      bufferAfterMinutes: null,
-      travelModeOverride: dto.travelModeOverride ?? null,
-      anchorTime: dto.anchorTime ?? null,
-      priority: dto.priority ?? 'nice',
-      status: 'todo',
-      travelFromPrevSeconds: null,
-      travelFromPrevDistanceM: null,
-      travelModeUsed: null,
+      trip.version = trip.version + 1;
+      await tripsRepo.save(trip);
+      dayIdForLegs = saved.tripDayId;
     });
-    const saved = await this.stopsRepo.save(stop);
 
-    if (dto.tags?.length) {
-      await this.syncTags(saved.id, dto.tags);
-    }
-
-    trip.version = trip.version + 1;
-    await this.tripsRepo.save(trip);
-
-    if (saved.tripDayId) {
-      await this.recomputeLegsForDay(trip, saved.tripDayId);
+    if (dayIdForLegs) {
+      const trip = await this.requireOwnedTrip(userId, tripId);
+      await this.recomputeLegsForDay(trip, dayIdForLegs);
     }
 
     const detail = await this.findOne(userId, tripId);
@@ -430,60 +444,76 @@ export class TripsService {
     stopId: string,
     dto: PatchStopDto,
   ): Promise<TripMutationResult> {
-    const trip = await this.requireOwnedTrip(userId, tripId);
-    const stop = await this.stopsRepo.findOne({ where: { id: stopId, tripId } });
-    if (!stop) {
-      throw new NotFoundException('Stop not found');
-    }
+    let recomputeDayId: string | null = null;
 
-    const modeChanged =
-      dto.travelModeOverride !== undefined &&
-      dto.travelModeOverride !== stop.travelModeOverride;
+    await this.tripsRepo.manager.transaction(async (em) => {
+      const tripsRepo = em.getRepository(TripEntity);
+      const stopsRepo = em.getRepository(TripStopEntity);
+      const tagsRepo = em.getRepository(TripStopTagEntity);
 
-    if (dto.durationMinutes !== undefined) stop.durationMinutes = dto.durationMinutes;
-    if (dto.bufferAfterMinutes !== undefined) {
-      stop.bufferAfterMinutes = dto.bufferAfterMinutes;
-    }
-    if (dto.travelFromPrevSeconds !== undefined) {
-      stop.travelFromPrevSeconds = dto.travelFromPrevSeconds;
-    }
-    if (dto.travelModeOverride !== undefined) {
-      stop.travelModeOverride = dto.travelModeOverride;
-    }
-    if (dto.anchorTime !== undefined) stop.anchorTime = dto.anchorTime;
-    if (dto.priority !== undefined) stop.priority = dto.priority;
-    if (dto.status !== undefined) stop.status = dto.status;
-    if (dto.note !== undefined) stop.note = dto.note;
-    if (dto.estimatedCostAmount !== undefined)
-      stop.estimatedCostAmount = dto.estimatedCostAmount != null
-        ? String(dto.estimatedCostAmount)
-        : null;
-    if (dto.estimatedCostCurrency !== undefined)
-      stop.estimatedCostCurrency = dto.estimatedCostCurrency;
-    if (dto.costItems !== undefined) {
-      const items = (dto.costItems ?? []).map((item) => ({
-        id: item.id,
-        label: item.label.trim(),
-        unitAmount: item.unitAmount,
-        quantity: item.quantity,
-      }));
-      stop.costItemsJson = serializeCostItems(items);
-      const total = sumCostItems(items);
-      stop.estimatedCostAmount = total > 0 ? String(total) : null;
-      stop.estimatedCostCurrency = total > 0 ? (stop.estimatedCostCurrency ?? 'VND') : null;
-    }
+      const trip = await tripsRepo.findOne({ where: { id: tripId } });
+      if (!trip || trip.userId !== userId) {
+        throw new NotFoundException('Trip not found');
+      }
+      const stop = await stopsRepo.findOne({ where: { id: stopId, tripId } });
+      if (!stop) {
+        throw new NotFoundException('Stop not found');
+      }
 
-    await this.stopsRepo.save(stop);
+      const modeChanged =
+        dto.travelModeOverride !== undefined &&
+        dto.travelModeOverride !== stop.travelModeOverride;
 
-    if (dto.tags !== undefined) {
-      await this.syncTags(stop.id, dto.tags);
-    }
+      if (dto.durationMinutes !== undefined) stop.durationMinutes = dto.durationMinutes;
+      if (dto.bufferAfterMinutes !== undefined) {
+        stop.bufferAfterMinutes = dto.bufferAfterMinutes;
+      }
+      if (dto.travelFromPrevSeconds !== undefined) {
+        stop.travelFromPrevSeconds = dto.travelFromPrevSeconds;
+      }
+      if (dto.travelModeOverride !== undefined) {
+        stop.travelModeOverride = dto.travelModeOverride;
+      }
+      if (dto.anchorTime !== undefined) stop.anchorTime = dto.anchorTime;
+      if (dto.priority !== undefined) stop.priority = dto.priority;
+      if (dto.status !== undefined) stop.status = dto.status;
+      if (dto.note !== undefined) stop.note = dto.note;
+      if (dto.estimatedCostAmount !== undefined)
+        stop.estimatedCostAmount = dto.estimatedCostAmount != null
+          ? String(dto.estimatedCostAmount)
+          : null;
+      if (dto.estimatedCostCurrency !== undefined)
+        stop.estimatedCostCurrency = dto.estimatedCostCurrency;
+      if (dto.costItems !== undefined) {
+        const items = (dto.costItems ?? []).map((item) => ({
+          id: item.id,
+          label: item.label.trim(),
+          unitAmount: item.unitAmount,
+          quantity: item.quantity,
+        }));
+        stop.costItemsJson = serializeCostItems(items);
+        const total = sumCostItems(items);
+        stop.estimatedCostAmount = total > 0 ? String(total) : null;
+        stop.estimatedCostCurrency = total > 0 ? (stop.estimatedCostCurrency ?? 'VND') : null;
+      }
 
-    trip.version = trip.version + 1;
-    await this.tripsRepo.save(trip);
+      await stopsRepo.save(stop);
 
-    if (modeChanged && stop.tripDayId) {
-      await this.recomputeLegsForDay(trip, stop.tripDayId);
+      if (dto.tags !== undefined) {
+        await this.syncTags(stop.id, dto.tags, tagsRepo);
+      }
+
+      trip.version = trip.version + 1;
+      await tripsRepo.save(trip);
+
+      if (modeChanged && stop.tripDayId) {
+        recomputeDayId = stop.tripDayId;
+      }
+    });
+
+    if (recomputeDayId) {
+      const trip = await this.requireOwnedTrip(userId, tripId);
+      await this.recomputeLegsForDay(trip, recomputeDayId);
     }
 
     const detail = await this.findOne(userId, tripId);
@@ -495,33 +525,44 @@ export class TripsService {
     tripId: string,
     stopId: string,
   ): Promise<TripMutationResult> {
-    const trip = await this.requireOwnedTrip(userId, tripId);
-    const stop = await this.stopsRepo.findOne({ where: { id: stopId, tripId } });
-    if (!stop) {
-      throw new NotFoundException('Stop not found');
-    }
+    let dayId: string | null = null;
 
-    const dayId = stop.tripDayId;
-    await this.stopsRepo.remove(stop);
+    await this.tripsRepo.manager.transaction(async (em) => {
+      const tripsRepo = em.getRepository(TripEntity);
+      const stopsRepo = em.getRepository(TripStopEntity);
 
-    const siblings = (
-      await this.stopsRepo.find({
-        where: { tripId },
-        order: { position: 'ASC' },
-      })
-    ).filter((s) => (dayId == null ? s.tripDayId == null : s.tripDayId === dayId));
+      const trip = await tripsRepo.findOne({ where: { id: tripId } });
+      if (!trip || trip.userId !== userId) {
+        throw new NotFoundException('Trip not found');
+      }
+      const stop = await stopsRepo.findOne({ where: { id: stopId, tripId } });
+      if (!stop) {
+        throw new NotFoundException('Stop not found');
+      }
 
-    siblings.forEach((s, i) => {
-      s.position = i;
+      dayId = stop.tripDayId;
+      await stopsRepo.remove(stop);
+
+      const siblings = (
+        await stopsRepo.find({
+          where: { tripId },
+          order: { position: 'ASC' },
+        })
+      ).filter((s) => (dayId == null ? s.tripDayId == null : s.tripDayId === dayId));
+
+      siblings.forEach((s, i) => {
+        s.position = i;
+      });
+      if (siblings.length) {
+        await stopsRepo.save(siblings);
+      }
+
+      trip.version = trip.version + 1;
+      await tripsRepo.save(trip);
     });
-    if (siblings.length) {
-      await this.stopsRepo.save(siblings);
-    }
-
-    trip.version = trip.version + 1;
-    await this.tripsRepo.save(trip);
 
     if (dayId) {
+      const trip = await this.requireOwnedTrip(userId, tripId);
       await this.recomputeLegsForDay(trip, dayId);
     }
 
@@ -640,18 +681,22 @@ export class TripsService {
     }
   }
 
-  private async syncTags(stopId: string, tags: string[]): Promise<void> {
-    await this.tagsRepo.delete({ tripStopId: stopId });
+  private async syncTags(
+    stopId: string,
+    tags: string[],
+    tagsRepo: Repository<TripStopTagEntity> = this.tagsRepo,
+  ): Promise<void> {
+    await tagsRepo.delete({ tripStopId: stopId });
     const unique = [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
     if (!unique.length) return;
     const rows = unique.map((tag) =>
-      this.tagsRepo.create({
+      tagsRepo.create({
         tripStopId: stopId,
         tag,
         isSystem: SYSTEM_TAGS.has(tag),
       }),
     );
-    await this.tagsRepo.save(rows);
+    await tagsRepo.save(rows);
   }
 
   private assertVersion(trip: TripEntity, expectedVersion?: number) {

@@ -128,4 +128,18 @@ export class TypesensePlaces implements OnModuleInit {
     });
     return (res.hits ?? []).map((h) => String((h.document as { id: string }).id));
   }
+
+  async healthCheck(): Promise<void> {
+    const host = this.config.get<string>('TYPESENSE_HOST') ?? '127.0.0.1';
+    const port = this.config.get<number>('TYPESENSE_PORT') ?? 8108;
+    const url = `http://${host}:${port}/health`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) throw new Error(`Typesense health ${res.status}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }

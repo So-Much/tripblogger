@@ -66,27 +66,58 @@ export class GeoRoutingClient {
     if (this.isOpen()) {
       return points.slice(1).map(() => ({ durationS: null, distanceM: null }));
     }
+
     const base = this.config.get<string>('GEO_BASE_URL') ?? 'http://127.0.0.1:3003';
     const token = this.config.get<string>('GEO_INTERNAL_TOKEN') ?? '';
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 4000);
-    try {
-      const res = await fetch(`${base.replace(/\/$/, '')}/api/internal/routing/table-legs`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-internal-token': token },
-        body: JSON.stringify({ points, mode }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error(`geo ${res.status}`);
-      this.record(true);
-      const body = (await res.json()) as { legs: Leg[] };
-      return body.legs ?? [];
-    } catch (err) {
-      this.record(false);
-      throw err;
-    } finally {
-      clearTimeout(timer);
+    const url = `${base.replace(/\/$/, '')}/api/internal/routing/table-legs`;
+    const body = JSON.stringify({ points, mode });
+
+    const delays = [0, 500, 1000];
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        this.logger.log(`Retry attempt ${attempt + 1} for Geo routing`);
+      }
+
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-internal-token': token },
+          body,
+          signal: ctrl.signal,
+        });
+
+        if (res.status >= 400 && res.status < 500) {
+          throw new Error(`geo ${res.status}`);
+        }
+
+        if (!res.ok) {
+          lastError = new Error(`geo ${res.status}`);
+          continue;
+        }
+
+        this.record(true);
+        const result = (await res.json()) as { legs: Leg[] };
+        return result.legs ?? [];
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (/^geo 4\d\d$/.test(lastError.message)) {
+          throw lastError;
+        }
+        if (err instanceof Error && err.name === 'AbortError') {
+          this.logger.warn(`Geo routing timeout on attempt ${attempt + 1}`);
+        }
+      } finally {
+        clearTimeout(timer);
+      }
     }
+
+    this.record(false);
+    throw lastError ?? new Error('All retry attempts failed');
   }
 
   private record(ok: boolean) {
@@ -98,5 +129,11 @@ export class GeoRoutingClient {
 
   private isOpen() {
     return this.openedAt > 0 && Date.now() - this.openedAt < 60_000;
+  }
+
+  async healthCheck(): Promise<void> {
+    if (this.isOpen()) {
+      throw new Error('Circuit breaker open');
+    }
   }
 }
