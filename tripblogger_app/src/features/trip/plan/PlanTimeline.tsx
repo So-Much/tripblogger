@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -26,6 +27,7 @@ import DraggableFlatList, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { tripKeys } from '../hooks/trip-query-keys';
 import { useTripDetail } from '../hooks/useTripDetail';
 import {
@@ -66,7 +68,11 @@ import {
 /** Grabber padding until handle onLayout; gorhom handle is ~24px. */
 const HANDLE_HEIGHT_FALLBACK = 24;
 
-function PlanVisibleListFrame({
+function PlanVisibleListFrameWeb({ children }: { children: ReactNode }) {
+  return <View style={[styles.listFrame, styles.listFrameWeb]}>{children}</View>;
+}
+
+function PlanVisibleListFrameNative({
   containerHeight,
   handleHeight,
   children,
@@ -87,6 +93,15 @@ function PlanVisibleListFrame({
       {children}
     </Animated.View>
   );
+}
+
+function PlanVisibleListFrame(props: {
+  containerHeight: number;
+  handleHeight: number;
+  children: ReactNode;
+}) {
+  if (Platform.OS === 'web') return <PlanVisibleListFrameWeb>{props.children}</PlanVisibleListFrameWeb>;
+  return <PlanVisibleListFrameNative {...props} />;
 }
 
 type Props = {
@@ -331,14 +346,15 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
   const bottomInset = sheetChrome.bottomInset;
   const snapPoints = sheetChrome.snapPoints;
   const sheetContainerHeight = Math.max(0, windowHeight - bottomInset);
+  const behavior = useClientBehavior();
   const settingsOpen = detailStopId != null;
-  const gesturesEnabled = planTabActive && !searchOverlay;
+  const gesturesEnabled = behavior.dragSheets && planTabActive && !searchOverlay;
   const policy = planSheetGesturePolicy({
     sheetIndex,
     dragging,
     gesturesEnabled,
   });
-  const canDrag = policy.canDragReorder && !settingsOpen;
+  const canDrag = policy.canDragReorder && !settingsOpen && behavior.longPressReorder;
   const wantedHost: PlanSheetHostKind = wantedPlanSheetHost({
     tabKind: resolvedSelection.kind,
     listKind: policy.listKind,
@@ -470,7 +486,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
       dragOpts?: { drag: () => void; isActive: boolean },
     ) => {
       const isActive = dragOpts?.isActive ?? false;
-      const swipeEnabled = !canDrag && !isActive;
+      const swipeEnabled = behavior.swipeToDelete && !canDrag && !isActive;
 
       const card = (
         <PlanStopCard
@@ -528,6 +544,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
     },
     [
       applyStopPatch,
+      behavior.swipeToDelete,
       canDrag,
       danger,
       isIdeas,
@@ -856,6 +873,10 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listFrame: {
     overflow: 'hidden',
+  },
+  listFrameWeb: {
+    flex: 1,
+    minHeight: 0,
   },
   chipsSlot: {
     flexGrow: 0,

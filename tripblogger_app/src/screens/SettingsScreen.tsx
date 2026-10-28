@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -46,6 +46,8 @@ function OptionPill({
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const wideSettings = windowWidth >= 720;
   const router = useRouter();
   const { t } = useI18n();
 
@@ -225,6 +227,7 @@ export function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
+          wideSettings ? styles.contentWide : null,
           {
             paddingTop: Math.max(insets.top, 10),
             paddingBottom: Math.max(insets.bottom, 14) + 14,
@@ -237,7 +240,7 @@ export function SettingsScreen() {
           {t('settingsTitle')}
         </ThemedText>
         <ThemedText style={{ color: muted }}>{t('settingsSubtitle')}</ThemedText>
-        <View style={[styles.profileHeaderCard, { borderColor: border, backgroundColor: card }]}>
+        <View style={[styles.profileHeaderCard, wideSettings && styles.profileHeaderRow, { borderColor: border, backgroundColor: card }]}>
           {isMember ? (
             <>
               <View style={[styles.avatarCircle, { borderColor: border }]}>
@@ -403,16 +406,23 @@ export function SettingsScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  content: { gap: 12 },
+  content: { gap: 16, width: '100%' },
+  contentWide: { maxWidth: 880, alignSelf: 'center' },
   prefsLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8 },
   title: { fontSize: 30, lineHeight: 36 },
   profileHeaderCard: {
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 6,
+    paddingVertical: 16,
+    gap: 8,
     alignItems: 'center',
+  },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 16,
   },
   statusBadgesWrap: { alignItems: 'center', gap: 6, marginTop: 4, width: '100%' },
   avatarCircle: {

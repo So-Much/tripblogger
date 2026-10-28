@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { PLAN_NAV_BAR_OFFSET } from '../plan/plan-sheet-layout';
 import { useMapStore } from '../store/map.store';
 import { usePlanStore } from '../store/plan.store';
@@ -31,6 +32,7 @@ export function TripBottomNav({ onExplorePress }: Props) {
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const tint = useThemeColor({}, 'tint');
+  const pointer = !useClientBehavior().dragSheets;
   const bottomTab = useMapStore((s) => s.bottomTab);
   const setBottomTab = useMapStore((s) => s.setBottomTab);
   const setActiveSheet = useMapStore((s) => s.setActiveSheet);
@@ -38,21 +40,22 @@ export function TripBottomNav({ onExplorePress }: Props) {
   return (
     <View
       style={[
-        styles.bar,
-        {
-          backgroundColor: surface,
-          borderTopColor: border,
-          // Keep content column height aligned with PLAN_NAV_BAR_OFFSET (safe area is extra).
-          minHeight: PLAN_NAV_BAR_OFFSET + Math.max(insets.bottom, 8),
-          paddingBottom: Math.max(insets.bottom, 8),
-        },
+        pointer ? [styles.barDock, { top: insets.top + 10 }] : styles.bar,
+        pointer
+          ? { backgroundColor: surface, borderColor: border }
+          : {
+              backgroundColor: surface,
+              borderTopColor: border,
+              minHeight: PLAN_NAV_BAR_OFFSET + Math.max(insets.bottom, 8),
+              paddingBottom: Math.max(insets.bottom, 8),
+            },
       ]}>
       {TABS.map((tab) => {
         const active = bottomTab === tab.id;
         return (
           <Pressable
             key={tab.id}
-            style={styles.item}
+            style={pointer ? styles.itemDock : styles.item}
             onPress={() => {
               setBottomTab(tab.id);
               if (tab.id === 'explore') {
@@ -65,7 +68,7 @@ export function TripBottomNav({ onExplorePress }: Props) {
                 usePlanStore.getState().revealPlanSheet();
               }
             }}>
-            <MaterialIcons name={tab.icon} size={24} color={active ? tint : muted} />
+            <MaterialIcons name={tab.icon} size={pointer ? 20 : 24} color={active ? tint : muted} />
             <Text style={[styles.label, { color: active ? tint : muted }]}>
               {t(tab.labelKey as 'mapTabExplore' | 'mapTabPlan' | 'mapTabContribute')}
             </Text>
@@ -90,10 +93,29 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     zIndex: 40,
   },
+  barDock: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    zIndex: 40,
+    gap: 4,
+  },
   item: {
     flex: 1,
     alignItems: 'center',
     gap: 2,
+  },
+  itemDock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
   },
   label: {
     fontSize: 11,

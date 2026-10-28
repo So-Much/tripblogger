@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { useMapStore } from '../store/map.store';
 
 type Props = {
@@ -20,6 +21,7 @@ export function MapSearchBar({ loading }: Props) {
   const setSearchOpen = useMapStore((s) => s.setSearchOpen);
   const setActiveSheet = useMapStore((s) => s.setActiveSheet);
   const label = t('mapSearchPlaceholder');
+  const pointer = !useClientBehavior().dragSheets;
 
   const openFocus = () => {
     setSearchOpen(true);
@@ -28,7 +30,7 @@ export function MapSearchBar({ loading }: Props) {
 
   return (
     <View
-      style={[styles.wrap, { paddingTop: insets.top + 8, paddingLeft: 52 }]}
+      style={[styles.wrap, { paddingTop: insets.top + 8, paddingLeft: 56, paddingRight: pointer ? 280 : 12 }]}
       pointerEvents="box-none">
       <Pressable
         onPress={openFocus}

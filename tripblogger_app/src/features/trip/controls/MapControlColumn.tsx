@@ -2,6 +2,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { useMapStore } from '../store/map.store';
 
 type FabProps = {
@@ -15,6 +16,8 @@ export function MapControlColumn({ onRecenter, onResetNorth }: FabProps) {
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
   const tint = useThemeColor({}, 'tint');
+  const panel = useClientBehavior().sidePanelWidth;
+  const planOpen = useMapStore((s) => s.bottomTab) === 'plan';
   const followMode = useMapStore((s) => s.followMode);
   const cycleFollowMode = useMapStore((s) => s.cycleFollowMode);
   const bearing = useMapStore((s) => s.bearing);
@@ -28,7 +31,9 @@ export function MapControlColumn({ onRecenter, onResetNorth }: FabProps) {
         : 'location-searching';
 
   return (
-    <View style={styles.column} pointerEvents="box-none">
+    <View
+      style={[styles.column, panel > 0 ? { right: (planOpen ? panel : 0) + 20, bottom: 24 } : null]}
+      pointerEvents="box-none">
       <Pressable
         onPress={toggleMapStyle}
         style={[styles.fab, { backgroundColor: surface, borderColor: border }]}

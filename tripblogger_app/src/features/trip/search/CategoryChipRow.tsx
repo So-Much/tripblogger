@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { useMapStore } from '../store/map.store';
 import { POI_CATEGORIES, type PoiCategoryId } from '../types/map';
 
@@ -25,6 +26,7 @@ const CATEGORY_AFTER_PLACE_CLOSE_MS = 64;
 export function CategoryChipRow({ loading }: Props) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
+  const panel = useClientBehavior().sidePanelWidth;
   const surface = useThemeColor({}, 'surface');
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
@@ -74,7 +76,9 @@ export function CategoryChipRow({ loading }: Props) {
   };
 
   return (
-    <View style={[styles.wrap, { top: insets.top + 62 }]} pointerEvents="box-none">
+    <View
+      style={[styles.wrap, { top: insets.top + 68, paddingLeft: panel > 0 ? 12 : 0, paddingRight: panel > 0 ? 12 : 0 }]}
+      pointerEvents="box-none">
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}

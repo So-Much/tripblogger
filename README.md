@@ -168,7 +168,33 @@ tripblogger/
 
 ## Quick start
 
-Có hai cách chạy. App luôn gọi **một** base URL `http://localhost:3000/api`.
+App luôn gọi **một** base URL `http://localhost:3000/api`.
+
+### Khởi động hàng ngày
+
+Khi Docker, `.env.compose` và dữ liệu đã có sẵn:
+
+```powershell
+cd D:\Work\Projects\tripblogger
+docker compose --env-file .env.compose --profile infra --profile apps up -d
+```
+
+Đợi Core, Geo và Trip healthy, rồi mở app. Trên web, trong cửa sổ Metro nhấn `w`.
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_app
+npm run start
+```
+
+- API: `http://localhost:3000/api/health`
+- Web: `http://localhost:8081`
+- Traefik: `http://localhost:8080`
+
+`/api/map` và `/api/trips` cần đăng nhập (không có token sẽ 401). Seed user: username `much`, mật khẩu `12345678`. Địa điểm seed nằm ở Đà Nẵng, không nằm trong bán kính 2 km quanh Sài Gòn.
+
+### Lần đầu
+
+Có hai cách chạy.
 
 ### A. Một process (hành vi cũ)
 
@@ -220,12 +246,14 @@ Kiểm tra: `http://localhost:3000/api/health` và dashboard Traefik `http://loc
 
 ```powershell
 cd D:\Work\Projects\tripblogger\tripblogger_app
+copy .env.example .env
 npm install
-# .env ← EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/api
 npm run start
 ```
 
-> Trên thiết bị thật, app **tự rewrite `localhost` → IP Metro** khi development. Simulator/emulator dùng `localhost` ổn.
+`.env` cần `EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/api`. Nhấn `w` để mở web. Trình duyệt rộng từ 1100px dùng thanh trên và bố cục hai cột. Dưới 720px giữ giao diện điện thoại. Ở giữa là tablet.
+
+Trên thiết bị thật, app tự đổi `localhost` sang IP Metro khi development. Máy ảo dùng `localhost`. Camera trên web xin quyền của máy đang mở trình duyệt, qua `localhost` hoặc HTTPS.
 
 | Package | README |
 |---------|--------|

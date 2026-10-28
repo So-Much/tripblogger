@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import { getStoredItem, setStoredItem } from '@/src/platform/stored-item';
 
 export type AppLanguage = 'vi' | 'en';
 export type ThemePreference = 'light' | 'dark' | 'system';
@@ -18,7 +18,7 @@ interface SettingsState {
 type PersistedSettings = Pick<SettingsState, 'language' | 'themePreference'>;
 
 async function persist(settings: PersistedSettings) {
-  await SecureStore.setItemAsync(SETTINGS_KEY, JSON.stringify(settings));
+  await setStoredItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -36,7 +36,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hydrate: async () => {
     if (get().hydrated) return;
     try {
-      const raw = await SecureStore.getItemAsync(SETTINGS_KEY);
+      const raw = await getStoredItem(SETTINGS_KEY);
       if (!raw) {
         set({ hydrated: true });
         return;

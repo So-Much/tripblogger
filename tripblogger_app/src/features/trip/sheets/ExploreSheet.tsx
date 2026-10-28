@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { LocationTypeIcon } from '@/src/components/locations/LocationTypeIcon';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { resolvePlaceCategoryVisual } from '@/src/utils/location-type-display';
 import { PlaceRatingLabel } from '../components/PlaceRatingLabel';
 import { PLAN_NAV_BAR_OFFSET } from '../plan/plan-sheet-layout';
@@ -43,6 +44,7 @@ function isRenderablePlace(place: MapPlace | null | undefined): place is MapPlac
 /** Draggable explore panel — snap heights + drag down to dismiss (Expo Go safe). */
 export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
   const { t, language } = useI18n();
+  const behavior = useClientBehavior();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const surface = useThemeColor({}, 'surface');
@@ -54,6 +56,7 @@ export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
   const category = useMapStore((s) => s.selectedCategory);
   const exploreSnapIndex = useMapStore((s) => s.exploreSnapIndex);
   const setExploreSnapIndex = useMapStore((s) => s.setExploreSnapIndex);
+  const bottomTab = useMapStore((s) => s.bottomTab);
   const activeSheet = useMapStore((s) => s.activeSheet);
   const setActiveSheet = useMapStore((s) => s.setActiveSheet);
   const sheetEpoch = useMapStore((s) => s.sheetEpoch);
@@ -173,21 +176,24 @@ export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
   // Keep the Reanimated + FlatList tree mounted when place/directions overlays open.
   // Hard-unmounting (`return null`) on every open/close remounts GestureHandler/Reanimated
   // views and was crashing after rapid Explore ↔ place cycles.
-  const visible = activeSheet === 'explore';
+  const visible = behavior.persistentExplore
+    ? bottomTab !== 'plan' && (activeSheet === 'explore' || activeSheet === 'none')
+    : activeSheet === 'explore';
 
   return (
     <Animated.View
       pointerEvents={visible ? 'auto' : 'none'}
       style={[
-        styles.sheet,
-        sheetStyle,
+        behavior.dragSheets ? [styles.sheet, sheetStyle] : styles.sheetDock,
+        !behavior.dragSheets ? { width: behavior.sidePanelWidth, top: insets.top + 112 } : null,
         {
           backgroundColor: surface,
           borderColor: border,
-          paddingBottom: Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET,
+          paddingBottom: behavior.dragSheets ? Math.max(insets.bottom, 8) + PLAN_NAV_BAR_OFFSET : 12,
           opacity: visible ? 1 : 0,
         },
       ]}>
+      {behavior.dragSheets ? (
       <GestureDetector gesture={pan}>
         <Animated.View>
           <View style={styles.handleHit}>
@@ -201,6 +207,14 @@ export function ExploreSheet({ onSelectPlace, loading, error }: Props) {
           </View>
         </Animated.View>
       </GestureDetector>
+      ) : (
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: text }]}>{t('mapExploreTitle')}</Text>
+          <Text style={[styles.sub, { color: muted }]}>
+            {category ? t('mapExploreCategoryHint') : t('mapExploreHint')}
+          </Text>
+        </View>
+      )}
 
       <FlatList
         data={listData}
@@ -278,6 +292,17 @@ const styles = StyleSheet.create({
     zIndex: 20,
     overflow: 'hidden',
   },
+  sheetDock: {
+    position: 'absolute',
+    left: 16,
+    top: 76,
+    bottom: 16,
+    width: 400,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 20,
+    overflow: 'hidden',
+  },
   handleHit: {
     alignItems: 'center',
     paddingVertical: 12,
@@ -287,7 +312,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
-  header: { paddingHorizontal: 16, paddingBottom: 8, gap: 2 },
+  header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, gap: 2 },
   title: { fontSize: 18, fontWeight: '700' },
   sub: { fontSize: 13 },
   /** Single-tag / cleared list: centered loader with space from the list top. */

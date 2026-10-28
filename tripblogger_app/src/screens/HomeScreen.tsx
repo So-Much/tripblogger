@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,8 @@ import { QuickActionsStrip } from '@/src/components/home/QuickActionsStrip';
 import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
+import { desktopColumnWidth } from '@/src/platform/client-form';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { authService } from '@/src/services/api/auth.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { hasCustomDisplayName, resolvePublicDisplayName } from '@/src/utils/display-name';
@@ -32,6 +34,8 @@ export function HomeScreen() {
   const muted = useThemeColor({}, 'textMuted');
   const text = useThemeColor({}, 'text');
   const insets = useSafeAreaInsets();
+  const splitHome = useClientBehavior().splitHome;
+  const { width: windowWidth } = useWindowDimensions();
 
   const isMember = hasAccessToken && me?.role === 'MEMBER';
 
@@ -58,8 +62,11 @@ export function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
+          splitHome
+            ? { width: '100%', maxWidth: desktopColumnWidth(windowWidth), alignSelf: 'center' }
+            : null,
           {
-            paddingTop: Math.max(insets.top, 8) + 4,
+            paddingTop: splitHome ? 16 : Math.max(insets.top, 8) + 4,
             paddingBottom: Math.max(insets.bottom, 12) + 28,
             paddingLeft: Math.max(insets.left, 16),
             paddingRight: Math.max(insets.right, 16),
@@ -67,7 +74,7 @@ export function HomeScreen() {
         ]}
         scrollIndicatorInsets={{ right: 1 }}
       >
-        <View style={styles.topRow}>
+        {splitHome ? null : <View style={styles.topRow}>
           <View style={styles.brandWrap}>
             <View style={[styles.brandBadge, { borderColor: border, backgroundColor: card }]}>
               <IconSymbol size={26} name="paperplane.fill" color={cta} />
@@ -103,7 +110,7 @@ export function HomeScreen() {
               </Pressable>
             </View>
           )}
-        </View>
+        </View>}
 
         <View style={[styles.welcomeCard, { borderColor: border, backgroundColor: card }]}>
           <ThemedText type="defaultSemiBold" style={[styles.welcomeTitle, { color: text }]}>
@@ -138,19 +145,21 @@ export function HomeScreen() {
           }}
         />
 
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          {t('homeToday')}
-        </ThemedText>
-        <ThemedText style={[styles.subtitleLine, { color: muted }]}>
-          {isMember ? t('homeSubtitleMember') : t('homeSubtitleGuest')}
-        </ThemedText>
-
-        {isMember && memberProfile ? (
-          <ProfileSummaryCard profile={memberProfile} />
-        ) : null}
-
-        <HomeCommerceDeals />
-        <HomePostsFeed />
+        <View style={splitHome ? styles.split : undefined}>
+          <View style={splitHome ? styles.splitMain : undefined}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              {t('homeToday')}
+            </ThemedText>
+            <ThemedText style={[styles.subtitleLine, { color: muted }]}>
+              {isMember ? t('homeSubtitleMember') : t('homeSubtitleGuest')}
+            </ThemedText>
+            <HomePostsFeed />
+          </View>
+          <View style={splitHome ? styles.splitSide : undefined}>
+            {isMember && memberProfile ? <ProfileSummaryCard profile={memberProfile} /> : null}
+            <HomeCommerceDeals />
+          </View>
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -159,10 +168,26 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1 },
   content: {
-    gap: 14,
-    maxWidth: 720,
+    gap: 16,
     width: '100%',
     alignSelf: 'center',
+  },
+  split: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 24,
+  },
+  splitMain: {
+    flex: 1.5,
+    minWidth: 0,
+    gap: 16,
+  },
+  splitSide: {
+    width: '34%',
+    maxWidth: 360,
+    minWidth: 240,
+    flexShrink: 1,
+    gap: 16,
   },
   topRow: {
     alignItems: 'center',

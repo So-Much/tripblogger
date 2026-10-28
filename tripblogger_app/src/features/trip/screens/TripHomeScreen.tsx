@@ -6,6 +6,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { AppErrorBoundary } from '@/src/components/AppErrorBoundary';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { MapAttribution } from '../controls/MapAttribution';
 import { MapControlColumn } from '../controls/MapControlColumn';
 import { useNearbyPlaces } from '../hooks/useNearbyPlaces';
@@ -31,6 +32,7 @@ import { createCoalescedInvoker } from '../plan/plan-camera';
 
 export function TripHomeScreen() {
   const { t } = useI18n();
+  const sidePanelWidth = useClientBehavior().sidePanelWidth;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const surface = useThemeColor({}, 'surface');
@@ -347,7 +349,10 @@ export function TripHomeScreen() {
       {planLayerMounted ? (
         <View
           pointerEvents={bottomTab === 'plan' ? 'box-none' : 'none'}
-          style={[styles.planLayer, { opacity: bottomTab === 'plan' ? 1 : 0 }]}>
+          style={[
+            sidePanelWidth > 0 ? [styles.planDock, { width: sidePanelWidth }] : styles.planLayer,
+            { opacity: bottomTab === 'plan' ? 1 : 0 },
+          ]}>
           <PlanTab />
         </View>
       ) : null}
@@ -381,6 +386,16 @@ const styles = StyleSheet.create({
   planLayer: {
     ...StyleSheet.absoluteFill,
     zIndex: 30,
+  },
+  planDock: {
+    position: 'absolute',
+    top: 72,
+    right: 16,
+    bottom: 88,
+    width: 420,
+    zIndex: 30,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   backBtn: {
     position: 'absolute',

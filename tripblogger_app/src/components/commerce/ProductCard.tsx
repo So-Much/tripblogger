@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.96 },
   cardTop: { position: 'relative' },
   mediaWrap: { overflow: 'hidden', position: 'relative' },
-  img: { width: '100%', aspectRatio: 4 / 5 },
+  img: { width: '100%', maxWidth: '100%', aspectRatio: 1 },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
   oosOverlay: {
     ...StyleSheet.absoluteFill,

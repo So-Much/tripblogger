@@ -4,9 +4,12 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
+  useWindowDimensions,
   View,
   type ListRenderItem,
 } from 'react-native';
+import { productColumnCount } from '@/src/platform/client-form';
+import { useClientForm } from '@/src/platform/use-client-form';
 import { ThemedText } from '@/components/themed-text';
 import { useCommerceTheme } from '@/hooks/use-commerce-theme';
 import { ProductCard } from '@/src/components/commerce/ProductCard';
@@ -62,12 +65,15 @@ function ProductListInner({
   currentUserId,
 }: ProductListProps) {
   const { textMuted } = useCommerceTheme();
+  const form = useClientForm();
+  const { width } = useWindowDimensions();
+  const columns = form === 'phone' ? numColumns : productColumnCount(form, width);
 
   const renderItem: ListRenderItem<ProductDto> = useCallback(
     ({ item }) => {
       const isOwn = Boolean(currentUserId && item.sellerId === currentUserId);
       return (
-      <View style={numColumns === 2 ? styles.col : styles.colFull}>
+      <View style={{ width: `${100 / columns}%`, paddingHorizontal: 8 }}>
         <ProductCard
           product={item}
           cardVariant={isOwn ? 'own' : 'marketplace'}
@@ -86,7 +92,7 @@ function ProductListInner({
       );
     },
     [
-      numColumns,
+      columns,
       onPressProduct,
       onLongPressProduct,
       onBuyNow,
@@ -105,9 +111,9 @@ function ProductListInner({
   return (
     <FlatList
       data={items}
-      key={numColumns}
+      key={columns}
       keyExtractor={(i) => i.id}
-      numColumns={numColumns}
+      numColumns={columns}
       renderItem={renderItem}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.35}

@@ -1,4 +1,5 @@
-import * as SecureStore from 'expo-secure-store';import { useAuthStore } from '@/src/store/auth.store';
+import { useAuthStore } from '@/src/store/auth.store';
+import { deleteStoredItem, getStoredItem, setStoredItem } from '@/src/platform/stored-item';
 
 const SESSION_ID_KEY = 'tripblogger.sessionId';
 const DEVICE_ID_KEY = 'tripblogger.deviceId';
@@ -17,14 +18,14 @@ export async function ensureSessionId(): Promise<string> {
   const inStore = useAuthStore.getState().sessionId;
   if (inStore) return inStore;
 
-  const existing = await SecureStore.getItemAsync(SESSION_ID_KEY);
+  const existing = await getStoredItem(SESSION_ID_KEY);
   if (existing) {
     useAuthStore.getState().setSessionId(existing);
     return existing;
   }
 
   const created = uuidLike();
-  await SecureStore.setItemAsync(SESSION_ID_KEY, created);
+  await setStoredItem(SESSION_ID_KEY, created);
   useAuthStore.getState().setSessionId(created);
   return created;
 }
@@ -33,27 +34,27 @@ export async function ensureDeviceId(): Promise<string> {
   const inStore = useAuthStore.getState().deviceId;
   if (inStore) return inStore;
 
-  const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  const existing = await getStoredItem(DEVICE_ID_KEY);
   if (existing) {
     useAuthStore.getState().setDeviceId(existing);
     return existing;
   }
 
   const created = uuidLike();
-  await SecureStore.setItemAsync(DEVICE_ID_KEY, created);
+  await setStoredItem(DEVICE_ID_KEY, created);
   useAuthStore.getState().setDeviceId(created);
   return created;
 }
 
 export async function persistAuthTokens(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
-  await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokens.accessToken);
-  await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refreshToken);
+  await setStoredItem(ACCESS_TOKEN_KEY, tokens.accessToken);
+  await setStoredItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
 }
 
 export async function hydrateAuthTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
   const [accessToken, refreshToken] = await Promise.all([
-    SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
-    SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+    getStoredItem(ACCESS_TOKEN_KEY),
+    getStoredItem(REFRESH_TOKEN_KEY),
   ]);
   if (!accessToken || !refreshToken) return null;
   return { accessToken, refreshToken };
@@ -61,8 +62,8 @@ export async function hydrateAuthTokens(): Promise<{ accessToken: string; refres
 
 export async function clearPersistedAuthTokens(): Promise<void> {
   await Promise.all([
-    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
-    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+    deleteStoredItem(ACCESS_TOKEN_KEY),
+    deleteStoredItem(REFRESH_TOKEN_KEY),
   ]);
 }
 

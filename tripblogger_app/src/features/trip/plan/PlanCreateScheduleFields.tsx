@@ -1,7 +1,7 @@
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { useEffect, useRef, useState } from 'react';
+import { createElement, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -169,6 +169,28 @@ export function PlanCreateScheduleFields({
       <Text style={[styles.label, { color: muted }]}>{t('planCreateDates')}</Text>
 
       <View style={styles.scheduleRow}>
+        {Platform.OS === 'web' ? (
+          createElement('input', {
+            type: 'datetime-local',
+            value: `${startDate}T${defaultDayStartTime.slice(0, 5)}`,
+            'aria-label': t('planCreateStartDateTime'),
+            onChange: (event: { target: { value: string } }) => {
+              const [date, time] = event.target.value.split('T');
+              if (date) onStartDateChange(date);
+              if (time) onDayStartTimeChange(time.slice(0, 5));
+            },
+            style: {
+              flex: 1,
+              minWidth: 0,
+              border: `1px solid ${border}`,
+              borderRadius: 12,
+              padding: '10px 12px',
+              background: card,
+              color: text,
+              fontSize: 16,
+            },
+          })
+        ) : (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${t('planCreateStartDateTime')}, ${startDisplay}. ${t('planCreateDayStartHint')}`}
@@ -184,6 +206,7 @@ export function PlanCreateScheduleFields({
           </View>
           <MaterialIcons name="event" size={20} color={muted} />
         </Pressable>
+        )}
 
         <View style={[styles.daysPanel, { borderColor: border, backgroundColor: card }]}>
           <Text style={[styles.dateBtnLabel, { color: muted }]} numberOfLines={2}>

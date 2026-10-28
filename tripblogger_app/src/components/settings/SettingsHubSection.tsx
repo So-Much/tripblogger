@@ -53,8 +53,6 @@ const HUB_GROUPS: HubGroup[] = [
 ];
 
 const TILE_GAP = 8;
-const MIN_TILE = 68;
-const MAX_TILE = 92;
 
 export function SettingsHubSection() {
   const { t } = useI18n();
@@ -65,10 +63,7 @@ export function SettingsHubSection() {
   const tint = useThemeColor({}, 'tint');
   const surface = useThemeColor({}, 'surface');
 
-  const horizontalPadding = 32;
-  const usable = Math.max(windowWidth - horizontalPadding, 200);
-  const columns = Math.min(4, Math.max(3, Math.floor(usable / (MIN_TILE + TILE_GAP))));
-  const tileWidth = Math.min(MAX_TILE, Math.floor((usable - TILE_GAP * (columns - 1)) / columns));
+  const wide = windowWidth >= 720;
 
   return (
     <View style={styles.groups}>
@@ -82,8 +77,8 @@ export function SettingsHubSection() {
                 onPress={() => router.push(tile.href)}
                 style={[
                   styles.tile,
+                  wide ? styles.tileWide : null,
                   {
-                    width: tileWidth,
                     borderColor: border,
                     backgroundColor: surface,
                   },
@@ -116,13 +111,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   tile: {
+    width: '31%',
+    minHeight: 88,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  tileWide: {
+    width: '23%',
+    flexGrow: 1,
   },
   tileTitle: {
     fontSize: 11,

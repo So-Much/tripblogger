@@ -126,6 +126,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.core.rule=PathPrefix(`/api`) || PathPrefix(`/uploads`)
       - traefik.http.routers.core.entrypoints=web
+      - traefik.http.routers.core.priority=10
       - traefik.http.routers.core.middlewares=rateLimit@file
       - traefik.http.routers.core-ws.rule=PathPrefix(`/socket.io`)
       - traefik.http.routers.core-ws.entrypoints=web
@@ -171,7 +172,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.geo.rule=PathPrefix(`/api/map`) || PathPrefix(`/api/places`) || PathPrefix(`/api/locations`) || PathPrefix(`/api/saved-locations`) || PathPrefix(`/api/checkins`)
       - traefik.http.routers.geo.entrypoints=web
-      - traefik.http.routers.geo.priority=20
+      - traefik.http.routers.geo.priority=100
       - traefik.http.routers.geo.middlewares=rateLimit@file
       - traefik.http.services.geo.loadbalancer.server.port=3000
 
@@ -206,7 +207,7 @@ services:
       - traefik.enable=true
       - traefik.http.routers.trip.rule=PathPrefix(`/api/trips`)
       - traefik.http.routers.trip.entrypoints=web
-      - traefik.http.routers.trip.priority=20
+      - traefik.http.routers.trip.priority=100
       - traefik.http.routers.trip.middlewares=rateLimit@file
       - traefik.http.services.trip.loadbalancer.server.port=3000
 

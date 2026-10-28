@@ -10,6 +10,7 @@ export {
   POI_CATEGORY_IDS,
   isPoiCategoryId,
   classifyOsmTags,
+  categoryFromDbTypeCode,
 } from './poi-categories';
 export type { PoiCategoryId, OsmTagFilter, PoiCategory } from './poi-categories';
 export type {

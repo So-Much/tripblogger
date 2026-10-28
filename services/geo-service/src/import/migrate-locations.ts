@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
-import { normalizeVi } from '@tripblogger/contracts';
+import { categoryFromDbTypeCode, normalizeVi } from '@tripblogger/contracts';
 import { PlaceEntity } from '../entities/place.entity';
 import { PlaceReviewEntity } from '../entities/place-review.entity';
 import { SavedPlaceEntity } from '../entities/saved-place.entity';
@@ -31,7 +31,9 @@ async function main() {
   await core.initialize();
   await geo.initialize();
   const rows = (await core.query(
-    `SELECT id, name, address, latitude, longitude, status, phone, website, avg_rating, total_review FROM locations`,
+    `SELECT l.id, l.name, l.address, l.latitude, l.longitude, l.status, l.phone, l.website, l.avg_rating, l.total_review, t.code AS type_code
+     FROM locations l
+     LEFT JOIN location_types t ON t.id = l.location_type_id`,
   )) as Array<Record<string, unknown>>;
   const repo = geo.getRepository(PlaceEntity);
   let upserted = 0;
@@ -44,7 +46,7 @@ async function main() {
       id,
       name: String(row.name),
       normalizedName: normalizeVi(String(row.name)),
-      category: 'other',
+      category: categoryFromDbTypeCode(row.type_code != null ? String(row.type_code) : null),
       lat: String(row.latitude),
       lng: String(row.longitude),
       address: row.address != null ? String(row.address) : null,

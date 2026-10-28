@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import { getStoredItem, setStoredItem } from '@/src/platform/stored-item';
 import { create } from 'zustand';
 import type { MapPlace } from '../types/map';
 
@@ -15,7 +15,7 @@ type RecentState = {
 
 async function persist(items: MapPlace[]) {
   try {
-    await SecureStore.setItemAsync(KEY, JSON.stringify(items));
+    await setStoredItem(KEY, JSON.stringify(items));
   } catch {
     /* ignore */
   }
@@ -27,7 +27,7 @@ export const useRecentSearchesStore = create<RecentState>((set, get) => ({
   hydrate: async () => {
     if (get().hydrated) return;
     try {
-      const raw = await SecureStore.getItemAsync(KEY);
+      const raw = await getStoredItem(KEY);
       const parsed = raw ? (JSON.parse(raw) as Partial<MapPlace>[]) : [];
       const items = Array.isArray(parsed)
         ? parsed

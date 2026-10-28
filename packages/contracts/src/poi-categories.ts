@@ -100,6 +100,16 @@ export function isPoiCategoryId(value: string): value is Exclude<PoiCategoryId, 
   return value in POI_CATEGORIES;
 }
 
+/** Map a Core `location_types.code` onto a Geo category. Unknown codes stay `other`. */
+export function categoryFromDbTypeCode(code: string | null | undefined): PoiCategoryId {
+  if (!code) return 'other';
+  const normalized = code.trim().toLowerCase();
+  for (const cat of Object.values(POI_CATEGORIES)) {
+    if (cat.dbTypeCodes.includes(normalized)) return cat.id;
+  }
+  return 'other';
+}
+
 /** Map OSM tags to a TripBlogger category. Named-but-unknown → `other`. */
 export function classifyOsmTags(tags: Record<string, string>): PoiCategoryId {
   for (const cat of Object.values(POI_CATEGORIES)) {

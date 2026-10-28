@@ -54,16 +54,18 @@ export function CommerceWidgetRow({ deals, onSeeAllPress, onDealPress }: Commerc
 const styles = StyleSheet.create({
   shell: {
     borderWidth: StyleSheet.hairlineWidth,
-    paddingTop: 14,
-    paddingBottom: 12,
-    gap: 12,
+    maxWidth: '100%',
+    overflow: 'hidden',
+    paddingTop: 16,
+    paddingBottom: 16,
+    gap: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   headerLeft: {
     flex: 1,
@@ -100,7 +102,7 @@ const styles = StyleSheet.create({
   },
   row: {
     gap: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingRight: 6,
   },
 });
