@@ -1,8 +1,6 @@
 import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-
 import { CaptureTabBarButton } from '@/components/capture-tab-bar-button';
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -12,6 +10,8 @@ import { useI18n } from '@/src/i18n';
 import { useClientForm } from '@/src/platform/use-client-form';
 import { useAuthStore } from '@/src/store/auth.store';
 
+type BottomTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
+
 function WebDesktopTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const colorScheme = useColorScheme();
   const palette = Colors[colorScheme ?? 'light'];
@@ -19,7 +19,8 @@ function WebDesktopTabBar({ state, descriptors, navigation }: BottomTabBarProps)
   const { t } = useI18n();
   const signedIn = Boolean(useAuthStore((s) => s.tokens?.accessToken));
   const focusedOptions = descriptors[state.routes[state.index].key]?.options;
-  const hidden = StyleSheet.flatten(focusedOptions?.tabBarStyle)?.display === 'none';
+  const hidden =
+    (StyleSheet.flatten(focusedOptions?.tabBarStyle) as { display?: string } | undefined)?.display === 'none';
   if (hidden) return null;
 
   return (
@@ -28,7 +29,7 @@ function WebDesktopTabBar({ state, descriptors, navigation }: BottomTabBarProps)
       <View style={styles.desktopTabs}>
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
-        if (options.href === null || route.name === 'posts') return null;
+        if ((options as { href?: unknown }).href === null || route.name === 'posts') return null;
         const focused = state.index === index;
         const color = focused ? palette.tint : palette.tabIconDefault;
         const label = options.title ?? route.name;

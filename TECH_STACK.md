@@ -14,10 +14,10 @@ Version theo khai báo trong `package.json` (có thể là range `^` / `~`).
 | Root monorepo | `/` | npm **workspaces** (`packages/*`, `services/*`, `tripblogger_api`, `tripblogger_app`) |
 | Core API | `tripblogger_api/` | Auth, users, posts, commerce (NestJS + TypeORM + SQL Server) |
 | Trip Service | `services/trip-service/` | Plan/itinerary, own DB `tripblogger_trips` |
-| Geo Service | `services/geo-service/` | Search/nearby/reverse/contribute; Typesense + Photon |
+| Geo Service | `services/geo-service/` | Search/nearby/reverse/contribute; SQL (Typesense tuỳ chọn) + Photon (public hoặc tự host) |
 | App | `tripblogger_app/` | Client Expo / React Native (mobile + web) |
 | Shared packages | `packages/*` | itinerary-engine, contracts, auth (JWKS), events (Redis Streams) |
-| Gateway | Traefik v3 | PathPrefix `/api/*` on `:3000` |
+| Gateway | Traefik v3 | PathPrefix `/api/*` và `GET /uploads/*` (SeaweedFS) on `:3000` |
 
 **Mục tiêu sản phẩm (README):** nền tảng nội dung du lịch + gợi ý thương mại (feed, profile, deals, map/trips).
 
@@ -204,8 +204,8 @@ Refresh token: rotate + revoke-by-jti (bảng `refresh_tokens`) — theo README 
 ### Upload / image
 
 - **Multer** (`diskStorage` qua Nest FileInterceptor) — avatars, posts, commerce
-- **sharp** `^0.34.5` — rotate / resize / WebP
-- Static serve: `/uploads/*` (local disk)
+- **sharp** `^0.35.5` — rotate / resize / WebP
+- `ObjectStorage`: `STORAGE_DRIVER=s3` → SeaweedFS (S3 tự host, Compose), Traefik serve `GET /uploads/*` từ bucket; mặc định local disk + Nest static
 
 ### Realtime
 
@@ -227,10 +227,10 @@ Shared: `@tripblogger/itinerary-engine`, Haversine util, Redis cache keys `map:n
 | Tech | Version / image | Evidence |
 |------|-----------------|----------|
 | `prom-client` | `^15.1.3` | `GET /api/metrics` |
-| OpenTelemetry packages | `@opentelemetry/*` (api, sdk-node, OTLP HTTP, auto-instrumentations…) | trong `package.json` + `OTEL_EXPORTER_OTLP_ENDPOINT` |
-| Docker Compose observability | Prometheus / Grafana / Loki / OTEL Collector (`:latest`) | `docker-compose.observability.yml` |
+| OpenTelemetry | `@tripblogger/observability` (sdk-node `^0.300`, OTLP HTTP) | bật khi `OTEL_EXPORTER_OTLP_ENDPOINT` có giá trị |
+| Docker Compose observability | Prometheus v3.15.1 (+ alert rules) / Grafana 13.2.5 (provisioned) / Jaeger 2.22.0 | profile `obs` trong `docker-compose.yml` |
 
-> Các package `@opentelemetry/*`, `nestjs-pino` / `pino` / `pino-http` có trong deps nhưng **chưa thấy import trong `src/`** (chỉ metrics controller + env OTEL).
+> `/metrics` của từng service chỉ đọc được trong mạng Docker; Traefik không route ra ngoài.
 
 ### Package có trong deps nhưng chưa thấy dùng trong source
 
@@ -256,9 +256,9 @@ Dùng chung bởi API (trips) và app (plan UI).
 | Loại | Công nghệ | Ghi chú |
 |------|-----------|---------|
 | Primary DB | **SQL Server** | TypeORM migrations trong `src/migrations/` |
-| Cache / broker | **Redis** | map cache + BullMQ |
-| File storage | Local filesystem `uploads/` | avatars, posts, commerce (+ variants) |
-| Object storage cloud | — | README khuyến nghị S3/Cloudinary sau; **chưa có trong code** |
+| Cache / broker | **Redis** (AOF) | map cache + BullMQ + Redis Streams (`place.events`) |
+| File storage | **SeaweedFS** `4.50_full` (S3 API, filer SQLite) | avatars, posts, commerce (+ variants); local `uploads/` khi chạy Core riêng |
+| Backup | `npm run backup` / `npm run restore` | 3 database `.bak` + volume SeaweedFS → `backups/<ts>` |
 
 Migrations (ví dụ): auth/profiles, posts/social, commerce, compositions/media, locations, trips/plan-builder…
 
@@ -269,8 +269,8 @@ Migrations (ví dụ): auth/profiles, posts/social, commerce, compositions/media
 | Hạng mục | Trạng thái trong repo |
 |----------|------------------------|
 | Docker | `docker-compose.yml` profiles `infra` + `apps`; Dockerfile Core, Geo, Trip; Traefik `:3000` |
-| Docker observability | Có — Prometheus `:9090`, Grafana `:3001`, Loki `:3100`, OTEL Collector `:4317/4318` |
-| CI | `.github/workflows/ci.yml` — test workspace + `docker build` ba image. Chưa có CD (ECR/ECS) |
+| Docker observability | Có — profile `obs`: Prometheus `:9090`, Grafana `:3001`, Jaeger `:16686` (OTLP `:4318`) |
+| CI | `.github/workflows/ci.yml` — test + audit + typecheck; build ba image, quét Trivy, push GHCR (miễn phí) trên `main`; compose smoke (`npm run e2e` + k6) |
 | Deploy | Local: một process Core, hoặc Compose. AWS (bài 09/12): image tag git SHA → ECR → ECS Fargate, Actions dùng OIDC |
 | Env | `.env` / `.env.example` riêng API & app |
 

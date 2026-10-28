@@ -54,4 +54,4 @@ TypeORM MSSQL must use `options.useUTC: true` so the driver does not treat DB UT
 ## Queues and Metrics
 
 - BullMQ queues: `image-processing`, `email`
-- Metrics endpoint: `GET /api/metrics`
+- Metrics endpoint: `GET /metrics` (outside `/api`, so the gateway does not expose it; Prometheus scrapes the container)

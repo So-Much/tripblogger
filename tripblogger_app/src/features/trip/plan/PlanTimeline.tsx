@@ -763,7 +763,7 @@ export function PlanTimeline({ tripId, tripTitle, sheetTopInset = 0 }: Props) {
                   extraData={{ selection: resolvedSelection, canDrag, tripId }}
                   contentContainerStyle={styles.listContent}
                   keyboardShouldPersistTaps="handled"
-                  keyExtractor={(item: { id: string }) => item.id}
+                  keyExtractor={(item: (typeof itineraryData)[number]) => item.id}
                   ListHeaderComponent={overviewHeader}
                   ItemSeparatorComponent={renderTravelSeparator as never}
                   ListEmptyComponent={

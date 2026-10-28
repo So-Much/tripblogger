@@ -12,5 +12,9 @@ providers:
   file:
     filename: /etc/traefik/dynamic.yml
 
+metrics:
+  prometheus:
+    addRoutersLabels: true
+
 log:
   level: INFO

@@ -17,4 +17,10 @@ export class PlaceOutboxEntity {
 
   @Column({ name: 'published_at', type: 'datetime2', nullable: true })
   publishedAt!: Date | null;
+
+  @Column({ type: 'int', default: 0 })
+  attempts!: number;
+
+  @Column({ name: 'last_error', type: 'nvarchar', length: 500, nullable: true })
+  lastError!: string | null;
 }

@@ -1,5 +1,16 @@
 name: tripblogger
 
+# Profiles:
+#   infra    — mssql, redis, traefik, seaweedfs (required)
+#   apps     — core, geo, trip
+#   search   — typesense (optional; Geo falls back to SQL when it is down)
+#   geocoder — local Photon (optional; Geo falls back to public photon.komoot.io + Redis cache)
+#   obs      — prometheus, grafana, jaeger
+#   tools    — k6 (run with `docker compose --profile tools run --rm k6`)
+
+x-otel: &otel
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
 services:
   mssql:
     profiles: ['infra']
@@ -11,6 +22,7 @@ services:
       - '1433:1433'
     volumes:
       - mssql_data:/var/opt/mssql
+      - ./backups/mssql:/var/opt/mssql/backup
     healthcheck:
       test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
       interval: 10s
@@ -42,6 +54,8 @@ services:
   redis:
     profiles: ['infra']
     image: redis:7-alpine
+    # AOF so place.events, the DLQ and idempotency keys survive a Docker/WSL crash (≤1s loss).
+    command: ['redis-server', '--appendonly', 'yes', '--appendfsync', 'everysec']
     ports:
       - '6379:6379'
     volumes:
@@ -63,8 +77,40 @@ services:
       - ./infra/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
-  typesense:
+  # Self-hosted S3 for user uploads (images never go into the database).
+  # Only anonymous GET/HEAD of bucket "uploads" is public, via Traefik at /uploads.
+  seaweedfs:
     profiles: ['infra']
+    # "_full" includes the SQLite filer store used by start.sh.
+    image: chrislusf/seaweedfs:4.50_full
+    # Strip CR so the script still runs after a Windows editor saves it with CRLF.
+    entrypoint: ['/bin/sh', '-c', "tr -d '\\r' < /start.sh > /tmp/start.sh && exec /bin/sh /tmp/start.sh"]
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-tripblogger}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change_this_s3_secret_123456}
+    ports:
+      - '8333:8333'
+    volumes:
+      - ./infra/seaweedfs/start.sh:/start.sh:ro
+      - seaweedfs_data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8333/healthz']
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.uploads.rule=PathPrefix(`/uploads/`) && (Method(`GET`) || Method(`HEAD`))
+      - traefik.http.routers.uploads.entrypoints=web
+      - traefik.http.routers.uploads.priority=50
+      - traefik.http.routers.uploads.middlewares=stripAuth@file
+      - traefik.http.services.uploads.loadbalancer.server.port=8333
+
+  # Typesense segfaults (exit 139) on some WSL2 kernels before printing anything;
+  # it is optional because Geo search/nearby fall back to SQL.
+  typesense:
+    profiles: ['search']
     image: typesense/typesense:27.1
     ports:
       - '8108:8108'
@@ -76,14 +122,19 @@ services:
     volumes:
       - typesense_data:/data
 
+  # Photon has no Vietnam extract; the smallest one covering VN is "asia" (large download).
+  # Reverse-only + vi/en keeps the index as small as possible.
   photon:
-    profiles: ['infra']
-    image: rtuszik/photon-docker:latest
+    profiles: ['geocoder']
+    image: rtuszik/photon-docker:2.5.0
     ports:
       - '2322:2322'
     environment:
+      IMPORT_MODE: jsonl
+      REGION: asia
+      REVERSE_ONLY: 'TRUE'
+      LANGUAGES: vi,en
       UPDATE_STRATEGY: DISABLED
-      REGION: vietnam
     volumes:
       - ${DATA_ROOT:-D:/tripblogger-data}/photon:/photon/data
 
@@ -93,6 +144,7 @@ services:
       context: .
       dockerfile: tripblogger_api/Dockerfile
     environment:
+      <<: *otel
       NODE_ENV: production
       PORT: 3000
       DB_HOST: mssql
@@ -112,6 +164,13 @@ services:
       TRIP_DELEGATE: '1'
       JWT_ACCESS_PRIVATE_KEY_PATH: /run/secrets/jwt_access_private.pem
       JWT_ACCESS_PUBLIC_KEY_PATH: /run/secrets/jwt_access_public.pem
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_REGION: us-east-1
+      S3_BUCKET: uploads
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-tripblogger}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change_this_s3_secret_123456}
+      ALLOW_PLACEHOLDER_SECRETS: ${ALLOW_PLACEHOLDER_SECRETS:-0}
     volumes:
       - ./infra/jwt/dev-private.pem:/run/secrets/jwt_access_private.pem:ro
       - ./infra/jwt/dev-public.pem:/run/secrets/jwt_access_public.pem:ro
@@ -122,9 +181,11 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
     labels:
       - traefik.enable=true
-      - traefik.http.routers.core.rule=PathPrefix(`/api`) || PathPrefix(`/uploads`)
+      - traefik.http.routers.core.rule=PathPrefix(`/api`)
       - traefik.http.routers.core.entrypoints=web
       - traefik.http.routers.core.priority=10
       - traefik.http.routers.core.middlewares=rateLimit@file
@@ -142,6 +203,7 @@ services:
       context: .
       dockerfile: services/geo-service/Dockerfile
     environment:
+      <<: *otel
       NODE_ENV: production
       PORT: 3000
       DB_HOST: mssql
@@ -151,16 +213,20 @@ services:
       DB_NAME: tripblogger_geo
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      TYPESENSE_HOST: typesense
+      # Empty = not used. Set TYPESENSE_HOST=typesense / PHOTON_URL=http://photon:2322 in .env.compose
+      # when running the "search" / "geocoder" profiles; otherwise every lookup waits on DNS timeouts.
+      TYPESENSE_HOST: ${TYPESENSE_HOST:-}
       TYPESENSE_PORT: 8108
       TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz_typesense_dev_key_change_me}
-      PHOTON_URL: http://photon:2322
+      PHOTON_URL: ${PHOTON_URL:-}
+      PHOTON_FALLBACK_URL: ${PHOTON_FALLBACK_URL:-https://photon.komoot.io}
       OSRM_BASE_URL: https://routing.openstreetmap.de
       CORE_JWKS_URL: http://core:3000/api/auth/.well-known/jwks.json
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_this_access_secret_123456}
       GEO_INTERNAL_TOKEN: ${GEO_INTERNAL_TOKEN:-change_this_geo_internal_token_123456}
       ADMIN_SECRET: ${ADMIN_SECRET:-change_this_admin_secret_123456}
-      DB_SYNC: '1'
+      ALLOW_PLACEHOLDER_SECRETS: ${ALLOW_PLACEHOLDER_SECRETS:-0}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-300}
     depends_on:
       mssql:
         condition: service_healthy
@@ -182,6 +248,7 @@ services:
       context: .
       dockerfile: services/trip-service/Dockerfile
     environment:
+      <<: *otel
       NODE_ENV: production
       PORT: 3000
       DB_HOST: mssql
@@ -195,7 +262,8 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_this_access_secret_123456}
       GEO_BASE_URL: http://geo:3000
       GEO_INTERNAL_TOKEN: ${GEO_INTERNAL_TOKEN:-change_this_geo_internal_token_123456}
-      DB_SYNC: '1'
+      ALLOW_PLACEHOLDER_SECRETS: ${ALLOW_PLACEHOLDER_SECRETS:-0}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-300}
     depends_on:
       mssql:
         condition: service_healthy
@@ -211,7 +279,55 @@ services:
       - traefik.http.routers.trip.middlewares=rateLimit@file
       - traefik.http.services.trip.loadbalancer.server.port=3000
 
+  prometheus:
+    profiles: ['obs']
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    profiles: ['obs']
+    image: grafana/grafana:13.2.5
+    ports:
+      - '3001:3000'
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+
+  # Receives OTLP traces when OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318 (.env.compose).
+  jaeger:
+    profiles: ['obs']
+    image: jaegertracing/jaeger:2.22.0
+    ports:
+      - '16686:16686'
+      - '4318:4318'
+
+  k6:
+    profiles: ['tools']
+    image: grafana/k6:1.8.2
+    environment:
+      BASE_URL: ${K6_BASE_URL:-http://traefik:3000}
+    volumes:
+      - ./infra/k6:/scripts:ro
+    entrypoint: ['k6', 'run']
+    command: ['/scripts/smoke.js']
+
 volumes:
   mssql_data:
   redis_data:
   typesense_data:
+  seaweedfs_data:
+  prometheus_data:
+  grafana_data:

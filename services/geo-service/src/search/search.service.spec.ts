@@ -1,4 +1,4 @@
-import { haversineM, REVERSE_SNAP_RADIUS_M, SearchService } from './search.service';
+import { bboxWhere, haversineM, REVERSE_SNAP_RADIUS_M, SearchService } from './search.service';
 import type { PlaceEntity } from '../entities/place.entity';
 
 function place(partial: Partial<PlaceEntity> & Pick<PlaceEntity, 'id' | 'name' | 'lat' | 'lng'>): PlaceEntity {
@@ -95,6 +95,19 @@ describe('SearchService.getDetail', () => {
     expect(detail?.reviews[0].body).toBe('Ngon');
     expect(detail?.isOpenNow).toBe(true);
     expect(detail?.phone).toBe('+84901234567');
+  });
+});
+
+describe('bboxWhere', () => {
+  it('encloses the search radius', () => {
+    const box = bboxWhere(21, 105, 1000) as any;
+    const [latMin, latMax] = box.lat.value.map(Number);
+    const [lngMin, lngMax] = box.lng.value.map(Number);
+    expect(haversineM(21, 105, latMax, 105)).toBeGreaterThanOrEqual(999);
+    expect(haversineM(21, 105, latMin, 105)).toBeGreaterThanOrEqual(999);
+    expect(haversineM(21, 105, 21, lngMax)).toBeGreaterThanOrEqual(999);
+    expect(haversineM(21, 105, 21, lngMin)).toBeGreaterThanOrEqual(999);
+    expect(haversineM(21, 105, latMax, 105)).toBeLessThan(1100);
   });
 });
 

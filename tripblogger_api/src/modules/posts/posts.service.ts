@@ -1,12 +1,12 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { keyFromUploadPath, OBJECT_STORAGE, type ObjectStorage } from '../../config/storage/object-storage';
 import { In, Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -91,10 +91,10 @@ function toLocalUploadPath(value?: string): string | undefined {
   }
 }
 
-function isLocalMediaPathAvailable(value?: string): boolean {
-  const localPath = toLocalUploadPath(value);
-  if (!localPath) return Boolean(value);
-  return existsSync(join(process.cwd(), localPath.replace(/^\/+/, '')));
+function isMediaPathAvailable(storage: ObjectStorage, value?: string): boolean {
+  if (!value) return false;
+  const key = keyFromUploadPath(value);
+  return key ? storage.probablyExists(key) : true;
 }
 
 function parseLocation(raw: string | null): Record<string, unknown> | null {
@@ -130,6 +130,7 @@ export class PostsService {
     private readonly realtimeGateway: PostsRealtimeGateway,
     private readonly mediaResolver: MediaResolver,
     private readonly mediaMigrationWorker: MediaMigrationWorker,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
   /** Persist a freshly uploaded file as a shared MediaEntity (for check-ins, etc.). */
@@ -345,9 +346,11 @@ export class PostsService {
         return visibility === 'PRIVATE' ? this.mediaResolver.toPrivateSignedPath(path) : path;
       };
       const variants = {
-        thumbnailUrl: isLocalMediaPathAvailable(item.thumbnailUrl) ? item.thumbnailUrl : undefined,
-        previewUrl: isLocalMediaPathAvailable(item.previewUrl) ? item.previewUrl : undefined,
-        originalUrl: isLocalMediaPathAvailable(item.originalUrl ?? item.url) ? (item.originalUrl ?? item.url) : undefined,
+        thumbnailUrl: isMediaPathAvailable(this.storage, item.thumbnailUrl) ? item.thumbnailUrl : undefined,
+        previewUrl: isMediaPathAvailable(this.storage, item.previewUrl) ? item.previewUrl : undefined,
+        originalUrl: isMediaPathAvailable(this.storage, item.originalUrl ?? item.url)
+          ? (item.originalUrl ?? item.url)
+          : undefined,
       };
       const primaryUrl = variants.previewUrl ?? variants.originalUrl ?? variants.thumbnailUrl;
       const missingVariants = [

@@ -4,29 +4,59 @@ import Typesense, { Client } from 'typesense';
 import type { PlaceEntity } from '../entities/place.entity';
 
 const COLLECTION = 'places';
+export const TYPESENSE_COOLDOWN_MS = 30_000;
 
 @Injectable()
 export class TypesensePlaces implements OnModuleInit {
   private readonly logger = new Logger(TypesensePlaces.name);
   private client: Client | null = null;
+  private downUntil = 0;
 
   constructor(private readonly config: ConfigService) {}
 
+  get enabled(): boolean {
+    return Boolean(this.config.get<string>('TYPESENSE_HOST'));
+  }
+
   async onModuleInit() {
+    const host = this.config.get<string>('TYPESENSE_HOST');
+    if (!host) {
+      this.logger.log('TYPESENSE_HOST is empty: search uses SQL only');
+      return;
+    }
     try {
       this.client = new Typesense.Client({
         nodes: [
           {
-            host: this.config.get<string>('TYPESENSE_HOST') ?? '127.0.0.1',
+            host,
             port: this.config.get<number>('TYPESENSE_PORT') ?? 8108,
             protocol: 'http',
           },
         ],
         apiKey: this.config.get<string>('TYPESENSE_API_KEY') ?? 'xyz',
         connectionTimeoutSeconds: 2,
+        numRetries: 1,
       });
     } catch (err) {
       this.logger.warn(`Typesense client init failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Runs against Typesense unless it failed to connect recently. Connection failures
+   * (no HTTP status) open the circuit so callers drop to SQL without waiting on timeouts.
+   */
+  private async withClient<T>(fn: (client: Client) => Promise<T>): Promise<T> {
+    if (!this.client) throw new Error('typesense_unavailable');
+    if (Date.now() < this.downUntil) throw new Error('typesense_circuit_open');
+    try {
+      await this.ensureCollection();
+      return await fn(this.client);
+    } catch (err) {
+      if ((err as { httpStatus?: number }).httpStatus == null) {
+        this.downUntil = Date.now() + TYPESENSE_COOLDOWN_MS;
+      }
+      throw err;
     }
   }
 
@@ -34,7 +64,8 @@ export class TypesensePlaces implements OnModuleInit {
     if (!this.client) return;
     try {
       await this.client.collections(COLLECTION).retrieve();
-    } catch {
+    } catch (err) {
+      if ((err as { httpStatus?: number }).httpStatus !== 404) throw err;
       await this.client.collections().create({
         name: COLLECTION,
         fields: [
@@ -58,7 +89,6 @@ export class TypesensePlaces implements OnModuleInit {
 
   async upsertPlaces(places: PlaceEntity[]): Promise<void> {
     if (!this.client || !places.length) return;
-    await this.ensureCollection();
     const docs = places.map((p) => ({
       id: p.id,
       name: p.name,
@@ -73,12 +103,10 @@ export class TypesensePlaces implements OnModuleInit {
       status: p.status,
       source: p.source,
     }));
-    await this.client.collections(COLLECTION).documents().import(docs, { action: 'upsert' });
+    await this.withClient((c) => c.collections(COLLECTION).documents().import(docs, { action: 'upsert' }));
   }
 
   async searchIds(q: string, bias: { lat: number; lng: number } | null, limit: number): Promise<string[]> {
-    if (!this.client) throw new Error('typesense_unavailable');
-    await this.ensureCollection();
     const search: Record<string, unknown> = {
       q,
       query_by: 'name,normalized_name,aliases,address',
@@ -90,7 +118,7 @@ export class TypesensePlaces implements OnModuleInit {
     if (bias) {
       search.sort_by = `location(${bias.lat},${bias.lng}):asc`;
     }
-    const res = await this.client.collections(COLLECTION).documents().search(search);
+    const res = await this.withClient((c) => c.collections(COLLECTION).documents().search(search));
     return (res.hits ?? []).map((h) => String((h.document as { id: string }).id));
   }
 
@@ -101,36 +129,37 @@ export class TypesensePlaces implements OnModuleInit {
     radiusM: number,
     limit: number,
   ): Promise<string[]> {
-    if (!this.client) throw new Error('typesense_unavailable');
-    await this.ensureCollection();
     const km = Math.max(0.1, radiusM / 1000);
-    const res = await this.client.collections(COLLECTION).documents().search({
-      q: '*',
-      query_by: 'name',
-      filter_by: `status:=active && category:=${category} && location:(${lat},${lng},${km} km)`,
-      per_page: limit,
-      sort_by: `location(${lat},${lng}):asc`,
-    });
+    const res = await this.withClient((c) =>
+      c.collections(COLLECTION).documents().search({
+        q: '*',
+        query_by: 'name',
+        filter_by: `status:=active && category:=${category} && location:(${lat},${lng},${km} km)`,
+        per_page: limit,
+        sort_by: `location(${lat},${lng}):asc`,
+      }),
+    );
     return (res.hits ?? []).map((h) => String((h.document as { id: string }).id));
   }
 
   /** Nearest active places of any category within radius (for reverse snap). */
   async nearbyIdsAnyCategory(lat: number, lng: number, radiusM: number, limit: number): Promise<string[]> {
-    if (!this.client) throw new Error('typesense_unavailable');
-    await this.ensureCollection();
     const km = Math.max(0.05, radiusM / 1000);
-    const res = await this.client.collections(COLLECTION).documents().search({
-      q: '*',
-      query_by: 'name',
-      filter_by: `status:=active && location:(${lat},${lng},${km} km)`,
-      per_page: limit,
-      sort_by: `location(${lat},${lng}):asc`,
-    });
+    const res = await this.withClient((c) =>
+      c.collections(COLLECTION).documents().search({
+        q: '*',
+        query_by: 'name',
+        filter_by: `status:=active && location:(${lat},${lng},${km} km)`,
+        per_page: limit,
+        sort_by: `location(${lat},${lng}):asc`,
+      }),
+    );
     return (res.hits ?? []).map((h) => String((h.document as { id: string }).id));
   }
 
   async healthCheck(): Promise<void> {
-    const host = this.config.get<string>('TYPESENSE_HOST') ?? '127.0.0.1';
+    const host = this.config.get<string>('TYPESENSE_HOST');
+    if (!host) throw new Error('typesense disabled');
     const port = this.config.get<number>('TYPESENSE_PORT') ?? 8108;
     const url = `http://${host}:${port}/health`;
     const ctrl = new AbortController();

@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { assertNoPlaceholderSecrets } from '@tripblogger/observability';
 
 export function validateEnv(config: Record<string, unknown>) {
-  return z
+  const env = z
     .object({
       NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
       PORT: z.coerce.number().default(3002),
@@ -10,13 +11,18 @@ export function validateEnv(config: Record<string, unknown>) {
       DB_USERNAME: z.string(),
       DB_PASSWORD: z.string(),
       DB_NAME: z.string().default('tripblogger_trips'),
-      DB_SYNC: z.string().optional(),
+      DB_MIGRATE_ON_BOOT: z.string().optional(),
       REDIS_HOST: z.string().default('127.0.0.1'),
       REDIS_PORT: z.coerce.number().default(6379),
       CORE_JWKS_URL: z.string().optional(),
       JWT_ACCESS_SECRET: z.string().min(16),
       GEO_BASE_URL: z.string().default('http://127.0.0.1:3003'),
       GEO_INTERNAL_TOKEN: z.string().min(8),
+      /** '0' disables the place.events consumer (e.g. for one-off scripts). */
+      EVENTS_CONSUMER: z.string().optional(),
+      THROTTLE_LIMIT: z.coerce.number().default(300),
     })
     .parse(config);
+  assertNoPlaceholderSecrets(config, ['JWT_ACCESS_SECRET', 'GEO_INTERNAL_TOKEN', 'DB_PASSWORD']);
+  return env;
 }

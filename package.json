@@ -14,7 +14,15 @@
     "test:contracts": "npm test -w @tripblogger/contracts",
     "test:auth": "npm test -w @tripblogger/auth",
     "test:events": "npm test -w @tripblogger/events",
-    "lint:api": "npm run lint -w tripblogger-api"
+    "test:observability": "npm test -w @tripblogger/observability",
+    "test:infra": "node --test infra/secrets/secrets-init.test.js",
+    "lint:api": "npm run lint -w tripblogger-api",
+    "secrets:init": "node infra/secrets/secrets-init.js",
+    "backup": "node infra/backup/backup.js",
+    "restore": "node infra/backup/backup.js restore",
+    "e2e": "node --env-file=.env.compose infra/e2e/flow.js",
+    "load:smoke": "docker compose --env-file .env.compose --profile tools run --rm k6 /scripts/smoke.js",
+    "load:test": "docker compose --env-file .env.compose --profile tools run --rm k6 /scripts/load.js"
   },
   "overrides": {
     "react": "19.2.3",

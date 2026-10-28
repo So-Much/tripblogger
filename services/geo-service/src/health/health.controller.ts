@@ -1,11 +1,15 @@
 import { Controller, Get, Inject, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { DataSource } from 'typeorm';
 import { TypesensePlaces } from '../search/typesense.client';
-import { PhotonClient } from '../geocode/photon.client';
+import { PhotonClient, type PhotonHealth } from '../geocode/photon.client';
 
-export const REDIS_CLIENT = 'REDIS_CLIENT';
+import { REDIS_CLIENT } from '../redis.tokens';
 
+export { REDIS_CLIENT };
+
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(
@@ -25,8 +29,8 @@ export class HealthController {
     const checks = {
       db: 'ok' as 'ok' | 'fail',
       redis: 'ok' as 'ok' | 'fail',
-      typesense: 'ok' as 'ok' | 'fail',
-      photon: 'ok' as 'ok' | 'fail',
+      typesense: 'ok' as 'ok' | 'fail' | 'disabled',
+      photon: 'ok' as PhotonHealth,
     };
 
     try {
@@ -42,17 +46,17 @@ export class HealthController {
       checks.redis = 'fail';
     }
 
-    try {
-      await this.typesense.healthCheck();
-    } catch {
-      checks.typesense = 'fail';
+    if (!this.typesense.enabled) {
+      checks.typesense = 'disabled';
+    } else {
+      try {
+        await this.typesense.healthCheck();
+      } catch {
+        checks.typesense = 'fail';
+      }
     }
 
-    try {
-      await this.photon.healthCheck();
-    } catch {
-      checks.photon = 'fail';
-    }
+    checks.photon = await this.photon.health();
 
     const status =
       checks.db === 'fail'

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -18,7 +18,7 @@ import { MapModule } from './modules/map/map.module';
 import { TripsModule } from './modules/trips/trips.module';
 import { RedisModule } from './config/redis/redis.module';
 import { QueueModule } from './config/queue/queue.module';
-import { OtelModule } from './config/otel/otel.module';
+import { StorageModule } from './config/storage/storage.module';
 import { LoggerModule } from 'nestjs-pino';
 
 const pinoImports =
@@ -26,6 +26,7 @@ const pinoImports =
     ? []
     : [
         LoggerModule.forRoot({
+          forRoutes: [{ path: '{*path}', method: RequestMethod.ALL }],
           pinoHttp: {
             autoLogging: false,
             transport:
@@ -48,7 +49,7 @@ const pinoImports =
     TypeOrmModule.forRootAsync(typeOrmOptionsFactory),
     RedisModule,
     QueueModule,
-    OtelModule,
+    StorageModule,
     HealthModule,
     UsersModule,
     AuthModule,

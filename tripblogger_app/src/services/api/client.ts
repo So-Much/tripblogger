@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '@/src/store/auth.store';
 import { resolveApiBaseUrl } from '@/src/services/api/resolve-api-base-url';
 import { clearPersistedAuthTokens, persistAuthTokens } from '@/src/services/session/session.service';
+import { newIdempotencyKey } from '@/src/services/api/idempotency-key';
 
 /** Effective base URL (dev rewrites localhost for real devices via Expo Metro host). */
 export const apiBaseUrl = resolveApiBaseUrl();
@@ -29,6 +30,11 @@ apiClient.interceptors.request.use((config) => {
   }
   if (sessionId) {
     config.headers['X-Session-Id'] = sessionId;
+  }
+  // Set once per request config, so the 401-refresh retry below resends the same key
+  // and the server replays the first result instead of creating a duplicate.
+  if (config.method?.toLowerCase() === 'post' && !config.headers['Idempotency-Key']) {
+    config.headers['Idempotency-Key'] = newIdempotencyKey();
   }
   return config;
 });

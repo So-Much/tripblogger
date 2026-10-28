@@ -1,10 +1,12 @@
 import { Controller, Get, Inject, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { DataSource } from 'typeorm';
 import { GeoRoutingClient } from '../legs/geo-routing.client';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
+@SkipThrottle()
 @Controller('health')
 export class HealthController {
   constructor(

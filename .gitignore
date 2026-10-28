@@ -123,6 +123,9 @@ docs/**
 infra/jwt/*.pem
 infra/jwt/*.key
 
+# Local backups (npm run backup)
+backups/
+
 # -----------------------------------------------------------------------------
 # Local project structure map (personal reference — not versioned)
 # -----------------------------------------------------------------------------

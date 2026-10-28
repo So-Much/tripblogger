@@ -1,15 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import Redis from 'ioredis';
+import { IDEMPOTENCY_STORE } from '@tripblogger/observability';
 import { validateEnv } from './config/env.schema';
-import { PlaceEntity } from './entities/place.entity';
-import { PlaceContributionEntity } from './entities/place-contribution.entity';
-import { PlaceOutboxEntity } from './entities/place-outbox.entity';
-import { PlaceReviewEntity } from './entities/place-review.entity';
-import { SavedPlaceEntity } from './entities/saved-place.entity';
-import { CheckinEntity } from './entities/checkin.entity';
-import { HealthController, REDIS_CLIENT } from './health/health.controller';
+import { geoDataSourceOptions, geoEntities } from './database/data-source';
+import { HealthController } from './health/health.controller';
+import { REDIS_CLIENT } from './redis.tokens';
 import { SearchService } from './search/search.service';
 import { TypesensePlaces } from './search/typesense.client';
 import { MapController } from './map/map.controller';
@@ -24,33 +23,19 @@ import { JwksAuthGuard } from './auth/jwks-auth.guard';
 import { ClaimStatusesGuard, RolesGuard } from './auth/claim-statuses.guard';
 import { OutboxPollerService } from './outbox/outbox-poller.service';
 
-const entities = [
-  PlaceEntity,
-  PlaceContributionEntity,
-  PlaceOutboxEntity,
-  PlaceReviewEntity,
-  SavedPlaceEntity,
-  CheckinEntity,
-];
-
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env', validate: validateEnv }),
-    TypeOrmModule.forRootAsync({
+    ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'mssql' as const,
-        host: config.getOrThrow<string>('DB_HOST'),
-        port: config.get<number>('DB_PORT') ?? 1433,
-        username: config.getOrThrow<string>('DB_USERNAME'),
-        password: config.getOrThrow<string>('DB_PASSWORD'),
-        database: config.getOrThrow<string>('DB_NAME'),
-        options: { encrypt: false, trustServerCertificate: true, useUTC: true },
-        entities,
-        synchronize: config.get('DB_SYNC') === '1' || config.get('NODE_ENV') !== 'production',
+        throttlers: [{ ttl: 60_000, limit: config.get<number>('THROTTLE_LIMIT') ?? 300 }],
       }),
     }),
-    TypeOrmModule.forFeature(entities),
+    TypeOrmModule.forRootAsync({
+      useFactory: () => geoDataSourceOptions(),
+    }),
+    TypeOrmModule.forFeature(geoEntities),
   ],
   controllers: [
     HealthController,
@@ -61,6 +46,7 @@ const entities = [
     CompatController,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     SearchService,
     TypesensePlaces,
     PhotonClient,
@@ -80,6 +66,7 @@ const entities = [
           maxRetriesPerRequest: null,
         }),
     },
+    { provide: IDEMPOTENCY_STORE, useExisting: REDIS_CLIENT },
   ],
 })
 export class AppModule {}

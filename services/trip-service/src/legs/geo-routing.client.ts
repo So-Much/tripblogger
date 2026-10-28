@@ -5,6 +5,7 @@ import {
   osrmProfileForPlanMode,
   type PlanTravelMode,
 } from '@tripblogger/itinerary-engine';
+import { propagationHeaders } from '@tripblogger/observability';
 import type { TripStopEntity } from '../trips/entities/trip-stop.entity';
 
 type Leg = { durationS: number | null; distanceM: number | null };
@@ -86,7 +87,11 @@ export class GeoRoutingClient {
       try {
         const res = await fetch(url, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', 'x-internal-token': token },
+          headers: {
+            'content-type': 'application/json',
+            'x-internal-token': token,
+            ...propagationHeaders(),
+          },
           body,
           signal: ctrl.signal,
         });

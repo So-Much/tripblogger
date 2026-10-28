@@ -11,8 +11,10 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
 import { normalizeVi } from '@tripblogger/contracts';
@@ -154,6 +156,7 @@ export class CompatController {
   }
 
   @Post('locations/:id/reviews')
+  @UseInterceptors(IdempotencyInterceptor)
   async createReview(
     @Param('id') id: string,
     @Req() req: AuthRequest,
@@ -293,6 +296,7 @@ export class CompatController {
   }
 
   @Post('checkins')
+  @UseInterceptors(IdempotencyInterceptor)
   async checkin(
     @Req() req: AuthRequest,
     @Body() body: { placeId?: string; locationId?: string; lat?: number; lng?: number; latitude?: number; longitude?: number; privacyLevel?: string },

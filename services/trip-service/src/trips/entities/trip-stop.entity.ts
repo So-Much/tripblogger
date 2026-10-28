@@ -18,6 +18,7 @@ export type StopStatus = 'todo' | 'doing' | 'done' | 'skipped';
 @Entity('trip_stops')
 @Index(['tripId'])
 @Index(['tripDayId'])
+@Index('IDX_trip_stops_place_id', ['placeId'])
 export class TripStopEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -63,6 +64,10 @@ export class TripStopEntity {
 
   @Column({ name: 'place_id', type: 'uniqueidentifier', nullable: true })
   placeId!: string | null;
+
+  /** Last Geo place version applied from `place.events`; older events are ignored. */
+  @Column({ name: 'place_version', type: 'int', nullable: true })
+  placeVersion!: number | null;
 
   @Column({ name: 'duration_minutes', type: 'int' })
   durationMinutes!: number;

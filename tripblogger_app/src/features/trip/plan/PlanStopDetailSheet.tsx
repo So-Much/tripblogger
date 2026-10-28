@@ -305,8 +305,7 @@ export function PlanStopSettingsPanel({
       keyboardDismissMode="interactive"
       onScroll={(e: { nativeEvent: { contentOffset: { y: number } } }) => {
         scrollY.current = e.nativeEvent.contentOffset.y;
-      }}
-      scrollEventThrottle={16}>
+      }}>
       {stop.address ? (
         <Text style={[styles.address, { color: muted }]} numberOfLines={2}>
           {stop.address}

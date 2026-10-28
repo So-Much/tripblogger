@@ -10,8 +10,10 @@ import {
   Post,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import { JwksAuthGuard } from '../auth/jwks-auth.guard';
 import { ClaimStatusesGuard, RequiredStatuses, Roles, RolesGuard } from '../auth/claim-statuses.guard';
 import { AddStopDto } from './dto/add-stop.dto';
@@ -39,6 +41,7 @@ export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
 
   @Post()
+  @UseInterceptors(IdempotencyInterceptor)
   create(@Req() req: AuthRequest, @Body() dto: CreateTripDto) {
     return this.tripsService.create(req.user.sub, dto);
   }
@@ -79,6 +82,7 @@ export class TripsController {
   }
 
   @Post(':tripId/stops')
+  @UseInterceptors(IdempotencyInterceptor)
   addStop(
     @Req() req: AuthRequest,
     @Param('tripId', ParseUUIDPipe) tripId: string,

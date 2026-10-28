@@ -1,8 +1,8 @@
+import './tracing';
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import helmet from 'helmet';
 import { requestContextMiddleware } from './common/middleware/request-context.middleware';
@@ -10,6 +10,7 @@ import { HttpLoggingInterceptor } from './common/interceptors/http-logging.inter
 import { HELMET_OPTIONS } from './config/http-security';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
+import { metrics } from './config/otel/metrics';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -19,19 +20,17 @@ async function bootstrap() {
   if (process.env.NODE_ENV !== 'test') {
     app.useLogger(app.get(Logger));
   }
+  // Traefik is the only hop in front; trust it so req.ip (rate limiting) is the client.
+  app.set('trust proxy', 1);
+  // Serves /metrics outside the /api prefix, so Traefik never routes it publicly.
+  app.use(metrics.middleware);
   app.use(helmet(HELMET_OPTIONS));
   app.use(requestContextMiddleware);
   app.useGlobalInterceptors(new HttpLoggingInterceptor());
-  const uploadsDir = join(process.cwd(), 'uploads');
-  const avatarDir = join(uploadsDir, 'avatars');
-  const postsDir = join(uploadsDir, 'posts');
-  const commerceDir = join(uploadsDir, 'commerce');
-  const commerceVariantsDir = join(commerceDir, 'variants');
-  if (!existsSync(avatarDir)) mkdirSync(avatarDir, { recursive: true });
-  if (!existsSync(postsDir)) mkdirSync(postsDir, { recursive: true });
-  if (!existsSync(commerceDir)) mkdirSync(commerceDir, { recursive: true });
-  if (!existsSync(commerceVariantsDir)) mkdirSync(commerceVariantsDir, { recursive: true });
-  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
+  // With STORAGE_DRIVER=s3 the gateway serves /uploads straight from the bucket.
+  if (process.env.STORAGE_DRIVER !== 's3') {
+    app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+  }
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -40,6 +39,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.enableShutdownHooks();
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);

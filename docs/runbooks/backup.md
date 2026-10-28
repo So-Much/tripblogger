@@ -1,11 +1,16 @@
-# Backup
-
-**SQL Server (three databases):**
+# Backup and restore
 
 ```powershell
-sqlcmd -S 127.0.0.1,1433 -U sa -P "YourStrong!Passw0rd" -Q "BACKUP DATABASE tripblogger TO DISK='D:\tripblogger-data\backup\tripblogger.bak' WITH INIT"
-sqlcmd -S 127.0.0.1,1433 -U sa -P "YourStrong!Passw0rd" -Q "BACKUP DATABASE tripblogger_trips TO DISK='D:\tripblogger-data\backup\tripblogger_trips.bak' WITH INIT"
-sqlcmd -S 127.0.0.1,1433 -U sa -P "YourStrong!Passw0rd" -Q "BACKUP DATABASE tripblogger_geo TO DISK='D:\tripblogger-data\backup\tripblogger_geo.bak' WITH INIT"
+npm run backup                 # -> backups/<timestamp>/
+npm run backup -- --keep 7     # also delete all but the 7 newest backups
+npm run restore -- <timestamp>  # e.g. 20261029-101500
 ```
 
-**Volumes:** copy `D:\tripblogger-data\photon` and Docker volumes `typesense_data` / `mssql_data` (Docker Desktop → Volumes, or `docker run --rm -v tripblogger_typesense_data:/data -v D:/tripblogger-data/backup:/out alpine tar czf /out/typesense.tgz /data`).
+A backup contains:
+
+- `tripblogger.bak`, `tripblogger_geo.bak`, `tripblogger_trips.bak` — SQL Server native backups (written through the `./backups/mssql` bind mount).
+- `seaweedfs.tgz` — tar of the `tripblogger_seaweedfs_data` volume (uploaded images + filer metadata).
+
+Restore stops core, geo and trip, restores the three databases `WITH REPLACE`, replaces the SeaweedFS volume, then starts the services again. Redis is not backed up: it only holds caches and the event stream (the outbox in Geo can republish).
+
+`backups/` is git-ignored. Copy it to another disk or a free cloud drive if you want an off-machine copy.

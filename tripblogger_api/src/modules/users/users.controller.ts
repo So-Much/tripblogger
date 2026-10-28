@@ -17,16 +17,18 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { StatusesGuard } from '../../common/guards/statuses.guard';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
+import { memoryStorage } from 'multer';
 import { Request } from 'express';
+import { MediaUploadService } from '../../config/storage/media-upload.service';
 
 const AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly mediaUpload: MediaUploadService,
+  ) {}
 
   @Get('me/stats')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
@@ -50,13 +52,7 @@ export class UsersController {
   @RequiredStatuses('ACTIVE')
   @UseInterceptors(
     FileInterceptor('avatar', {
-      storage: diskStorage({
-        destination: join(process.cwd(), 'uploads', 'avatars'),
-        filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-          const extension = extname(file.originalname || '').toLowerCase() || '.jpg';
-          cb(null, `${Date.now()}-${randomUUID()}${extension}`);
-        },
-      }),
+      storage: memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile: boolean) => void) => {
         cb(null, AVATAR_MIME.has(file.mimetype));
@@ -65,7 +61,7 @@ export class UsersController {
   )
   async updateMyProfile(
     @Req() req: { user: { sub: string }; protocol: string; headers: { host?: string; 'x-forwarded-proto'?: string } },
-    @UploadedFile() avatar?: { filename: string; mimetype: string },
+    @UploadedFile() avatar?: Express.Multer.File,
     @Body('displayName') displayName?: string,
     @Body('email') email?: string,
     @Body('totalTravelBudgetAmount') totalTravelBudgetAmountRaw?: string,
@@ -78,7 +74,11 @@ export class UsersController {
     const removeAvatar = removeAvatarRaw === true || removeAvatarRaw === 'true' || removeAvatarRaw === '1';
     const proto = req.headers['x-forwarded-proto'] ?? req.protocol ?? 'http';
     const host = req.headers.host;
-    const avatarUrl = avatar ? `${proto}://${host}/uploads/avatars/${avatar.filename}` : removeAvatar ? null : undefined;
+    const avatarUrl = avatar
+      ? `${proto}://${host}${await this.mediaUpload.storeAvatar(avatar)}`
+      : removeAvatar
+        ? null
+        : undefined;
 
     let totalTravelBudgetAmount: number | null | undefined;
     if (totalTravelBudgetAmountRaw !== undefined) {

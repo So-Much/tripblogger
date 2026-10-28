@@ -2,7 +2,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src/features/trip/plan', '<rootDir>/src/platform'],
+  roots: ['<rootDir>/src/features/trip/plan', '<rootDir>/src/platform', '<rootDir>/src/services/api'],
   testMatch: ['**/*.spec.ts'],
   moduleFileExtensions: ['ts', 'js'],
   transform: {

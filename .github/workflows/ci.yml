@@ -6,26 +6,124 @@ on:
   pull_request:
     branches: [main, develop, 'feat/**']
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies (fail on critical)
+        run: npm audit --omit=dev --audit-level=critical
       - run: npm run test:engine
-      - run: npm test -w @tripblogger/contracts
-      - run: npm test -w @tripblogger/auth
-      - run: npm test -w @tripblogger/events
+      - run: npm run test:contracts
+      - run: npm run test:auth
+      - run: npm run test:events
+      - run: npm run test:observability
+      - run: npm run test:infra
       - run: npm run test:api
       - run: npm test -w geo-service
-      - run: npm test -w trip-service -- --testPathPattern=travel-legs
+      - run: npm test -w trip-service
       - run: npm run test:app-plan
-      - run: npx tsc --noEmit -p tripblogger_app
+      - name: Typecheck app
+        run: npm exec -w tripblogger_app -- tsc --noEmit
       - run: npm run lint:api
-      - run: docker build -f tripblogger_api/Dockerfile .
-      - run: docker build -f services/geo-service/Dockerfile .
-      - run: docker build -f services/trip-service/Dockerfile .
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            dockerfile: tripblogger_api/Dockerfile
+          - name: geo
+            dockerfile: services/geo-service/Dockerfile
+          - name: trip
+            dockerfile: services/trip-service/Dockerfile
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/tripblogger-${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          load: true
+          tags: tripblogger-${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - name: Trivy scan (fail on fixable critical)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+            --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
+            tripblogger-${{ matrix.name }}:ci
+      - name: Push to GHCR (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          image="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          docker tag tripblogger-${{ matrix.name }}:ci "$image:${GITHUB_SHA::12}"
+          docker tag tripblogger-${{ matrix.name }}:ci "$image:main"
+          docker push "$image:${GITHUB_SHA::12}"
+          docker push "$image:main"
+
+  compose-smoke:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Dev keys and random secrets
+        run: |
+          node infra/jwt/generate-dev-keys.js
+          node infra/secrets/secrets-init.js
+      - name: Start stack
+        run: docker compose --env-file .env.compose --profile infra --profile apps up -d --build
+      - name: Wait for gateway
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/health >/dev/null \
+              && curl -fsS http://localhost:3000/api/map/categories >/dev/null; then
+              echo "ready after $((i * 5))s"; exit 0
+            fi
+            sleep 5
+          done
+          echo "gateway not ready"; exit 1
+      - name: Upload is served from SeaweedFS, not the database
+        run: |
+          curl -fsS -o /dev/null -w '%{http_code}\n' http://localhost:3000/uploads/does-not-exist.jpg && exit 1 || true
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT --data x http://localhost:3000/uploads/evil.txt)
+          test "$code" != "200" && test "$code" != "201"
+      - name: End-to-end flow (upload, idempotency, place sync, geocode)
+        run: npm run e2e
+      - name: k6 smoke through Traefik
+        run: docker compose --env-file .env.compose --profile tools run --rm k6 /scripts/smoke.js
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --env-file .env.compose --profile infra --profile apps logs --no-color --tail 200
+      - name: Tear down
+        if: always()
+        run: docker compose --env-file .env.compose --profile infra --profile apps down -v

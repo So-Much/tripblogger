@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import Redis from 'ioredis';
 import { ConfigService } from '@nestjs/config';
+import { IDEMPOTENCY_STORE } from '@tripblogger/observability';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 
@@ -17,7 +18,8 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
           maxRetriesPerRequest: null,
         }),
     },
+    { provide: IDEMPOTENCY_STORE, useExisting: REDIS_CLIENT },
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, IDEMPOTENCY_STORE],
 })
 export class RedisModule {}

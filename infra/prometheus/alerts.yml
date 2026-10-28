@@ -1,0 +1,47 @@
+groups:
+  - name: tripblogger
+    rules:
+      - alert: ServiceDown
+        expr: up{job="services"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: '{{ $labels.instance }} is not answering /metrics'
+
+      - alert: High5xxRate
+        expr: |
+          sum by (service) (rate(http_request_duration_seconds_count{status=~"5.."}[5m]))
+            / clamp_min(sum by (service) (rate(http_request_duration_seconds_count[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: '{{ $labels.service }}: more than 5% of requests return 5xx'
+
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: '{{ $labels.service }}: p99 latency above 2s'
+
+      - alert: PlaceEventsDeadLettered
+        expr: events_dlq_length > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: 'place.events.dlq has {{ $value }} entries — inspect with XRANGE place.events.dlq - +'
+
+      - alert: GeoOutboxStuck
+        expr: geo_outbox_stuck > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: '{{ $value }} outbox rows exhausted their retries and were not published'
+
+      - alert: GeoOutboxBacklog
+        expr: geo_outbox_pending > 100
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Geo outbox backlog is {{ $value }} rows'

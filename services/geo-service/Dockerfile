@@ -6,11 +6,12 @@ COPY packages/auth/package.json packages/auth/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/events/package.json packages/events/
 COPY packages/itinerary-engine/package.json packages/itinerary-engine/
+COPY packages/observability/package.json packages/observability/
 COPY services/geo-service/package.json services/geo-service/
 COPY services/trip-service/package.json services/trip-service/
 COPY tripblogger_api/package.json tripblogger_api/
 COPY tripblogger_app/package.json tripblogger_app/
-RUN npm ci --ignore-scripts --workspace=geo-service --workspace=@tripblogger/contracts --workspace=@tripblogger/auth --workspace=@tripblogger/events --include-workspace-root
+RUN npm ci --ignore-scripts --workspace=geo-service --workspace=@tripblogger/contracts --workspace=@tripblogger/auth --workspace=@tripblogger/events --workspace=@tripblogger/observability --include-workspace-root
 COPY packages ./packages
 COPY services/geo-service ./services/geo-service
 RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app

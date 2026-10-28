@@ -8,7 +8,9 @@ import {
   Req,
   UnauthorizedException,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import { IsIn, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ConfigService } from '@nestjs/config';
@@ -83,6 +85,7 @@ export class ContributeController {
   ) {}
 
   @Post()
+  @UseInterceptors(IdempotencyInterceptor)
   @UseGuards(JwksAuthGuard, RolesGuard, ClaimStatusesGuard)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')

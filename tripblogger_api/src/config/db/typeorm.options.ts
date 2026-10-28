@@ -105,6 +105,7 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       TripStopTagEntity,
     ],
     migrations: ['src/migrations/*.ts'],
+    migrationsRun: process.env.NODE_ENV !== 'test' && process.env.DB_MIGRATE_ON_BOOT !== '0',
     synchronize: false,
   };
 }

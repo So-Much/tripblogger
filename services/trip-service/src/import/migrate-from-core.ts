@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
+import { tripDataSourceOptions } from '../database/data-source';
 
 async function main() {
   const core = new DataSource({
@@ -11,15 +12,7 @@ async function main() {
     database: process.env.CORE_DB_NAME ?? 'tripblogger',
     options: { encrypt: false, trustServerCertificate: true, useUTC: true },
   });
-  const trip = new DataSource({
-    type: 'mssql',
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT ?? 1433),
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME ?? 'tripblogger_trips',
-    options: { encrypt: false, trustServerCertificate: true, useUTC: true },
-  });
+  const trip = new DataSource(tripDataSourceOptions());
   await core.initialize();
   await trip.initialize();
   const trips = (await core.query('SELECT * FROM trips')) as Array<Record<string, unknown>>;

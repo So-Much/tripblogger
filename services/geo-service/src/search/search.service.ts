@@ -9,7 +9,7 @@ import {
 } from '@tripblogger/contracts';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
+import { Between, Like, Repository } from 'typeorm';
 import { PlaceEntity } from '../entities/place.entity';
 import { PlaceReviewEntity } from '../entities/place-review.entity';
 import { TypesensePlaces } from './typesense.client';
@@ -85,7 +85,10 @@ export class SearchService {
     } catch (err) {
       this.logger.warn(`Typesense nearby fallback: ${err instanceof Error ? err.message : err}`);
     }
-    const all = await this.places.find({ where: { status: 'active', category }, take: 500 });
+    const all = await this.places.find({
+      where: { status: 'active', category, ...bboxWhere(lat, lng, radius) },
+      take: 500,
+    });
     return all
       .map((p) => this.toDto(p, { lat, lng }))
       .filter((p) => p.distanceM != null && p.distanceM <= radius)
@@ -135,7 +138,10 @@ export class SearchService {
     } catch (err) {
       this.logger.warn(`Typesense nearestWithin fallback: ${err instanceof Error ? err.message : err}`);
     }
-    const candidates = await this.places.find({ where: { status: 'active' }, take: 800 });
+    const candidates = await this.places.find({
+      where: { status: 'active', ...bboxWhere(lat, lng, radiusM) },
+      take: 800,
+    });
     const ranked = candidates
       .map((p) => this.toDto(p, { lat, lng }))
       .filter((p) => p.distanceM != null && p.distanceM <= radiusM)
@@ -176,6 +182,16 @@ export class SearchService {
       lng: Number(place.lng),
     };
   }
+}
+
+/** Lat/lng box enclosing a circle, so the SQL fallback can use the coordinate columns instead of scanning. */
+export function bboxWhere(lat: number, lng: number, radiusM: number) {
+  const dLat = radiusM / 111_000;
+  const dLng = radiusM / (111_000 * Math.max(0.01, Math.cos((lat * Math.PI) / 180)));
+  return {
+    lat: Between((lat - dLat).toFixed(8), (lat + dLat).toFixed(8)),
+    lng: Between((lng - dLng).toFixed(8), (lng + dLng).toFixed(8)),
+  };
 }
 
 export function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {

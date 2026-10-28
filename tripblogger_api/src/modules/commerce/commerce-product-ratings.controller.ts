@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors } from '@nestjs/common';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
@@ -29,6 +30,7 @@ export class CommerceProductRatingsController {
 
   @Post(':id/ratings')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
   create(@Req() req: AuthedRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateRatingDto) {

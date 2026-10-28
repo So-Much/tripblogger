@@ -5,6 +5,7 @@ import { PlaceEntity } from '../entities/place.entity';
 import { PlaceReviewEntity } from '../entities/place-review.entity';
 import { SavedPlaceEntity } from '../entities/saved-place.entity';
 import { CheckinEntity } from '../entities/checkin.entity';
+import { geoDataSourceOptions } from '../database/data-source';
 
 /** Read-only copy of Core `locations` into Geo `places`, keeping the same UUID. */
 async function main() {
@@ -17,17 +18,7 @@ async function main() {
     database: process.env.CORE_DB_NAME ?? 'tripblogger',
     options: { encrypt: false, trustServerCertificate: true, useUTC: true },
   });
-  const geo = new DataSource({
-    type: 'mssql',
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT ?? 1433),
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME ?? 'tripblogger_geo',
-    options: { encrypt: false, trustServerCertificate: true, useUTC: true },
-    entities: [PlaceEntity, PlaceReviewEntity, SavedPlaceEntity, CheckinEntity],
-    synchronize: process.env.DB_SYNC === '1',
-  });
+  const geo = new DataSource(geoDataSourceOptions());
   await core.initialize();
   await geo.initialize();
   const rows = (await core.query(

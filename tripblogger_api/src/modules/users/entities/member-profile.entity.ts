@@ -1,7 +1,8 @@
-import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 import { UserEntity } from './user.entity';
 
 @Entity('member_profiles')
+@Index('UX_member_profiles_email', ['email'], { unique: true, where: 'email IS NOT NULL' })
 export class MemberProfileEntity {
   @PrimaryColumn({ name: 'user_id' })
   userId!: string;
@@ -13,7 +14,7 @@ export class MemberProfileEntity {
   @Column({ unique: true })
   username!: string;
 
-  @Column({ type: 'nvarchar', length: 255, unique: true, nullable: true })
+  @Column({ type: 'nvarchar', length: 255, nullable: true })
   email?: string | null;
 
   @Column({ name: 'password_hash' })

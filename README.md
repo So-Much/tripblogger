@@ -125,19 +125,22 @@ Chi tiết stack có bằng chứng trong repo: [`TECH_STACK.md`](./TECH_STACK.m
 
 ## Kiến trúc
 
-**Services (2026-09):** Traefik gateway + Core API + Trip Service + Geo Service (Typesense + Photon, Việt Nam). Tiến độ sống: [`docs/PROGRESS.md`](docs/PROGRESS.md). Compose: `docker compose --profile infra --profile apps up`.
+**Services (2026-10):** Traefik gateway + Core API + Trip Service + Geo Service + SeaweedFS (ảnh). Toàn bộ chạy bằng Docker, không dùng dịch vụ trả phí. Tiến độ sống: [`docs/PROGRESS.md`](docs/PROGRESS.md). Runbook: [`docs/runbooks/compose-up.md`](docs/runbooks/compose-up.md).
 
 ```mermaid
 flowchart LR
   App[Expo app] --> Traefik["Traefik :3000"]
   Traefik -->|map places locations saved checkins| Geo[Geo]
   Traefik -->|trips| Trip[Trip]
-  Traefik -->|api còn lại uploads socket.io| Core[Core]
+  Traefik -->|api còn lại, socket.io| Core[Core]
+  Traefik -->|GET /uploads| Seaweed[(SeaweedFS S3)]
+  Core -->|PUT ảnh| Seaweed
   Core --> DbCore[(tripblogger)]
   Geo --> DbGeo[(tripblogger_geo)]
   Trip --> DbTrip[(tripblogger_trips)]
-  Geo --> Typesense
-  Geo --> Photon
+  Geo -->|outbox, Redis Streams| Trip
+  Geo -.->|tuỳ chọn| Typesense
+  Geo -->|public hoặc tự host| Photon
   Trip -->|JWKS và table-legs| Geo
   Geo -->|JWKS| Core
   Trip -->|JWKS| Core
@@ -212,21 +215,23 @@ API: **`http://localhost:3000/api`**. Redis phải chạy nếu bật map cache 
 
 ### B. Ba service sau Traefik
 
-Traefik giữ cổng 3000 (cùng vai trò cửa trước như API Gateway trong bài AWS 07). `/api/map|places|locations|saved-locations|checkins` → Geo, `/api/trips` → Trip, phần còn lại và `/uploads` và `/socket.io` → Core.
+Traefik giữ cổng 3000 (cùng vai trò cửa trước như API Gateway trong bài AWS 07). `/api/map|places|locations|saved-locations|checkins` → Geo, `/api/trips` → Trip, phần còn lại của `/api` và `/socket.io` → Core, `GET /uploads/*` → SeaweedFS (ảnh không nằm trong database).
 
 ```powershell
 cd D:\Work\Projects\tripblogger
 copy .env.compose.example .env.compose
 node infra/jwt/generate-dev-keys.js
-docker compose --env-file .env.compose --profile infra up -d
-docker compose --env-file .env.compose --profile apps up --build
+npm run secrets:init
+docker compose --env-file .env.compose --profile infra --profile apps up -d --build
+npm run e2e
 ```
 
-Volume SQL mới là database trống. Migration và seed của Core chạy một lần từ máy host, đọc `tripblogger_api/.env` (file này đã có, không cần `$env:`):
+`secrets:init` sinh secret ngẫu nhiên vào `.env.compose` (không ghi biến môi trường ra máy), xem [`docs/runbooks/secrets.md`](docs/runbooks/secrets.md). Profile tuỳ chọn: `obs` (Prometheus, Grafana, Jaeger), `search` (Typesense), `geocoder` (Photon tự host), `tools` (k6: `npm run load:smoke`). Backup: `npm run backup`, xem [`docs/runbooks/backup.md`](docs/runbooks/backup.md).
+
+Migration của cả ba service tự chạy khi container khởi động. Seed của Core chạy một lần từ máy host, đọc `tripblogger_api/.env` (file này đã có, không cần `$env:`):
 
 ```powershell
 cd D:\Work\Projects\tripblogger\tripblogger_api
-npm run migration:run
 npm run seed:all
 ```
 
@@ -238,7 +243,7 @@ docker compose --env-file .env.compose exec geo node /app/node_modules/ts-node/d
 docker compose --env-file .env.compose exec trip node /app/node_modules/ts-node/dist/bin.js --transpile-only src/import/migrate-from-core.ts
 ```
 
-Photon index Việt Nam và OSM đầy đủ: [`docs/runbooks/import-osm-vietnam.md`](docs/runbooks/import-osm-vietnam.md). Không có index thì reverse geocode trả 503 khi không snap được POI trong 50m.
+Mặc định `PHOTON_URL` để trống: Geo dùng Photon công khai (`photon.komoot.io`) và cache 7 ngày trong Redis. Muốn tự host thì import index Việt Nam theo [`docs/runbooks/import-osm-vietnam.md`](docs/runbooks/import-osm-vietnam.md), bật profile `geocoder` và đặt `PHOTON_URL=http://photon:2322`. Typesense mặc định tắt (`TYPESENSE_HOST=` trống) vì bị segfault trên kernel WSL 6.18; khi tắt, Geo tìm kiếm bằng SQL.
 
 Kiểm tra: `http://localhost:3000/api/health` và dashboard Traefik `http://localhost:8080`.
 
@@ -272,7 +277,8 @@ Trên thiết bị thật, app tự đổi `localhost` sang IP Metro khi develop
 | **API** | NestJS 11 · TypeORM · mssql · Passport JWT · Helmet · Throttler · Sharp |
 | **Realtime** | Socket.IO |
 | **Jobs** | BullMQ + Redis |
-| **Observability** | Prometheus · Grafana · Loki · OTEL Collector (`docker-compose.observability.yml`) |
+| **Storage** | SQL Server · Redis (AOF, Streams) · SeaweedFS (S3 tự host cho ảnh) |
+| **Observability** | Prometheus · Grafana · Jaeger (OTLP) — profile `obs` |
 | **Shared** | `@tripblogger/itinerary-engine` (pure TS) |
 
 </div>
@@ -302,8 +308,8 @@ Chỉ seed roles/statuses cần thiết — tránh seed user demo.
 
 ### 4) Upload ảnh
 
-- Hiện lưu `uploads/` và serve `/uploads/*`
-- Production: persistent volume, quota, backup; trung hạn → S3/Cloudinary
+- Compose: Core ghi vào SeaweedFS qua S3 API (`STORAGE_DRIVER=s3`), Traefik phục vụ `GET /uploads/*`; chạy API riêng lẻ thì mặc định lưu `uploads/` trên đĩa
+- Volume `seaweedfs_data` được `npm run backup` đóng gói cùng database
 
 ### 5) Deploy
 
@@ -314,7 +320,7 @@ npm ci && npm run build && node dist/main.js
 # App: Expo production build với env production
 ```
 
-Proxy: `/api/*` → API · `/uploads/*` → static
+Proxy: `/api/*` → API · `/uploads/*` → SeaweedFS (chỉ GET/HEAD)
 
 ### 6) Bảo mật
 
@@ -323,7 +329,7 @@ Proxy: `/api/*` → API · `/uploads/*` → static
 
 ### 7) Observability & backup
 
-- Metrics / logs · backup SQL Server + `uploads/` · kiểm tra restore
+- Metrics, alert, trace: profile `obs` · `npm run backup` (SQL Server + SeaweedFS) · `npm run restore` để kiểm tra
 
 ### 8) Smoke test
 

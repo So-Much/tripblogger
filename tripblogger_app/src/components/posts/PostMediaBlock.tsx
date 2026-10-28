@@ -47,7 +47,7 @@ function ResilientPostImage({
   imageStyle: StyleProp<ImageStyle>;
   fallbackStyle: StyleProp<ViewStyle>;
   placeholder?: string;
-  contentFit: 'contain';
+  contentFit: 'contain' | 'cover';
   transition: number;
   fallbackLabel: string;
   retryLabel: string;

@@ -6,6 +6,7 @@ import Typesense from 'typesense';
 import { normalizeVi } from '@tripblogger/contracts';
 import { PlaceEntity } from '../entities/place.entity';
 import { parseGeoJsonSeq } from './parse-geojsonseq';
+import { geoDataSourceOptions } from '../database/data-source';
 
 const COLLECTION = 'places';
 
@@ -70,17 +71,7 @@ async function main() {
   const text = readFileSync(path, 'utf8');
   const pois = parseGeoJsonSeq(text);
 
-  const ds = new DataSource({
-    type: 'mssql',
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT ?? 1433),
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME ?? 'tripblogger_geo',
-    options: { encrypt: false, trustServerCertificate: true, useUTC: true },
-    entities: [PlaceEntity],
-    synchronize: process.env.DB_SYNC === '1',
-  });
+  const ds = new DataSource(geoDataSourceOptions());
   await ds.initialize();
   const repo = ds.getRepository(PlaceEntity);
   const saved: PlaceEntity[] = [];
