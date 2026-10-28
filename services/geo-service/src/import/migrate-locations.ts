@@ -2,6 +2,9 @@ import 'dotenv/config';
 import { DataSource } from 'typeorm';
 import { normalizeVi } from '@tripblogger/contracts';
 import { PlaceEntity } from '../entities/place.entity';
+import { PlaceReviewEntity } from '../entities/place-review.entity';
+import { SavedPlaceEntity } from '../entities/saved-place.entity';
+import { CheckinEntity } from '../entities/checkin.entity';
 
 /** Read-only copy of Core `locations` into Geo `places`, keeping the same UUID. */
 async function main() {
@@ -22,7 +25,7 @@ async function main() {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME ?? 'tripblogger_geo',
     options: { encrypt: false, trustServerCertificate: true, useUTC: true },
-    entities: [PlaceEntity],
+    entities: [PlaceEntity, PlaceReviewEntity, SavedPlaceEntity, CheckinEntity],
     synchronize: process.env.DB_SYNC === '1',
   });
   await core.initialize();
@@ -60,9 +63,49 @@ async function main() {
     }
     upserted++;
   }
+  const saved = await copyOptional(core, geo, 'saved_locations', async (row) => {
+    await geo.query(
+      `IF NOT EXISTS (SELECT 1 FROM saved_places WHERE id = @0)
+       INSERT INTO saved_places (id, user_id, place_id, collection_name, note, created_at)
+       VALUES (@0,@1,@2,@3,@4,COALESCE(@5, SYSUTCDATETIME()))`,
+      [row.id, row.user_id, row.location_id, row.collection_name ?? 'Mặc định', row.note, row.created_at],
+    );
+  });
+  const reviews = await copyOptional(core, geo, 'location_reviews', async (row) => {
+    await geo.query(
+      `IF NOT EXISTS (SELECT 1 FROM place_reviews WHERE id = @0)
+       INSERT INTO place_reviews (id, place_id, user_id, rating, body, tags_json, created_at)
+       VALUES (@0,@1,@2,@3,@4,@5,COALESCE(@6, SYSUTCDATETIME()))`,
+      [row.id, row.location_id, row.user_id, row.rating, row.content, row.tags_json, row.created_at],
+    );
+  });
+  const checkins = await copyOptional(core, geo, 'user_checkins', async (row) => {
+    await geo.query(
+      `IF NOT EXISTS (SELECT 1 FROM checkins WHERE id = @0)
+       INSERT INTO checkins (id, user_id, place_id, lat, lng, privacy_level, created_at)
+       VALUES (@0,@1,@2,@3,@4,@5,COALESCE(@6, SYSUTCDATETIME()))`,
+      [row.id, row.user_id, row.location_id, row.latitude, row.longitude, row.privacy_level, row.checkin_time],
+    );
+  });
   await core.destroy();
   await geo.destroy();
-  console.log(JSON.stringify({ upserted }));
+  console.log(JSON.stringify({ upserted, saved, reviews, checkins }));
+}
+
+async function copyOptional(
+  core: DataSource,
+  _geo: DataSource,
+  table: string,
+  insert: (row: Record<string, unknown>) => Promise<void>,
+): Promise<number> {
+  try {
+    const rows = (await core.query(`SELECT * FROM ${table}`)) as Array<Record<string, unknown>>;
+    for (const row of rows) await insert(row);
+    return rows.length;
+  } catch (err) {
+    console.warn(`skip ${table}: ${err instanceof Error ? err.message : err}`);
+    return 0;
+  }
 }
 
 main().catch((err) => {

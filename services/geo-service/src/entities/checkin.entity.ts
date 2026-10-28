@@ -17,6 +17,9 @@ export class CheckinEntity {
   @Column({ type: 'decimal', precision: 11, scale: 8, nullable: true })
   lng!: string | null;
 
+  @Column({ name: 'privacy_level', type: 'nvarchar', length: 16, default: 'PUBLIC' })
+  privacyLevel!: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

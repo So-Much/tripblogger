@@ -1,7 +1,7 @@
 # Compose up
 
 ```powershell
-cd D:\tripblogger
+cd D:\Work\Projects\tripblogger
 copy .env.compose.example .env.compose
 node infra/jwt/generate-dev-keys.js
 docker compose --env-file .env.compose --profile infra up -d

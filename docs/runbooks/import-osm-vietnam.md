@@ -3,7 +3,7 @@
 **Fixture (CI / first demo, no download):**
 
 ```powershell
-cd D:\tripblogger\services\geo-service
+cd D:\Work\Projects\tripblogger\services\geo-service
 $env:DB_HOST='127.0.0.1'; $env:DB_USERNAME='sa'; $env:DB_PASSWORD='YourStrong!Passw0rd'; $env:DB_NAME='tripblogger_geo'; $env:DB_SYNC='1'
 npm run geo:import -- --fixture
 ```

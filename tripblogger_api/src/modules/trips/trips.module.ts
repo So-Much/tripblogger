@@ -9,6 +9,7 @@ import { TripStopTagEntity } from './entities/trip-stop-tag.entity';
 import { TripStopEntity } from './entities/trip-stop.entity';
 import { TripEntity } from './entities/trip.entity';
 import { TravelLegsService } from './travel-legs.service';
+import { MemberBudgetController } from './member-budget.controller';
 import { TripsController } from './trips.controller';
 import { TripsService } from './trips.service';
 
@@ -18,7 +19,7 @@ import { TripsService } from './trips.service';
     UsersModule,
     MapModule,
   ],
-  controllers: [TripsController],
+  controllers: [MemberBudgetController, TripsController],
   providers: [TripsService, TravelLegsService, RolesGuard, StatusesGuard],
   exports: [TripsService],
 })

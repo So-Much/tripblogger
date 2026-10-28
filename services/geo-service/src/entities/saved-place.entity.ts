@@ -11,6 +11,12 @@ export class SavedPlaceEntity {
   @Column({ name: 'place_id', type: 'uniqueidentifier' })
   placeId!: string;
 
+  @Column({ name: 'collection_name', type: 'nvarchar', length: 100, default: 'Mặc định' })
+  collectionName!: string;
+
+  @Column({ type: 'nvarchar', length: 'max', nullable: true })
+  note!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

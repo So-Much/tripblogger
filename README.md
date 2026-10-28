@@ -129,42 +129,30 @@ Chi tiết stack có bằng chứng trong repo: [`TECH_STACK.md`](./TECH_STACK.m
 
 ```mermaid
 flowchart LR
-  subgraph Client
-    A[Expo Router App]
-    A --> B[Zustand]
-    A --> C[React Query]
-    A --> D[Maps / Plan Sheet]
-  end
-
-  subgraph API
-    E[NestJS /api]
-    E --> F[TypeORM]
-    E --> G[BullMQ]
-    E --> H[Socket.IO]
-  end
-
-  subgraph Data
-    I[(SQL Server)]
-    J[(Redis)]
-    K[uploads/]
-  end
-
-  C -->|Axios| E
-  H <-->|realtime| A
-  F --> I
-  G --> J
-  E --> K
-  A -.->|shared| L[@tripblogger/itinerary-engine]
-  E -.-> L
+  App[Expo app] --> Traefik["Traefik :3000"]
+  Traefik -->|map places locations saved checkins| Geo[Geo]
+  Traefik -->|trips| Trip[Trip]
+  Traefik -->|api còn lại uploads socket.io| Core[Core]
+  Core --> DbCore[(tripblogger)]
+  Geo --> DbGeo[(tripblogger_geo)]
+  Trip --> DbTrip[(tripblogger_trips)]
+  Geo --> Typesense
+  Geo --> Photon
+  Trip -->|JWKS và table-legs| Geo
+  Geo -->|JWKS| Core
+  Trip -->|JWKS| Core
 ```
 
 ```
 tripblogger/
-├── tripblogger_api/           # NestJS · TypeORM · SQL Server · Redis
-├── tripblogger_app/           # Expo SDK 54 · RN · maps · plan UI
-├── packages/itinerary-engine/ # schedule · opening hours · travel mode
-├── docs/                      # spec & cấu trúc nội bộ
-└── TECH_STACK.md              # khảo sát công nghệ trong repo
+├── tripblogger_api/            # Core: auth, users, posts, commerce, uploads, socket
+├── services/geo-service/       # search, map, locations, saved, check-in
+├── services/trip-service/      # lịch trình và /trips/budget
+├── packages/                   # contracts, auth JWKS, events, itinerary-engine
+├── infra/traefik/              # cửa trước, một URL cho app
+├── tripblogger_app/            # Expo, vẫn gọi http://host:3000/api
+├── docker-compose.yml          # profile infra + apps
+└── .github/workflows/ci.yml    # test và docker build
 ```
 
 ---
@@ -180,23 +168,58 @@ tripblogger/
 
 ## Quick start
 
-### 1. API
+Có hai cách chạy. App luôn gọi **một** base URL `http://localhost:3000/api`.
 
-```bash
-cp tripblogger_api/.env.example tripblogger_api/.env   # Windows: copy tay
-cd tripblogger_api
-npm install
+### A. Một process (hành vi cũ)
+
+`GEO_DELEGATE` và `TRIP_DELEGATE` để trống. Core tự phục vụ map, location và trip, kể cả `GET/PUT /api/trips/budget`.
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_api
+copy .env.example .env
 npm run migration:run
 npm run seed:all
 npm run start:dev
 ```
 
-API: **`http://localhost:3000/api`**
+API: **`http://localhost:3000/api`**. Redis phải chạy nếu bật map cache và BullMQ.
 
-### 2. App
+### B. Ba service sau Traefik
 
-```bash
-cd tripblogger_app
+Traefik giữ cổng 3000 (cùng vai trò cửa trước như API Gateway trong bài AWS 07). `/api/map|places|locations|saved-locations|checkins` → Geo, `/api/trips` → Trip, phần còn lại và `/uploads` và `/socket.io` → Core.
+
+```powershell
+cd D:\Work\Projects\tripblogger
+copy .env.compose.example .env.compose
+node infra/jwt/generate-dev-keys.js
+docker compose --env-file .env.compose --profile infra up -d
+docker compose --env-file .env.compose --profile apps up --build
+```
+
+Volume SQL mới là database trống. Migration và seed của Core chạy một lần từ máy host, đọc `tripblogger_api/.env` (file này đã có, không cần `$env:`):
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_api
+npm run migration:run
+npm run seed:all
+```
+
+Copy dữ liệu sang Geo và Trip chạy trong container. Container đã nhận biến từ `docker-compose.yml` và `.env.compose`, không ghi biến ra máy:
+
+```powershell
+cd D:\Work\Projects\tripblogger
+docker compose --env-file .env.compose exec geo node /app/node_modules/ts-node/dist/bin.js --transpile-only src/import/migrate-locations.ts
+docker compose --env-file .env.compose exec trip node /app/node_modules/ts-node/dist/bin.js --transpile-only src/import/migrate-from-core.ts
+```
+
+Photon index Việt Nam và OSM đầy đủ: [`docs/runbooks/import-osm-vietnam.md`](docs/runbooks/import-osm-vietnam.md). Không có index thì reverse geocode trả 503 khi không snap được POI trong 50m.
+
+Kiểm tra: `http://localhost:3000/api/health` và dashboard Traefik `http://localhost:8080`.
+
+### App
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_app
 npm install
 # .env ← EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/api
 npm run start

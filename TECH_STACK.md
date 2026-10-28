@@ -268,10 +268,10 @@ Migrations (ví dụ): auth/profiles, posts/social, commerce, compositions/media
 
 | Hạng mục | Trạng thái trong repo |
 |----------|------------------------|
-| Docker app/API production | **Không** có Dockerfile root / service |
+| Docker | `docker-compose.yml` profiles `infra` + `apps`; Dockerfile Core, Geo, Trip; Traefik `:3000` |
 | Docker observability | Có — Prometheus `:9090`, Grafana `:3001`, Loki `:3100`, OTEL Collector `:4317/4318` |
-| CI/CD (GitHub Actions…) | **Không** thấy `.github/workflows` |
-| Deploy | README: build API → `node dist/main.js` (PM2/systemd/container); Expo production build; reverse proxy Nginx/Caddy (hướng dẫn, không config trong repo) |
+| CI | `.github/workflows/ci.yml` — test workspace + `docker build` ba image. Chưa có CD (ECR/ECS) |
+| Deploy | Local: một process Core, hoặc Compose. AWS (bài 09/12): image tag git SHA → ECR → ECS Fargate, Actions dùng OIDC |
 | Env | `.env` / `.env.example` riêng API & app |
 
 **Env API chính:** `DB_*`, `JWT_*`, `REDIS_*`, `ADMIN_SECRET`, `GOOGLE_OAUTH_AUDIENCES`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `PORT`.  
@@ -342,8 +342,8 @@ Migrations (ví dụ): auth/profiles, posts/social, commerce, compositions/media
 
 ## Ghi chú / khoảng trống dữ liệu
 
-1. **Không có CI pipeline** trong repo — không khẳng định công cụ CI bên ngoài.
-2. **Không có Dockerfile** cho API/app — chỉ compose observability.
+1. CI nằm ở `.github/workflows/ci.yml` (test + docker build). Chưa có bước deploy.
+2. Dockerfile: `tripblogger_api/Dockerfile`, `services/geo-service/Dockerfile`, `services/trip-service/Dockerfile`. Compose: `docker-compose.yml`.
 3. **Swagger / OpenTelemetry / Pino**: có dependency (và env OTEL) nhưng wiring runtime trong `src/` chưa rõ / chưa thấy.
 4. **Version exact** trong lockfile có thể khác range `package.json`; bảng trên lấy theo khai báo package.
 5. **E2E / app Jest script**: thiếu bằng chứng chạy chuẩn hóa trên app package.

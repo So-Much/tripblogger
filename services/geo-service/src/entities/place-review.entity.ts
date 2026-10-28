@@ -18,6 +18,9 @@ export class PlaceReviewEntity {
   @Column({ type: 'nvarchar', length: 'max', nullable: true })
   body!: string | null;
 
+  @Column({ name: 'tags_json', type: 'nvarchar', length: 'max', nullable: true })
+  tagsJson!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

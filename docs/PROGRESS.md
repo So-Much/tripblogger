@@ -47,7 +47,11 @@ App: `EXPO_PUBLIC_API_BASE_URL=http://<lan-ip>:3000/api`
 
 - Photon container chưa có index VN cho đến khi chạy runbook import — reverse trả 503 `photon_unavailable` (khi snap 50m không thấy POI)
 - Typesense trống cho đến `npm run geo:import -- --fixture` trong geo-service (import giờ cũng upsert Typesense)
-- Core `locations` / `trips` bảng cũ vẫn còn; script migrate là một chiều
+- Core `locations` / `trips` bảng cũ vẫn còn; script migrate là một chiều. Trip copy cả ngày, stop (location_id → place_id) và tag. Geo copy saved / review / check-in khi bảng Core còn
+- Alias Geo trả đúng shape app đang gọi: saved-locations theo collection, `DELETE /saved-locations/:id`, `GET /checkins/mine`, review summary/mine/POST/PATCH, `GET /locations/:id/media`, `POST /locations/upsert-from-place`, driving-route `{ coordinates, distanceM, durationS }`
+- Traefik chuyển `/socket.io` về Core. Realtime verify RS256 khi có public key, nếu không thì HS256
+- `GET/PUT /trips/budget` có trên Trip Service, và trên Core khi `TRIP_DELEGATE` trống (đọc member profile)
+- Docker `npm ci` copy đủ `package.json` của mọi workspace trước khi cài
 - `Alert.prompt` không dùng trên Android; “đề xuất sửa” gửi address hiện tại
-- Docker build `npm ci` cần lockfile đã gồm workspace `services/*` (chạy `npm install` ở root một lần)
 - Place card reviews chỉ có khi `source === 'db'` và Geo phục vụ `GET /places/:id`
+- Chưa deploy AWS. Bước tiếp theo đúng bài 09/12: image tag bằng git SHA, đẩy ECR, chạy ECS Fargate, GitHub Actions lấy quyền bằng OIDC — không dán access key

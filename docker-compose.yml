@@ -54,7 +54,7 @@ services:
 
   traefik:
     profiles: ['infra']
-    image: traefik:v3.3
+    image: traefik:v3.7
     ports:
       - '3000:3000'
       - '8080:8080'
@@ -118,6 +118,8 @@ services:
     depends_on:
       mssql:
         condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     labels:
@@ -125,6 +127,10 @@ services:
       - traefik.http.routers.core.rule=PathPrefix(`/api`) || PathPrefix(`/uploads`)
       - traefik.http.routers.core.entrypoints=web
       - traefik.http.routers.core.middlewares=rateLimit@file
+      - traefik.http.routers.core-ws.rule=PathPrefix(`/socket.io`)
+      - traefik.http.routers.core-ws.entrypoints=web
+      - traefik.http.routers.core-ws.priority=30
+      - traefik.http.routers.core-ws.service=core
       - traefik.http.services.core.loadbalancer.server.port=3000
     # Geo/Trip routers override /api/trips and /api/map* when those services are up
     # (higher priority labels on those services).
@@ -157,6 +163,8 @@ services:
     depends_on:
       mssql:
         condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     labels:
@@ -190,6 +198,8 @@ services:
     depends_on:
       mssql:
         condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     labels:

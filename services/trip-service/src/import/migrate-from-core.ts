@@ -47,9 +47,53 @@ async function main() {
       ],
     );
   }
+  const days = (await core.query('SELECT id, trip_id, date, day_index, start_time FROM trip_days')) as Array<Record<string, unknown>>;
+  for (const row of days) {
+    await trip.query(
+      `IF NOT EXISTS (SELECT 1 FROM trip_days WHERE id = @0)
+       INSERT INTO trip_days (id, trip_id, date, day_index, start_time)
+       VALUES (@0,@1,@2,@3,@4)`,
+      [row.id, row.trip_id, row.date, row.day_index, row.start_time],
+    );
+  }
+  const stops = (await core.query(
+    `SELECT id, trip_id, trip_day_id, position, name, address, lat, lng, category, external_place_id, opening_hours_raw, location_id,
+            duration_minutes, buffer_after_minutes, travel_mode_override, anchor_time, priority, status,
+            travel_from_prev_seconds, travel_from_prev_distance_m, travel_mode_used, travel_computed_at, note,
+            estimated_cost_amount, estimated_cost_currency, cost_items_json
+     FROM trip_stops`,
+  )) as Array<Record<string, unknown>>;
+  for (const row of stops) {
+    await trip.query(
+      `IF NOT EXISTS (SELECT 1 FROM trip_stops WHERE id = @0)
+       INSERT INTO trip_stops (
+         id, trip_id, trip_day_id, position, name, address, lat, lng, category, external_place_id, opening_hours_raw, place_id,
+         duration_minutes, buffer_after_minutes, travel_mode_override, anchor_time, priority, status,
+         travel_from_prev_seconds, travel_from_prev_distance_m, travel_mode_used, travel_computed_at, note,
+         estimated_cost_amount, estimated_cost_currency, cost_items_json, created_at, updated_at
+       ) VALUES (
+         @0,@1,@2,@3,@4,@5,@6,@7,@8,@9,@10,@11,@12,@13,@14,@15,@16,@17,@18,@19,@20,@21,@22,@23,@24,@25,SYSUTCDATETIME(),SYSUTCDATETIME()
+       )`,
+      [
+        row.id, row.trip_id, row.trip_day_id, row.position, row.name, row.address, row.lat, row.lng, row.category,
+        row.external_place_id, row.opening_hours_raw, row.location_id, row.duration_minutes, row.buffer_after_minutes,
+        row.travel_mode_override, row.anchor_time, row.priority, row.status, row.travel_from_prev_seconds,
+        row.travel_from_prev_distance_m, row.travel_mode_used, row.travel_computed_at, row.note, row.estimated_cost_amount,
+        row.estimated_cost_currency, row.cost_items_json,
+      ],
+    );
+  }
+  const tags = (await core.query('SELECT id, trip_stop_id, tag, is_system FROM trip_stop_tags')) as Array<Record<string, unknown>>;
+  for (const row of tags) {
+    await trip.query(
+      `IF NOT EXISTS (SELECT 1 FROM trip_stop_tags WHERE id = @0)
+       INSERT INTO trip_stop_tags (id, trip_stop_id, tag, is_system) VALUES (@0,@1,@2,@3)`,
+      [row.id, row.trip_stop_id, row.tag, row.is_system],
+    );
+  }
   await core.destroy();
   await trip.destroy();
-  console.log(JSON.stringify({ trips: trips.length }));
+  console.log(JSON.stringify({ trips: trips.length, days: days.length, stops: stops.length, tags: tags.length }));
 }
 
 main().catch((err) => {

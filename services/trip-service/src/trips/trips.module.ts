@@ -23,7 +23,7 @@ import { UserTravelBudgetEntity } from '../budget/user-travel-budget.entity';
       UserTravelBudgetEntity,
     ]),
   ],
-  controllers: [TripsController, BudgetController],
+  controllers: [BudgetController, TripsController],
   providers: [TripsService, TravelLegsService, GeoRoutingClient, JwksAuthGuard, RolesGuard, ClaimStatusesGuard],
   exports: [TripsService, GeoRoutingClient],
 })
