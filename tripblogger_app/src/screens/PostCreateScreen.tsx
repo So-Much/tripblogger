@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -22,9 +22,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAndroidBack } from '@/src/hooks/useAndroidBack';
 import { useI18n } from '@/src/i18n';
 import { postsService } from '@/src/services/api/posts.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { safeRouterBack } from '@/src/utils/safe-router-back';
 import { uploadAllPendingMedia } from '@/src/utils/upload-editor-media';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 import { HashtagChipInput } from '@/src/components/posts/HashtagChipInput';
@@ -164,6 +166,45 @@ export function PostCreateScreen() {
     [contentHtml, tags],
   );
 
+  const hasUnsavedDraftContent = useMemo(() => {
+    if (postId) return false;
+    return Boolean(
+      title.trim() ||
+        contentHtml.trim() ||
+        category.trim() ||
+        tags.length ||
+        location ||
+        media.length,
+    );
+  }, [postId, title, contentHtml, category, tags.length, location, media.length]);
+
+  const leaveScreen = useCallback(() => {
+    safeRouterBack(router, '/(tabs)');
+  }, [router]);
+
+  const requestClose = useCallback(() => {
+    if (hasUnsavedDraftContent) {
+      Alert.alert(t('unsavedProfileTitle'), t('unsavedProfileMessage'), [
+        { text: t('continueEditingProfile'), style: 'cancel' },
+        {
+          text: t('discardProfileChanges'),
+          style: 'destructive',
+          onPress: leaveScreen,
+        },
+      ]);
+      return;
+    }
+    leaveScreen();
+  }, [hasUnsavedDraftContent, leaveScreen, t]);
+
+  useAndroidBack(() => {
+    if (hasUnsavedDraftContent) {
+      requestClose();
+      return true;
+    }
+    return false;
+  });
+
   useFocusEffect(
     useCallback(() => {
       usePostComposerHandoffStore.getState().setReturnPostId(postId ? String(postId) : null);
@@ -225,6 +266,7 @@ export function PostCreateScreen() {
   const text = useThemeColor({}, 'text');
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
+  const onCta = useThemeColor({}, 'onCta');
 
   const mapSubmitMedia = useCallback((items: EditorMedia[]) => {
     return items.map(
@@ -284,6 +326,7 @@ export function PostCreateScreen() {
         ...base,
         media: submitMedia ?? [],
         status: 'DRAFT',
+        location: base.location ?? undefined,
       });
     },
     onSuccess: (data, variables) => {
@@ -298,7 +341,7 @@ export function PostCreateScreen() {
         return;
       }
       if (!variables?.forPublish) {
-        router.back();
+        leaveScreen();
       }
     },
     onMutate: (variables) => {
@@ -331,7 +374,7 @@ export function PostCreateScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
-      router.replace('/(tabs)/posts');
+      router.replace('/(tabs)');
     },
     onError: (e: unknown) => {
       formShakeRef.current?.shake();
@@ -346,7 +389,7 @@ export function PostCreateScreen() {
     mutationFn: () => postsService.deletePost(String(postId)),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['posts', 'mine'] });
-      router.back();
+      leaveScreen();
     },
     onError: (e: unknown) => setError(formatApiError(e, 'Không thể xóa bản nháp.')),
   });
@@ -407,20 +450,41 @@ export function PostCreateScreen() {
     };
   }, [postId, media, autosaveBlocked, scheduleSave]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        <Pressable
+          onPress={requestClose}
+          hitSlop={12}
+          style={{ marginLeft: 4 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('backHome')}>
+          <IconSymbol name="chevron.left" size={24} color={cta} />
+        </Pressable>
+      ),
       headerRight: isEditDraft
         ? () => (
             <PressableScale
               onPress={handlePublishPress}
               disabled={saveDraftMutation.isPending || publishMutation.isPending}
-              style={styles.headerPublishBtn}>
-              <ThemedText style={styles.headerPublishTxt}>{t('postsPublishNow')}</ThemedText>
+              style={[styles.headerPublishBtn, { backgroundColor: cta }]}>
+              <ThemedText style={[styles.headerPublishTxt, { color: onCta }]}>{t('postsPublishNow')}</ThemedText>
             </PressableScale>
           )
         : undefined,
     });
-  }, [navigation, isEditDraft, saveDraftMutation.isPending, publishMutation.isPending, handlePublishPress, t]);
+  }, [
+    navigation,
+    router,
+    cta,
+    onCta,
+    isEditDraft,
+    saveDraftMutation.isPending,
+    publishMutation.isPending,
+    handlePublishPress,
+    requestClose,
+    t,
+  ]);
 
   const pickMedia = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -727,9 +791,8 @@ const styles = StyleSheet.create({
   headerPublishBtn: {
     marginRight: 8,
     borderRadius: 10,
-    backgroundColor: '#2563EB',
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  headerPublishTxt: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  headerPublishTxt: { fontWeight: '700', fontSize: 12 },
 });

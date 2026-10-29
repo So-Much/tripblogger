@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { HomePostsFeed } from '@/src/components/feed/HomePostsFeed';
+import { HomeQuickComposer } from '@/src/components/home/HomeQuickComposer';
 import { HomeCommerceDeals } from '@/src/components/home/HomeCommerceDeals';
 import { PromoBanner } from '@/src/components/home/PromoBanner';
 import { HomeSearchBar } from '@/src/components/home/HomeSearchBar';
@@ -14,6 +15,8 @@ import { QuickActionsStrip } from '@/src/components/home/QuickActionsStrip';
 import { ProfileSummaryCard } from '@/src/components/profile/ProfileSummaryCard';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
+import { desktopColumnWidth } from '@/src/platform/client-form';
+import { useClientBehavior } from '@/src/platform/use-client-behavior';
 import { authService } from '@/src/services/api/auth.service';
 import { useAuthStore } from '@/src/store/auth.store';
 import { hasCustomDisplayName, resolvePublicDisplayName } from '@/src/utils/display-name';
@@ -31,6 +34,8 @@ export function HomeScreen() {
   const muted = useThemeColor({}, 'textMuted');
   const text = useThemeColor({}, 'text');
   const insets = useSafeAreaInsets();
+  const splitHome = useClientBehavior().splitHome;
+  const { width: windowWidth } = useWindowDimensions();
 
   const isMember = hasAccessToken && me?.role === 'MEMBER';
 
@@ -57,8 +62,11 @@ export function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
+          splitHome
+            ? { width: '100%', maxWidth: desktopColumnWidth(windowWidth), alignSelf: 'center' }
+            : null,
           {
-            paddingTop: Math.max(insets.top, 8) + 4,
+            paddingTop: splitHome ? 16 : Math.max(insets.top, 8) + 4,
             paddingBottom: Math.max(insets.bottom, 12) + 28,
             paddingLeft: Math.max(insets.left, 16),
             paddingRight: Math.max(insets.right, 16),
@@ -66,7 +74,7 @@ export function HomeScreen() {
         ]}
         scrollIndicatorInsets={{ right: 1 }}
       >
-        <View style={styles.topRow}>
+        {splitHome ? null : <View style={styles.topRow}>
           <View style={styles.brandWrap}>
             <View style={[styles.brandBadge, { borderColor: border, backgroundColor: card }]}>
               <IconSymbol size={26} name="paperplane.fill" color={cta} />
@@ -83,17 +91,26 @@ export function HomeScreen() {
               </ThemedText>
             </Pressable>
           ) : (
-            <Pressable
-              style={[styles.avatarButton, { borderColor: border, backgroundColor: card }]}
-              onPress={() => router.push('/explore')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Open profile"
-            >
-              <IconSymbol size={24} name="person.crop.circle.fill" color={cta} />
-            </Pressable>
+            <View style={styles.memberActions}>
+              <Pressable
+                style={[styles.iconButton, { borderColor: border, backgroundColor: card }]}
+                onPress={() => router.push('/(tabs)/posts/create')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('homeCreatePostA11y')}>
+                <IconSymbol size={24} name="plus.circle.fill" color={cta} />
+              </Pressable>
+              <Pressable
+                style={[styles.avatarButton, { borderColor: border, backgroundColor: card }]}
+                onPress={() => router.push('/explore')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Open profile">
+                <IconSymbol size={24} name="person.crop.circle.fill" color={cta} />
+              </Pressable>
+            </View>
           )}
-        </View>
+        </View>}
 
         <View style={[styles.welcomeCard, { borderColor: border, backgroundColor: card }]}>
           <ThemedText type="defaultSemiBold" style={[styles.welcomeTitle, { color: text }]}>
@@ -116,6 +133,8 @@ export function HomeScreen() {
           ) : null}
         </View>
 
+        {isMember ? <HomeQuickComposer /> : null}
+
         <HomeSearchBar onPress={() => router.push('/(tabs)/shop/search')} />
         <PromoBanner />
         <QuickActionsStrip
@@ -126,19 +145,21 @@ export function HomeScreen() {
           }}
         />
 
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          {t('homeToday')}
-        </ThemedText>
-        <ThemedText style={[styles.subtitleLine, { color: muted }]}>
-          {isMember ? t('homeSubtitleMember') : t('homeSubtitleGuest')}
-        </ThemedText>
-
-        {isMember && memberProfile ? (
-          <ProfileSummaryCard profile={memberProfile} />
-        ) : null}
-
-        <HomeCommerceDeals />
-        <HomePostsFeed />
+        <View style={splitHome ? styles.split : undefined}>
+          <View style={splitHome ? styles.splitMain : undefined}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>
+              {t('homeToday')}
+            </ThemedText>
+            <ThemedText style={[styles.subtitleLine, { color: muted }]}>
+              {isMember ? t('homeSubtitleMember') : t('homeSubtitleGuest')}
+            </ThemedText>
+            <HomePostsFeed />
+          </View>
+          <View style={splitHome ? styles.splitSide : undefined}>
+            {isMember && memberProfile ? <ProfileSummaryCard profile={memberProfile} /> : null}
+            <HomeCommerceDeals />
+          </View>
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -147,10 +168,26 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1 },
   content: {
-    gap: 14,
-    maxWidth: 720,
+    gap: 16,
     width: '100%',
     alignSelf: 'center',
+  },
+  split: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 24,
+  },
+  splitMain: {
+    flex: 1.5,
+    minWidth: 0,
+    gap: 16,
+  },
+  splitSide: {
+    width: '34%',
+    maxWidth: 360,
+    minWidth: 240,
+    flexShrink: 1,
+    gap: 16,
   },
   topRow: {
     alignItems: 'center',
@@ -207,6 +244,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   loginText: { color: '#fff' },
+  memberActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    height: 44,
+    width: 44,
+  },
   avatarButton: {
     alignItems: 'center',
     borderRadius: 999,

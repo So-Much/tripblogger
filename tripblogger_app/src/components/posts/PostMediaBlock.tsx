@@ -15,6 +15,7 @@ import {
 import { Image as ExpoImage } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useClientForm } from '@/src/platform/use-client-form';
 import type { PostDto } from '@/src/types/post';
 import { getContainedMediaFrame } from '@/src/utils/media-viewer-layout';
 
@@ -46,7 +47,7 @@ function ResilientPostImage({
   imageStyle: StyleProp<ImageStyle>;
   fallbackStyle: StyleProp<ViewStyle>;
   placeholder?: string;
-  contentFit: 'contain';
+  contentFit: 'contain' | 'cover';
   transition: number;
   fallbackLabel: string;
   retryLabel: string;
@@ -125,18 +126,20 @@ export function PostMediaBlock({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const form = useClientForm();
 
-  const effectiveSlot: PostMediaSlot = slot ?? (compact ? 'square' : 'portrait');
+  const effectiveSlot: PostMediaSlot = slot ?? (form === 'phone' ? (compact ? 'square' : 'portrait') : 'landscape');
   const slotAspect = useMemo(() => {
+    if (form !== 'phone' && !slot) return 3 / 2;
     if (effectiveSlot === 'portrait') return 4 / 5;
-    if (effectiveSlot === 'landscape') return 16 / 9;
+    if (effectiveSlot === 'landscape') return 3 / 2;
     return 1;
-  }, [effectiveSlot]);
+  }, [effectiveSlot, form, slot]);
 
   const backdropColor = useThemeColor({ light: '#F1F5F9', dark: '#0F172A' }, 'background');
   const slotHeight = width ? Math.round(width / slotAspect) : 0;
-  const viewerWidth = Math.round(screenWidth);
-  const viewerHeight = Math.round(screenHeight);
+  const viewerWidth = Math.round(form === 'desktop' ? Math.min(screenWidth, 960) : screenWidth);
+  const viewerHeight = Math.round(form === 'desktop' ? Math.min(screenHeight, screenHeight * 0.92) : screenHeight);
 
   if (!items.length) return null;
 
@@ -207,7 +210,7 @@ export function PostMediaBlock({
                     unavailable={item.available === false}
                     imageStyle={[styles.image, sizeStyle, { backgroundColor: backdropColor }]}
                     fallbackStyle={[styles.imageFallback, sizeStyle, { backgroundColor: backdropColor }]}
-                    contentFit="contain"
+                    contentFit="cover"
                     placeholder={item.placeholder}
                     transition={180}
                     fallbackLabel="Không tải được ảnh"
@@ -297,11 +300,15 @@ export function PostMediaBlock({
 const styles = StyleSheet.create({
   wrap: { gap: 8 },
   sliderViewport: {
-    borderRadius: 14,
+    width: '100%',
+    maxWidth: '100%',
+    borderRadius: 16,
     overflow: 'hidden',
   },
   image: {
-    borderRadius: 14,
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
   },
   imageFallback: {
     borderRadius: 14,

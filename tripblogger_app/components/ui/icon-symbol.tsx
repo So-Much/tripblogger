@@ -44,10 +44,21 @@ const MAPPING = {
   minus: 'remove',
   plus: 'add',
   'square.grid.2x2': 'apps',
+  'square.grid.2x2.fill': 'apps',
   'slider.horizontal.3': 'tune',
   'bag.fill': 'work',
   airplane: 'flight',
   'tag.fill': 'local-offer',
+  'eye.fill': 'visibility',
+  'eye.slash.fill': 'visibility-off',
+  'checkmark.circle.fill': 'check-circle',
+  'star.fill': 'star',
+  'calendar': 'event',
+  'map.fill': 'map',
+  'flame.fill': 'whatshot',
+  'trash.fill': 'delete',
+  'bookmark.fill': 'bookmark',
+  'square.and.arrow.up': 'share',
 } as const;
 
 export type IconSymbolName = keyof typeof MAPPING;

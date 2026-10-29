@@ -1,21 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useAndroidBack } from '@/src/hooks/useAndroidBack';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { safeRouterBack } from '@/src/utils/safe-router-back';
 
 export function AddressFormScreen() {
   const { t } = useI18n();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const qc = useQueryClient();
   const border = useThemeColor({}, 'border');
   const text = useThemeColor({}, 'text');
+  const tint = useThemeColor({}, 'tint');
   const isEdit = Boolean(id);
 
   const existingQ = useQuery({
@@ -27,7 +32,7 @@ export function AddressFormScreen() {
     enabled: isEdit,
   });
 
-  const [label, setLabel] = useState('Nhà');
+  const [label, setLabel] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [phone, setPhone] = useState('');
   const [province, setProvince] = useState('');
@@ -48,6 +53,88 @@ export function AddressFormScreen() {
     setStreet(a.street);
     setIsDefault(a.isDefault);
   }, [existingQ.data]);
+
+  useEffect(() => {
+    if (!isEdit) {
+      setLabel(t('addressLabelHome'));
+    }
+  }, [isEdit, t]);
+
+  const initialSnapshot = useMemo(() => {
+    if (isEdit && existingQ.data) {
+      const a = existingQ.data;
+      return {
+        label: a.label,
+        recipientName: a.recipientName,
+        phone: a.phone,
+        province: a.province,
+        district: a.district,
+        ward: a.ward,
+        street: a.street,
+        isDefault: a.isDefault,
+      };
+    }
+    return {
+      label: t('addressLabelHome'),
+      recipientName: '',
+      phone: '',
+      province: '',
+      district: '',
+      ward: '',
+      street: '',
+      isDefault: true,
+    };
+  }, [isEdit, existingQ.data, t]);
+
+  const isDirty = useMemo(
+    () =>
+      label.trim() !== initialSnapshot.label.trim() ||
+      recipientName.trim() !== initialSnapshot.recipientName.trim() ||
+      phone.trim() !== initialSnapshot.phone.trim() ||
+      province.trim() !== initialSnapshot.province.trim() ||
+      district.trim() !== initialSnapshot.district.trim() ||
+      ward.trim() !== initialSnapshot.ward.trim() ||
+      street.trim() !== initialSnapshot.street.trim() ||
+      isDefault !== initialSnapshot.isDefault,
+    [label, recipientName, phone, province, district, ward, street, isDefault, initialSnapshot],
+  );
+
+  const leaveScreen = useCallback(() => {
+    safeRouterBack(router, '/(tabs)/shop/addresses');
+  }, [router]);
+
+  const requestClose = useCallback(() => {
+    if (!isDirty) {
+      leaveScreen();
+      return;
+    }
+    Alert.alert(t('unsavedProfileTitle'), t('unsavedProfileMessage'), [
+      { text: t('continueEditingProfile'), style: 'cancel' },
+      {
+        text: t('discardProfileChanges'),
+        style: 'destructive',
+        onPress: leaveScreen,
+      },
+    ]);
+  }, [isDirty, leaveScreen, t]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable onPress={requestClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('backHome')}>
+          <IconSymbol name="chevron.left" size={24} color={tint} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, requestClose, tint, t]);
+
+  useAndroidBack(() => {
+    if (isDirty) {
+      requestClose();
+      return true;
+    }
+    return false;
+  });
 
   const save = useMutation({
     mutationFn: () =>
@@ -74,9 +161,9 @@ export function AddressFormScreen() {
           }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['commerce', 'addresses'] });
-      router.back();
+      leaveScreen();
     },
-    onError: (e) => Alert.alert('Error', formatApiError(e, '')),
+    onError: (e) => Alert.alert(t('errorTitle'), formatApiError(e, t('locationErrorGeneric'))),
   });
 
   return (

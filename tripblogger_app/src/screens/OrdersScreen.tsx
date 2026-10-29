@@ -11,6 +11,9 @@ import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
 import type { OrderDto } from '@/src/types/commerce';
 import { formatApiError } from '@/src/utils/format-api-error';
+import { useSettingsStore } from '@/src/store/settings.store';
+import { formatOrderStatus, formatPaymentMethod, formatPaymentStatus, formatShipmentStatus } from '@/src/utils/format-order-status';
+import { formatLocalDateTime } from '@/src/utils/datetime';
 import { PriceLabel } from '@/src/components/commerce/PriceLabel';
 
 type OrderListFilter = 'ALL' | 'PENDING' | 'IN_PROGRESS' | 'DELIVERED' | 'CANCELLED';
@@ -34,12 +37,16 @@ export function OrdersScreen() {
   const { t } = useI18n();
   const router = useRouter();
   const me = useMeQuery();
-  const border = useThemeColor({}, 'border');
+  const language = useSettingsStore((s) => s.language);
   const tint = useThemeColor({}, 'tint');
+  const border = useThemeColor({}, 'border');
   const [tab, setTab] = useState<'buy' | 'sell'>('buy');
   const [orderFilter, setOrderFilter] = useState<OrderListFilter>('ALL');
 
   const listExtra = orderListParams(orderFilter);
+
+  const isMember = me.data?.role === 'MEMBER';
+  const hasSession = Boolean(me.data);
 
   const buyQ = useInfiniteQuery({
     queryKey: ['commerce', 'orders', 'buy', orderFilter],
@@ -51,7 +58,7 @@ export function OrdersScreen() {
       }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
-    enabled: me.data?.role === 'MEMBER' && tab === 'buy',
+    enabled: hasSession && tab === 'buy',
   });
 
   const sellQ = useInfiniteQuery({
@@ -64,7 +71,7 @@ export function OrdersScreen() {
       }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
-    enabled: me.data?.role === 'MEMBER' && tab === 'sell',
+    enabled: isMember && tab === 'sell',
   });
 
   const q = tab === 'buy' ? buyQ : sellQ;
@@ -78,10 +85,13 @@ export function OrdersScreen() {
     { key: 'CANCELLED', label: t('orderFilterCancelled') },
   ];
 
-  if (me.data?.role !== 'MEMBER') {
+  if (!hasSession) {
     return (
       <ThemedView style={styles.center}>
         <ThemedText>{t('shopMemberRequired')}</ThemedText>
+        <Pressable onPress={() => router.push('/login')} style={[styles.tab, { borderColor: border, marginTop: 12 }]}>
+          <ThemedText type="link">{t('login')}</ThemedText>
+        </Pressable>
       </ThemedView>
     );
   }
@@ -94,11 +104,13 @@ export function OrdersScreen() {
           style={[styles.tab, { borderColor: tab === 'buy' ? tint : border }]}>
           <ThemedText>{t('myOrders')}</ThemedText>
         </Pressable>
+        {isMember ? (
         <Pressable
           onPress={() => setTab('sell')}
           style={[styles.tab, { borderColor: tab === 'sell' ? tint : border }]}>
           <ThemedText>{t('sellerOrders')}</ThemedText>
         </Pressable>
+        ) : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
         {filterChips.map((c) => (
@@ -122,16 +134,18 @@ export function OrdersScreen() {
           onEndReached={() => {
             if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
           }}
-          refreshing={q.isRefetching}
           onRefresh={() => void q.refetch()}
+          refreshing={q.isRefetching}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
           renderItem={({ item }: { item: OrderDto }) => (
             <Pressable style={[styles.card, { borderColor: border }]} onPress={() => router.push(`/(tabs)/shop/order/${item.id}` as Href)}>
               <ThemedText type="defaultSemiBold">{item.orderCode}</ThemedText>
-              <ThemedText style={styles.small}>{item.status}</ThemedText>
+              <ThemedText style={styles.small}>{formatOrderStatus(item.status, language)}</ThemedText>
               <PriceLabel amount={item.totalAmount} />
             </Pressable>
           )}
-          ListEmptyComponent={q.isLoading ? <ActivityIndicator style={{ marginTop: 32 }} /> : <ThemedText style={styles.center}>—</ThemedText>}
+          ListEmptyComponent={q.isLoading ? <ActivityIndicator style={{ marginTop: 32 }} /> : <ThemedText style={styles.center}>{t('ordersEmpty')}</ThemedText>}
         />
       )}
     </SafeAreaView>

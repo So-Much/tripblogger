@@ -1,18 +1,20 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { existsSync } from 'fs';
-import { join } from 'path';
-import sanitizeHtml from 'sanitize-html';
+import { keyFromUploadPath, OBJECT_STORAGE, type ObjectStorage } from '../../config/storage/object-storage';
 import { In, Repository } from 'typeorm';
 import { decodePostCursor, encodePostCursor } from './cursor.util';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { QueryPostsNearLocationDto } from './dto/query-posts-near-location.dto';
 import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
+import { haversineKm } from '../../common/utils/haversine';
+import { sanitizePlainText, sanitizePostHtml } from '../../common/utils/html-sanitize';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { CompositionEntity } from '../compositions/entities/composition.entity';
 import { CommentEntity } from './entities/comment.entity';
@@ -26,24 +28,6 @@ import { MediaResolver } from './media.resolver';
 import { MediaMigrationWorker } from './media.migration.worker';
 import { normalizePostMediaItem, PostMediaItem } from './media.types';
 import { toIsoString } from '../../common/utils/iso-date';
-
-const POST_SANITIZE: sanitizeHtml.IOptions = {
-  allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'img', 'span']),
-  allowedAttributes: {
-    ...sanitizeHtml.defaults.allowedAttributes,
-    img: ['src', 'alt', 'width', 'height'],
-    a: ['href', 'name', 'target', 'rel'],
-  },
-  allowedSchemes: ['http', 'https', 'mailto'],
-};
-
-function sanitizePostHtml(raw: string): string {
-  return sanitizeHtml(raw, POST_SANITIZE);
-}
-
-function sanitizeCommentText(raw: string): string {
-  return sanitizeHtml(raw, { allowedTags: [], allowedAttributes: {} }).trim();
-}
 
 function parseJsonArray(raw: string | null): string[] {
   if (!raw) return [];
@@ -107,10 +91,10 @@ function toLocalUploadPath(value?: string): string | undefined {
   }
 }
 
-function isLocalMediaPathAvailable(value?: string): boolean {
-  const localPath = toLocalUploadPath(value);
-  if (!localPath) return Boolean(value);
-  return existsSync(join(process.cwd(), localPath.replace(/^\/+/, '')));
+function isMediaPathAvailable(storage: ObjectStorage, value?: string): boolean {
+  if (!value) return false;
+  const key = keyFromUploadPath(value);
+  return key ? storage.probablyExists(key) : true;
 }
 
 function parseLocation(raw: string | null): Record<string, unknown> | null {
@@ -146,7 +130,61 @@ export class PostsService {
     private readonly realtimeGateway: PostsRealtimeGateway,
     private readonly mediaResolver: MediaResolver,
     private readonly mediaMigrationWorker: MediaMigrationWorker,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
+
+  /** Persist a freshly uploaded file as a shared MediaEntity (for check-ins, etc.). */
+  async registerUploadedMedia(
+    userId: string,
+    input: {
+      kind: 'image' | 'video';
+      url: string;
+      thumbnailUrl?: string;
+      previewUrl?: string;
+      originalUrl?: string;
+      mimeType?: string;
+      width?: number;
+      height?: number;
+      placeholder?: string;
+      storage?: 'local' | 'cloud';
+      sourcePath?: string;
+      size?: number;
+    },
+  ) {
+    const media = await this.mediaRepo.save(
+      this.mediaRepo.create({
+        userId,
+        type: input.kind,
+        url: input.url,
+        thumbnailUrl: input.thumbnailUrl ?? null,
+        previewUrl: input.previewUrl ?? null,
+        originalUrl: input.originalUrl ?? input.url,
+        mimeType: input.mimeType ?? null,
+        width: input.width ?? null,
+        height: input.height ?? null,
+        placeholder: input.placeholder ?? null,
+        storage: input.storage ?? 'local',
+        sourcePath: input.sourcePath ?? null,
+        size: input.size != null ? String(input.size) : null,
+      }),
+    );
+    return {
+      id: media.id,
+      mediaId: media.id,
+      kind: input.kind,
+      url: input.url,
+      thumbnailUrl: input.thumbnailUrl,
+      previewUrl: input.previewUrl,
+      originalUrl: input.originalUrl,
+      mimeType: input.mimeType,
+      width: input.width,
+      height: input.height,
+      placeholder: input.placeholder,
+      storage: input.storage ?? ('local' as const),
+      sourcePath: input.sourcePath,
+      size: input.size,
+    };
+  }
 
   private async loadPostWithMedia(postId: string): Promise<PostEntity | null> {
     return this.postsRepo.findOne({
@@ -308,9 +346,11 @@ export class PostsService {
         return visibility === 'PRIVATE' ? this.mediaResolver.toPrivateSignedPath(path) : path;
       };
       const variants = {
-        thumbnailUrl: isLocalMediaPathAvailable(item.thumbnailUrl) ? item.thumbnailUrl : undefined,
-        previewUrl: isLocalMediaPathAvailable(item.previewUrl) ? item.previewUrl : undefined,
-        originalUrl: isLocalMediaPathAvailable(item.originalUrl ?? item.url) ? (item.originalUrl ?? item.url) : undefined,
+        thumbnailUrl: isMediaPathAvailable(this.storage, item.thumbnailUrl) ? item.thumbnailUrl : undefined,
+        previewUrl: isMediaPathAvailable(this.storage, item.previewUrl) ? item.previewUrl : undefined,
+        originalUrl: isMediaPathAvailable(this.storage, item.originalUrl ?? item.url)
+          ? (item.originalUrl ?? item.url)
+          : undefined,
       };
       const primaryUrl = variants.previewUrl ?? variants.originalUrl ?? variants.thumbnailUrl;
       const missingVariants = [
@@ -563,6 +603,58 @@ export class PostsService {
     return { items: payloads, nextCursor };
   }
 
+  async findMineNear(userId: string, query: QueryPostsNearLocationDto) {
+    const limit = Math.min(query.limit ?? 20, 30);
+    const radiusKm = (query.radiusM ?? 300) / 1000;
+    const rows = await this.postsRepo.find({
+      where: { userId, status: 'PUBLISHED' },
+      order: { createdAt: 'DESC' },
+      take: 150,
+      relations: ['postMedia', 'postMedia.media', 'user', 'user.memberProfile'],
+    });
+
+    const byId: PostEntity[] = [];
+    const byGeo: PostEntity[] = [];
+    const seen = new Set<string>();
+
+    for (const post of rows) {
+      const loc = parseLocation(post.locationJson);
+      if (!loc) continue;
+
+      if (query.locationId) {
+        const lid = typeof loc.locationId === 'string' ? loc.locationId : undefined;
+        if (lid && lid === query.locationId && !seen.has(post.id)) {
+          seen.add(post.id);
+          byId.push(post);
+          continue;
+        }
+      }
+
+      if (query.lat != null && query.lng != null) {
+        const lat = Number(loc.lat);
+        const lng = Number(loc.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          const d = haversineKm(query.lat, query.lng, lat, lng);
+          if (d <= radiusKm && !seen.has(post.id)) {
+            seen.add(post.id);
+            byGeo.push(post);
+          }
+        }
+      }
+    }
+
+    const items = [...byId, ...byGeo].slice(0, limit);
+    const payloads = await Promise.all(
+      items.map(async (p) => {
+        const meta = await this.getPostReactionMeta(p.id, userId);
+        const commentCount = await this.getPostCommentCount(p.id);
+        return this.serializePost(p, { ...meta, commentCount });
+      }),
+    );
+
+    return { items: payloads };
+  }
+
   async findFeed(viewerUserId: string, query: QueryFeedPostsDto) {
     const limit = query.limit;
     const qb = this.postsRepo
@@ -748,7 +840,7 @@ export class PostsService {
       }
     }
 
-    const content = sanitizeCommentText(dto.content);
+    const content = sanitizePlainText(dto.content);
     if (!content) throw new BadRequestException('Comment is empty');
 
     const comment = this.commentsRepo.create({

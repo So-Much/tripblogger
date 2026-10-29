@@ -1,0 +1,26 @@
+/** @type {import('jest').Config} */
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src/features/trip/plan', '<rootDir>/src/platform', '<rootDir>/src/services/api'],
+  testMatch: ['**/*.spec.ts'],
+  moduleFileExtensions: ['ts', 'js'],
+  transform: {
+    '^.+\\.tsx?$': [
+      'ts-jest',
+      {
+        isolatedModules: true,
+        tsconfig: {
+          module: 'commonjs',
+          esModuleInterop: true,
+          isolatedModules: true,
+          rootDir: '.',
+          types: ['jest', 'node'],
+        },
+      },
+    ],
+  },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+  },
+};

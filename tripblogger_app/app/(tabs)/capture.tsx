@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { isExpoGo } from '@/src/utils/is-expo-go';
 
@@ -7,9 +7,12 @@ export default function CaptureTabRoute() {
   const [Screen, setScreen] = useState<React.ComponentType | null>(null);
 
   useEffect(() => {
-    const load = isExpoGo()
-      ? import('@/src/screens/CompositionCameraExpoGoScreen').then((m) => m.CompositionCameraExpoGoScreen)
-      : import('@/src/screens/CompositionCameraScreen').then((m) => m.CompositionCameraScreen);
+    const load =
+      Platform.OS === 'web'
+        ? import('@/src/screens/CompositionCameraScreen.web').then((m) => m.CompositionCameraScreen)
+        : isExpoGo()
+          ? import('@/src/screens/CompositionCameraExpoGoScreen').then((m) => m.CompositionCameraExpoGoScreen)
+          : import('@/src/screens/CompositionCameraScreen').then((m) => m.CompositionCameraScreen);
     void load.then((C) => setScreen(() => C));
   }, []);
 

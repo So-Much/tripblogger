@@ -5,9 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import sanitizeHtml from 'sanitize-html';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { sanitizeProductHtml } from '../../common/utils/html-sanitize';
 import { MemberProfileEntity } from '../users/entities/member-profile.entity';
 import { MediaResolver } from '../posts/media.resolver';
 import { parseProductMediaJson } from './commerce-media.util';
@@ -20,12 +20,6 @@ import { ProductEntity } from './entities/product.entity';
 import { ProductTagEntity } from './entities/product-tag.entity';
 import { decodeProductCursor, encodeProductCursor } from './product-cursor.util';
 import { TagsService } from './tags.service';
-
-const DESC_SANITIZE: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'a'],
-  allowedAttributes: { a: ['href', 'target', 'rel'] },
-  allowedSchemes: ['http', 'https', 'mailto'],
-};
 
 export type CommerceReqMeta = { protocol: string; host?: string; forwardedProto?: string };
 
@@ -80,7 +74,7 @@ export class CommerceService {
   ) {}
 
   private sanitizeDescription(html: string): string {
-    return sanitizeHtml(html, DESC_SANITIZE).trim();
+    return sanitizeProductHtml(html);
   }
 
   private async uniqueSlug(base: string): Promise<string> {
@@ -339,6 +333,11 @@ export class CommerceService {
     const product = await this.productRepo.findOne({ where: { id }, relations: ['category', 'seller', 'seller.memberProfile'] });
     if (!product) throw new NotFoundException('Product not found');
     if (product.sellerId !== sellerId) throw new ForbiddenException('Not owner');
+
+    const member = await this.memberRepo.findOne({ where: { userId: sellerId } });
+    if (!member?.isVerifiedSeller) {
+      throw new ForbiddenException('Seller verification required before publishing');
+    }
 
     const media = parseProductMediaJson(product.mediaJson);
     if (media.length === 0) throw new BadRequestException('At least one image is required');

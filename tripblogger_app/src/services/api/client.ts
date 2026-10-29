@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useAuthStore } from '@/src/store/auth.store';
 import { resolveApiBaseUrl } from '@/src/services/api/resolve-api-base-url';
 import { clearPersistedAuthTokens, persistAuthTokens } from '@/src/services/session/session.service';
+import { newIdempotencyKey } from '@/src/services/api/idempotency-key';
 
 /** Effective base URL (dev rewrites localhost for real devices via Expo Metro host). */
 export const apiBaseUrl = resolveApiBaseUrl();
@@ -14,6 +15,13 @@ export const apiClient = axios.create({
 let isRefreshing = false;
 let pendingRequests: ((token: string | null) => void)[] = [];
 
+function rebootstrapGuest(): void {
+  // Lazy import breaks client ↔ session-bootstrap require cycle.
+  void import('@/src/services/session/session-bootstrap.service').then((m) =>
+    m.bootstrapGuestSession(),
+  );
+}
+
 apiClient.interceptors.request.use((config) => {
   const accessToken = useAuthStore.getState().tokens?.accessToken;
   const sessionId = useAuthStore.getState().sessionId;
@@ -22,6 +30,11 @@ apiClient.interceptors.request.use((config) => {
   }
   if (sessionId) {
     config.headers['X-Session-Id'] = sessionId;
+  }
+  // Set once per request config, so the 401-refresh retry below resends the same key
+  // and the server replays the first result instead of creating a duplicate.
+  if (config.method?.toLowerCase() === 'post' && !config.headers['Idempotency-Key']) {
+    config.headers['Idempotency-Key'] = newIdempotencyKey();
   }
   return config;
 });
@@ -40,6 +53,7 @@ apiClient.interceptors.response.use(
     if (!refreshToken) {
       useAuthStore.getState().logout();
       void clearPersistedAuthTokens();
+      rebootstrapGuest();
       return Promise.reject(error);
     }
     if (!deviceId) return Promise.reject(error);
@@ -68,6 +82,9 @@ apiClient.interceptors.response.use(
       pendingRequests = [];
       useAuthStore.getState().logout();
       await clearPersistedAuthTokens();
+      await import('@/src/services/session/session-bootstrap.service').then((m) =>
+        m.bootstrapGuestSession(),
+      );
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

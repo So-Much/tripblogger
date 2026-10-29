@@ -1,7 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnGatewayConnection, OnGatewayDisconnect, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import { JwtPayload, verify } from 'jsonwebtoken';
+import { loadAccessPublicKey } from '../auth/jwt-keys';
+import { verifySocketAccessToken } from './verify-socket-token';
 import { Server, Socket } from 'socket.io';
 import {
   CommentCreatedEventPayload,
@@ -30,19 +31,16 @@ export class PostsRealtimeGateway implements OnGatewayConnection, OnGatewayDisco
       this.disconnect(client, 'missing_token');
       return;
     }
-    try {
-      const payload = verify(
-        token,
-        this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-      ) as JwtPayload & { sub?: string };
-      if (!payload?.sub) {
-        this.disconnect(client, 'invalid_token');
-        return;
-      }
-      client.data.userId = String(payload.sub);
-    } catch {
+    const payload = verifySocketAccessToken(
+      token,
+      this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      loadAccessPublicKey(),
+    );
+    if (!payload) {
       this.disconnect(client, 'invalid_token');
+      return;
     }
+    client.data.userId = payload.sub;
   }
 
   handleDisconnect(_client: Socket) {

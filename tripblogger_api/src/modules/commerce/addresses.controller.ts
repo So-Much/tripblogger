@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -24,6 +37,7 @@ export class AddressesController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
   create(@Req() req: AuthedRequest, @Body() dto: CreateAddressDto) {

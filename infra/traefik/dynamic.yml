@@ -1,0 +1,16 @@
+http:
+  middlewares:
+    rateLimit:
+      rateLimit:
+        average: 100
+        burst: 200
+    # Uploads are public objects; a Bearer token from the app would be parsed as S3 auth and rejected.
+    stripAuth:
+      headers:
+        customRequestHeaders:
+          Authorization: ''
+          Cookie: ''
+    forwarded:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: http

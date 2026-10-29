@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.*
+uploads
+**/*.spec.ts
+coverage
+.git
+.expo

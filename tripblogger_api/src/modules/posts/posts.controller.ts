@@ -15,6 +15,7 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -23,20 +24,20 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RequiredStatuses } from '../../common/decorators/statuses.decorator';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
+import { QueryPostsNearLocationDto } from './dto/query-posts-near-location.dto';
 import { QueryCommentsDto, QueryFeedPostsDto, QueryMinePostsDto } from './dto/query-posts.dto';
 import { ToggleReactionDto } from './dto/reaction.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
 import { UploadPostMediaDto } from './dto/upload-post-media.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
-import { Request, Response } from 'express';
-import { existsSync, mkdirSync } from 'fs';
-import sharp from 'sharp';
+import { memoryStorage } from 'multer';
+import { Response } from 'express';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import { MediaResolver } from './media.resolver';
 import { MediaMigrationWorker } from './media.migration.worker';
+import { MediaUploadService } from '../../config/storage/media-upload.service';
+import { keyFromUploadPath, OBJECT_STORAGE, type ObjectStorage } from '../../config/storage/object-storage';
 
 @Controller('posts')
 export class PostsController {
@@ -44,6 +45,8 @@ export class PostsController {
     private readonly postsService: PostsService,
     private readonly mediaResolver: MediaResolver,
     private readonly mediaMigrationWorker: MediaMigrationWorker,
+    private readonly mediaUpload: MediaUploadService,
+    @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
   ) {}
 
   @Get('reaction-types')
@@ -62,6 +65,14 @@ export class PostsController {
     return this.postsService.findMine(req.user.sub, query);
   }
 
+  @Get('mine/near')
+  @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @Roles('MEMBER')
+  @RequiredStatuses('ACTIVE')
+  findMineNear(@Req() req: { user: { sub: string } }, @Query() query: QueryPostsNearLocationDto) {
+    return this.postsService.findMineNear(req.user.sub, query);
+  }
+
   @Get('feed')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER', 'GUEST')
@@ -72,6 +83,7 @@ export class PostsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
   create(@Req() req: { user: { sub: string } }, @Body() dto: CreatePostDto) {
@@ -152,6 +164,7 @@ export class PostsController {
 
   @Post(':id/comments')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
   addComment(
@@ -191,20 +204,13 @@ export class PostsController {
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: join(process.cwd(), 'uploads', 'posts'),
-        filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-          const extension = extname(file.originalname || '').toLowerCase() || '.bin';
-          cb(null, `${Date.now()}-${randomUUID()}${extension}`);
-        },
-      }),
-      limits: { fileSize: 60 * 1024 * 1024 },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } }))
   async uploadMedia(
-    @Req() req: { protocol: string; headers: { host?: string; 'x-forwarded-proto'?: string } },
+    @Req() req: {
+      user: { sub: string };
+      protocol: string;
+      headers: { host?: string; 'x-forwarded-proto'?: string };
+    },
     @UploadedFile() file?: Express.Multer.File,
     @Body() dto?: UploadPostMediaDto,
   ) {
@@ -222,40 +228,14 @@ export class PostsController {
       forwardedProto: req.headers['x-forwarded-proto'],
     };
 
-    const relativeOriginal = `/uploads/posts/${file.filename}`;
-    const localSourcePath = join(process.cwd(), relativeOriginal.replace(/^\//, ''));
-
-    let thumbnailRelative: string | undefined;
-    let previewRelative: string | undefined;
-    let width: number | undefined;
-    let height: number | undefined;
-    let placeholder: string | undefined;
-
-    if (kind === 'image') {
-      const variantsDir = join(process.cwd(), 'uploads', 'posts', 'variants');
-      if (!existsSync(variantsDir)) mkdirSync(variantsDir, { recursive: true });
-      const oriented = sharp(localSourcePath).rotate();
-      const stats = await oriented.metadata();
-      width = stats.width;
-      height = stats.height;
-
-      const thumbName = `${file.filename}-thumb.webp`;
-      const previewName = `${file.filename}-preview.webp`;
-      const thumbAbsolute = join(variantsDir, thumbName);
-      const previewAbsolute = join(variantsDir, previewName);
-      await oriented.clone().resize(320, 320, { fit: 'inside' }).webp({ quality: 72 }).toFile(thumbAbsolute);
-      await oriented.clone().resize(1280, 1280, { fit: 'inside' }).webp({ quality: 82 }).toFile(previewAbsolute);
-      thumbnailRelative = `/uploads/posts/variants/${thumbName}`;
-      previewRelative = `/uploads/posts/variants/${previewName}`;
-      const tiny = await oriented.clone().resize(24, 24, { fit: 'inside' }).webp({ quality: 35 }).toBuffer();
-      placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
-    }
-
+    const stored = await this.mediaUpload.storeMedia('posts', file, kind);
+    const { width, height, placeholder } = stored;
+    const relativeOriginal = stored.originalPath;
     const originalUrl = this.mediaResolver.toPublicUrl(relativeOriginal, reqMeta);
-    const previewUrl = previewRelative ? this.mediaResolver.toPublicUrl(previewRelative, reqMeta) : undefined;
-    const thumbnailUrl = thumbnailRelative ? this.mediaResolver.toPublicUrl(thumbnailRelative, reqMeta) : undefined;
+    const previewUrl = stored.previewPath ? this.mediaResolver.toPublicUrl(stored.previewPath, reqMeta) : undefined;
+    const thumbnailUrl = stored.thumbnailPath ? this.mediaResolver.toPublicUrl(stored.thumbnailPath, reqMeta) : undefined;
 
-    return {
+    const registered = await this.postsService.registerUploadedMedia(req.user.sub, {
       kind,
       url: previewUrl ?? originalUrl,
       thumbnailUrl,
@@ -266,9 +246,13 @@ export class PostsController {
       width,
       height,
       placeholder,
-      caption: dto?.caption ?? null,
-      storage: 'local' as const,
+      storage: this.storage.driver === 's3' ? 'cloud' : 'local',
       sourcePath: relativeOriginal,
+    });
+
+    return {
+      ...registered,
+      caption: dto?.caption ?? null,
     };
   }
 
@@ -284,7 +268,7 @@ export class PostsController {
   }
 
   @Get('media/access')
-  accessSignedMedia(
+  async accessSignedMedia(
     @Query('p') encodedPath: string,
     @Query('exp') exp: string,
     @Query('sig') sig: string,
@@ -293,8 +277,12 @@ export class PostsController {
     if (!encodedPath || !exp || !sig) throw new BadRequestException('Missing signed media params');
     const mediaPath = decodeURIComponent(encodedPath);
     this.mediaResolver.verifySignedPath(mediaPath, exp, sig);
-    const absolute = join(process.cwd(), mediaPath.replace(/^\//, ''));
-    if (!existsSync(absolute)) throw new BadRequestException('Media not found');
-    res.sendFile(absolute);
+    const key = keyFromUploadPath(mediaPath);
+    const object = key ? await this.storage.get(key) : null;
+    if (!object) throw new BadRequestException('Media not found');
+    if (object.contentType) res.setHeader('Content-Type', object.contentType);
+    if (object.contentLength) res.setHeader('Content-Length', String(object.contentLength));
+    res.setHeader('Cache-Control', 'private, max-age=600');
+    object.body.pipe(res);
   }
 }

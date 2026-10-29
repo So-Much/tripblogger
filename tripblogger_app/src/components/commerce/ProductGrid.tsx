@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { FlatList, StyleSheet, useWindowDimensions } from 'react-native';
 import type { ProductDto } from '@/src/types/commerce';
+import { productColumnCount } from '@/src/platform/client-form';
+import { useClientForm } from '@/src/platform/use-client-form';
 import { ProductCard } from './ProductCard';
 
 export function ProductGrid({
@@ -13,7 +15,8 @@ export function ProductGrid({
   onLongPress?: (p: ProductDto) => void;
 }) {
   const { width } = useWindowDimensions();
-  const numColumns = 2;
+  const form = useClientForm();
+  const numColumns = productColumnCount(form, width);
   const colW = (width - 32) / numColumns;
 
   const renderItem = useCallback(
@@ -29,6 +32,7 @@ export function ProductGrid({
 
   return (
     <FlatList
+      key={numColumns}
       data={items}
       keyExtractor={(p) => p.id}
       numColumns={numColumns}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -15,8 +15,10 @@ import { useAuthStore } from '@/src/store/auth.store';
 import { AppLanguage, ThemePreference, useSettingsStore } from '@/src/store/settings.store';
 import { useI18n } from '@/src/i18n';
 import { authService } from '@/src/services/api/auth.service';
-import { clearPersistedAuthTokens } from '@/src/services/session/session.service';
+import { logoutAndReGuest } from '@/src/services/session/session-bootstrap.service';
+import { resolvePublicDisplayName } from '@/src/utils/display-name';
 import { SettingsHubSection } from '@/src/components/settings/SettingsHubSection';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 
 function OptionPill({
   label,
@@ -44,12 +46,13 @@ function OptionPill({
 
 export function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const wideSettings = windowWidth >= 720;
   const router = useRouter();
   const { t } = useI18n();
 
   const me = useAuthStore((s) => s.me);
   const setMe = useAuthStore((s) => s.setMe);
-  const logout = useAuthStore((s) => s.logout);
   const tokens = useAuthStore((s) => s.tokens);
   const deviceId = useAuthStore((s) => s.deviceId);
   const isMember = me?.role === 'MEMBER';
@@ -62,6 +65,7 @@ export function SettingsScreen() {
   const border = useThemeColor({}, 'border');
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
+  const onCta = useThemeColor({}, 'onCta');
   const text = useThemeColor({}, 'text');
   const card = useThemeColor({}, 'card');
 
@@ -77,8 +81,12 @@ export function SettingsScreen() {
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const profileName = displayNameDraft || me?.profile?.username || '';
-  const avatarGlyph = (isMember ? profileName : 'G').trim().charAt(0).toUpperCase();
+  const profileName = resolvePublicDisplayName(
+    displayNameDraft || me?.profile?.displayName,
+    me?.profile?.username,
+    t('profileMemberBio'),
+  );
+  const avatarGlyph = profileName.trim().charAt(0).toUpperCase();
   const isProfileDirty =
     displayNameDraft.trim() !== initialDisplay.trim() ||
     emailDraft.trim() !== initialEmail.trim() ||
@@ -115,13 +123,14 @@ export function SettingsScreen() {
   const saveProfile = async () => {
     if (!me?.profile) return;
     try {
-      const updated = await authService.updateProfile({
+      await authService.updateProfile({
         displayName: displayNameDraft.trim() || me.profile.username,
         email: emailDraft.trim(),
         removeAvatar,
         avatarFile: selectedAvatarFile ?? undefined,
       });
-      setMe(updated);
+      const refreshedMe = await authService.me();
+      setMe(refreshedMe);
       setIsProfileModalOpen(false);
     } catch {
       Alert.alert(t('saveProfileFailedTitle'), t('saveProfileFailedMessage'));
@@ -218,6 +227,7 @@ export function SettingsScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
+          wideSettings ? styles.contentWide : null,
           {
             paddingTop: Math.max(insets.top, 10),
             paddingBottom: Math.max(insets.bottom, 14) + 14,
@@ -230,7 +240,7 @@ export function SettingsScreen() {
           {t('settingsTitle')}
         </ThemedText>
         <ThemedText style={{ color: muted }}>{t('settingsSubtitle')}</ThemedText>
-        <View style={[styles.profileHeaderCard, { borderColor: border, backgroundColor: card }]}>
+        <View style={[styles.profileHeaderCard, wideSettings && styles.profileHeaderRow, { borderColor: border, backgroundColor: card }]}>
           {isMember ? (
             <>
               <View style={[styles.avatarCircle, { borderColor: border }]}>
@@ -259,12 +269,9 @@ export function SettingsScreen() {
               <View style={[styles.avatarCircle, { borderColor: border }]}>
                 <ThemedText type="title">{avatarGlyph}</ThemedText>
               </View>
-              <ThemedText type="subtitle" style={styles.profileNameCenter}>
-                {t('settingsGuestMode')}
-              </ThemedText>
               <ThemedText style={{ color: muted }}>{t('settingsGuestSyncHint')}</ThemedText>
               <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={() => router.push('/login')}>
-                <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+                <ThemedText type="defaultSemiBold" style={[styles.ctaText, { color: onCta }]}>
                   {t('login')}
                 </ThemedText>
               </Pressable>
@@ -275,17 +282,26 @@ export function SettingsScreen() {
         {isMember ? <SettingsHubSection /> : null}
 
         <SectionCard>
-          <ThemedText type="subtitle">{t('settingsAppearanceCardTitle')}</ThemedText>
-          <ThemedText style={[styles.prefsLabel, { color: muted }]}>{t('languageSection')}</ThemedText>
-          <View style={styles.optionsRow}>
-            <OptionPill label={t('languageVi')} active={language === 'vi'} onPress={() => setLanguage('vi' as AppLanguage)} />
-            <OptionPill label={t('languageEn')} active={language === 'en'} onPress={() => setLanguage('en' as AppLanguage)} />
-          </View>
-          <ThemedText style={[styles.prefsLabel, { color: muted, marginTop: 14 }]}>{t('themeSection')}</ThemedText>
-          <View style={styles.optionsWrap}>
-            <OptionPill label={t('themeLight')} active={themePreference === 'light'} onPress={() => setThemePreference('light' as ThemePreference)} />
-            <OptionPill label={t('themeDark')} active={themePreference === 'dark'} onPress={() => setThemePreference('dark' as ThemePreference)} />
-            <OptionPill label={t('themeSystem')} active={themePreference === 'system'} onPress={() => setThemePreference('system' as ThemePreference)} />
+          <ThemedText type="defaultSemiBold" style={styles.appearanceTitle}>
+            {t('settingsAppearanceCardTitle')}
+          </ThemedText>
+          <View style={styles.compactPrefsRow}>
+            <View style={styles.compactGroup}>
+              <ThemedText style={[styles.compactLabel, { color: muted }]}>{t('languageSection')}</ThemedText>
+              <View style={styles.compactPills}>
+                <OptionPill label="VI" active={language === 'vi'} onPress={() => setLanguage('vi' as AppLanguage)} />
+                <OptionPill label="EN" active={language === 'en'} onPress={() => setLanguage('en' as AppLanguage)} />
+              </View>
+            </View>
+            <View style={[styles.compactDivider, { backgroundColor: border }]} />
+            <View style={styles.compactGroup}>
+              <ThemedText style={[styles.compactLabel, { color: muted }]}>{t('themeSection')}</ThemedText>
+              <View style={styles.compactPills}>
+                <OptionPill label={t('themeLight')} active={themePreference === 'light'} onPress={() => setThemePreference('light' as ThemePreference)} />
+                <OptionPill label={t('themeDark')} active={themePreference === 'dark'} onPress={() => setThemePreference('dark' as ThemePreference)} />
+                <OptionPill label={t('themeSystem')} active={themePreference === 'system'} onPress={() => setThemePreference('system' as ThemePreference)} />
+              </View>
+            </View>
           </View>
         </SectionCard>
 
@@ -306,8 +322,7 @@ export function SettingsScreen() {
                         // Keep local logout resilient even if network/logout endpoint fails.
                       }
                     }
-                    await clearPersistedAuthTokens();
-                    logout();
+                    await logoutAndReGuest();
                     router.replace('/');
                   },
                 },
@@ -357,22 +372,18 @@ export function SettingsScreen() {
               </View>
               <View style={styles.modalFieldGroup}>
                 <ThemedText style={{ color: muted }}>{t('displayName')}</ThemedText>
-                <TextInput
+                <ThemedTextInput
                   value={displayNameDraft}
                   onChangeText={setDisplayNameDraft}
-                  style={[styles.input, { borderColor: border, color: text }]}
                   placeholder={me?.profile?.username ?? ''}
-                  placeholderTextColor={muted}
                 />
               </View>
               <View style={styles.modalFieldGroup}>
                 <ThemedText style={{ color: muted }}>{t('email')}</ThemedText>
-                <TextInput
+                <ThemedTextInput
                   value={emailDraft}
                   onChangeText={setEmailDraft}
-                  style={[styles.input, { borderColor: border, color: text }]}
                   placeholder={t('noEmail')}
-                  placeholderTextColor={muted}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -380,7 +391,7 @@ export function SettingsScreen() {
               </View>
               <View style={styles.modalFooter}>
                 <Pressable style={[styles.primaryButton, { backgroundColor: cta }]} onPress={saveProfile}>
-                  <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+                  <ThemedText type="defaultSemiBold" style={[styles.ctaText, { color: onCta }]}>
                     {t('saveProfile')}
                   </ThemedText>
                 </Pressable>
@@ -395,16 +406,23 @@ export function SettingsScreen() {
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  content: { gap: 12 },
+  content: { gap: 16, width: '100%' },
+  contentWide: { maxWidth: 880, alignSelf: 'center' },
   prefsLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8 },
   title: { fontSize: 30, lineHeight: 36 },
   profileHeaderCard: {
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 6,
+    paddingVertical: 16,
+    gap: 8,
     alignItems: 'center',
+  },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 16,
   },
   statusBadgesWrap: { alignItems: 'center', gap: 6, marginTop: 4, width: '100%' },
   avatarCircle: {
@@ -432,11 +450,17 @@ const styles = StyleSheet.create({
   },
   optionsRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   optionsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  appearanceTitle: { fontSize: 16, marginBottom: 10 },
+  compactPrefsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  compactGroup: { flex: 1, gap: 6, minWidth: 0 },
+  compactLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  compactPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  compactDivider: { width: 1, alignSelf: 'stretch', opacity: 0.6 },
   pill: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   ctaButton: {
     borderRadius: 999,
@@ -444,7 +468,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 4,
   },
-  ctaText: { color: '#fff' },
+  ctaText: { fontWeight: '600' },
   primaryButton: {
     borderRadius: 999,
     alignItems: 'center',
@@ -474,7 +498,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   modalCard: {
@@ -511,7 +535,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   avatarEditOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

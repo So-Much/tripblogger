@@ -15,11 +15,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
-import { readFileSync, existsSync, mkdirSync } from 'fs';
-import sharp from 'sharp';
+import { memoryStorage } from 'multer';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
+import { MediaUploadService } from '../../config/storage/media-upload.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -41,6 +39,7 @@ export class CommerceProductsController {
   constructor(
     private readonly commerceService: CommerceService,
     private readonly mediaResolver: MediaResolver,
+    private readonly mediaUpload: MediaUploadService,
   ) {}
 
   private reqMeta(req: { protocol: string; headers: { host?: string; 'x-forwarded-proto'?: string } }): CommerceReqMeta {
@@ -63,18 +62,7 @@ export class CommerceProductsController {
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: join(process.cwd(), 'uploads', 'commerce'),
-        filename: (_req: unknown, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-          const extension = extname(file.originalname || '').toLowerCase() || '.bin';
-          cb(null, `${Date.now()}-${randomUUID()}${extension}`);
-        },
-      }),
-      limits: { fileSize: 60 * 1024 * 1024 },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 60 * 1024 * 1024 } }))
   async uploadMedia(
     @Req() req: Request,
     @UploadedFile() file?: Express.Multer.File,
@@ -90,38 +78,12 @@ export class CommerceProductsController {
     }
     const reqMeta = this.reqMeta(req);
 
-    const relativeOriginal = `/uploads/commerce/${file.filename}`;
-    const localSourcePath = join(process.cwd(), relativeOriginal.replace(/^\//, ''));
-
-    let thumbnailRelative: string | undefined;
-    let previewRelative: string | undefined;
-    let width: number | undefined;
-    let height: number | undefined;
-    let placeholder: string | undefined;
-
-    if (kind === 'image') {
-      const variantsDir = join(process.cwd(), 'uploads', 'commerce', 'variants');
-      if (!existsSync(variantsDir)) mkdirSync(variantsDir, { recursive: true });
-      const meta = readFileSync(localSourcePath);
-      const stats = await sharp(meta).metadata();
-      width = stats.width;
-      height = stats.height;
-
-      const thumbName = `${file.filename}-thumb.webp`;
-      const previewName = `${file.filename}-preview.webp`;
-      const thumbAbsolute = join(variantsDir, thumbName);
-      const previewAbsolute = join(variantsDir, previewName);
-      await sharp(localSourcePath).resize(320, 320, { fit: 'inside' }).webp({ quality: 72 }).toFile(thumbAbsolute);
-      await sharp(localSourcePath).resize(1280, 1280, { fit: 'inside' }).webp({ quality: 82 }).toFile(previewAbsolute);
-      thumbnailRelative = `/uploads/commerce/variants/${thumbName}`;
-      previewRelative = `/uploads/commerce/variants/${previewName}`;
-      const tiny = await sharp(localSourcePath).resize(24, 24, { fit: 'inside' }).webp({ quality: 35 }).toBuffer();
-      placeholder = `data:image/webp;base64,${tiny.toString('base64')}`;
-    }
-
+    const stored = await this.mediaUpload.storeMedia('commerce', file, kind);
+    const { width, height, placeholder } = stored;
+    const relativeOriginal = stored.originalPath;
     const originalUrl = this.mediaResolver.toPublicUrl(relativeOriginal, reqMeta);
-    const previewUrl = previewRelative ? this.mediaResolver.toPublicUrl(previewRelative, reqMeta) : undefined;
-    const thumbnailUrl = thumbnailRelative ? this.mediaResolver.toPublicUrl(thumbnailRelative, reqMeta) : undefined;
+    const previewUrl = stored.previewPath ? this.mediaResolver.toPublicUrl(stored.previewPath, reqMeta) : undefined;
+    const thumbnailUrl = stored.thumbnailPath ? this.mediaResolver.toPublicUrl(stored.thumbnailPath, reqMeta) : undefined;
 
     return {
       type: kind,
@@ -136,7 +98,7 @@ export class CommerceProductsController {
       height,
       placeholder,
       caption: dto?.caption ?? null,
-      storage: 'local' as const,
+      storage: this.mediaUpload.driver === 's3' ? ('cloud' as const) : ('local' as const),
       sourcePath: relativeOriginal,
     };
   }
@@ -148,6 +110,7 @@ export class CommerceProductsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Roles('MEMBER')
   @RequiredStatuses('ACTIVE')
   create(@Req() req: AuthedRequest, @Body() dto: CreateProductDto) {

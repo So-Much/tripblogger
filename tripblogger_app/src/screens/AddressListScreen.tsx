@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useI18n } from '@/src/i18n';
@@ -18,6 +19,7 @@ export function AddressListScreen() {
   const qc = useQueryClient();
   const me = useMeQuery();
   const border = useThemeColor({}, 'border');
+  const tint = useThemeColor({}, 'tint');
 
   const q = useQuery({
     queryKey: ['commerce', 'addresses'],
@@ -63,9 +65,10 @@ export function AddressListScreen() {
         onRefresh={() => void q.refetch()}
         renderItem={({ item }: { item: AddressDto }) => (
           <ThemedView style={[styles.card, { borderColor: border }]}>
-            <ThemedText type="defaultSemiBold">
-              {item.label} {item.isDefault ? '★' : ''}
-            </ThemedText>
+            <View style={styles.labelRow}>
+              <ThemedText type="defaultSemiBold">{item.label}</ThemedText>
+              {item.isDefault ? <IconSymbol name="star.fill" size={14} color={tint} /> : null}
+            </View>
             <ThemedText>
               {item.recipientName} · {item.phone}
             </ThemedText>
@@ -106,6 +109,7 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center', marginTop: 24 },
   add: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12, alignItems: 'center', minHeight: 44 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10, gap: 4 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   small: { fontSize: 13, opacity: 0.8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
 });

@@ -1,148 +1,373 @@
-# TripBlogger
+<div align="center">
 
-Monorepo gồm **API NestJS** (SQL Server, auth JWT) và **ứng dụng mobile/web Expo** (React Native, Expo Router). Mục tiêu: nền tảng nội dung du lịch kết hợp gợi ý thương mại (feed, profile, deals).
+<!-- Animated hero — works on GitHub -->
+<svg width="100%" height="220" viewBox="0 0 960 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TripBlogger">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B1F2A"/>
+      <stop offset="45%" stop-color="#123D4A"/>
+      <stop offset="100%" stop-color="#1A5C4A"/>
+      <animate attributeName="x2" values="1;0.2;1" dur="10s" repeatCount="indefinite"/>
+    </linearGradient>
+    <linearGradient id="neon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3EE0B0"/>
+      <stop offset="50%" stop-color="#7CF5FF"/>
+      <stop offset="100%" stop-color="#F4C95F"/>
+      <animate attributeName="x1" values="0%;40%;0%" dur="6s" repeatCount="indefinite"/>
+      <animate attributeName="x2" values="100%;60%;100%" dur="6s" repeatCount="indefinite"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
 
-## Cấu trúc thư mục
+  <rect width="960" height="220" rx="24" fill="url(#sky)"/>
 
-| Thư mục | Mô tả |
-|--------|--------|
-| [`tripblogger_api/`](./tripblogger_api/) | Backend NestJS, TypeORM migrations, seed, OpenAPI có thể bật qua Swagger |
-| [`tripblogger_app/`](./tripblogger_app/) | Client Expo: routing `app/`, màn `src/screens/`, API client Axios, Zustand |
-| [`README.md`](./README.md) | Tài liệu khởi động tổng (file này) |
+  <!-- soft orbs -->
+  <circle cx="140" cy="70" r="48" fill="#3EE0B0" opacity="0.12">
+    <animate attributeName="cy" values="70;90;70" dur="5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="820" cy="150" r="70" fill="#7CF5FF" opacity="0.1">
+    <animate attributeName="cx" values="820;780;820" dur="7s" repeatCount="indefinite"/>
+  </circle>
 
-Chi tiết từng package: [`tripblogger_api/README.md`](./tripblogger_api/README.md), [`tripblogger_app/README.md`](./tripblogger_app/README.md).
+  <!-- dotted map grid -->
+  <g opacity="0.18" stroke="#9FD9C8" stroke-width="1">
+    <path d="M60 40 H900 M60 80 H900 M60 120 H900 M60 160 H900 M60 200 H900"/>
+    <path d="M120 20 V200 M240 20 V200 M360 20 V200 M480 20 V200 M600 20 V200 M720 20 V200 M840 20 V200"/>
+  </g>
 
-## Yêu cầu môi trường
+  <!-- animated route -->
+  <path id="route" d="M90 160 C180 90, 260 190, 360 120 S540 60, 640 130 S800 180, 880 90"
+        fill="none" stroke="url(#neon)" stroke-width="3.5" stroke-linecap="round"
+        stroke-dasharray="12 10" filter="url(#softGlow)">
+    <animate attributeName="stroke-dashoffset" from="0" to="-220" dur="4s" repeatCount="indefinite"/>
+  </path>
 
-- **Node.js** LTS (khuyến nghị 20+)
-- **npm** hoặc tương đương
-- API: **Microsoft SQL Server** (instance đạt JDBC/connection string trong `.env`)
-- **Redis**, queue (tuỳ cấu hình `tripblogger_api`): nếu chạy full `start:dev` mà không có Redis có thể lỗi kết nối — chỉ seed/migration không cần bật Nest nếu bạn chỉ muốn cập nhật DB.
+  <!-- traveling pin -->
+  <g filter="url(#softGlow)">
+    <circle r="7" fill="#F4C95F">
+      <animateMotion dur="8s" repeatCount="indefinite" rotate="auto"
+        path="M90 160 C180 90, 260 190, 360 120 S540 60, 640 130 S800 180, 880 90"/>
+    </circle>
+    <circle r="14" fill="#F4C95F" opacity="0.25">
+      <animate attributeName="r" values="10;18;10" dur="1.6s" repeatCount="indefinite"/>
+      <animateMotion dur="8s" repeatCount="indefinite"
+        path="M90 160 C180 90, 260 190, 360 120 S540 60, 640 130 S800 180, 880 90"/>
+    </circle>
+  </g>
 
-## Backend (`tripblogger_api`)
+  <!-- title -->
+  <text x="480" y="88" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="46" font-weight="700" fill="#F4FFF8" letter-spacing="1.5">
+    TripBlogger
+  </text>
+  <text x="480" y="122" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="15" fill="#9FD9C8">
+    feed · map · itinerary · commerce
+  </text>
 
-1. Sao chép môi trường: `cp tripblogger_api/.env.example tripblogger_api/.env` (Windows: copy tay) và điền `DB_*`, `JWT_*`.
-2. Cài đặt: `cd tripblogger_api && npm install`
-3. Migration: `npm run migration:run`
-4. Seed vai trò/trạng thái và user demo:
-   ```bash
-   npm run seed:roles-statuses
-   npm run seed:user
-   ```
-5. Chạy dev: `npm run start:dev`  
-   API chạy tại cổng mặc định **`http://localhost:3000`** với prefix **`/api`** (ví dụ đăng nhập: `POST /api/auth/login`).
+  <!-- typing subtitle -->
+  <text x="480" y="168" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="18" fill="#7CF5FF" filter="url(#softGlow)">
+    <tspan id="typed">plan the trip. live the story.</tspan>
+    <tspan fill="#F4C95F">
+      <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>|
+    </tspan>
+  </text>
+</svg>
 
-Chi tiết: [`tripblogger_api/README.md`](./tripblogger_api/README.md).
+<br/>
 
-## App (`tripblogger_app`)
+**Nền tảng nội dung du lịch** — feed, bản đồ, lịch trình theo ngày, và gợi ý thương mại trong một monorepo.
 
-1. `cd tripblogger_app && npm install`
-2. Sao chép `tripblogger_app/.env.example` → `.env`, đặt:
-   ```env
-   EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/api
-   ```
-3. **`localhost` chỉ đúng khi simulator/emulator chia sẻ mạng với máy dev.** Trên điện thoại qua Expo Go, app trong repo đã **tự đổi localhost sang IP Metro** khi đang development; vẫn có thể ghi rõ URL máy chủ vào `.env` nếu cần.
-4. Chạy: `npm run start` (hoặc `npx expo start`)
+[![Expo SDK](https://img.shields.io/badge/Expo-SDK%2054-000?style=for-the-badge&logo=expo)](./tripblogger_app)
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](./tripblogger_api)
+[![React Native](https://img.shields.io/badge/React%20Native-0.81-61DAFB?style=for-the-badge&logo=react&logoColor=black)](./tripblogger_app)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](#)
+[![SQL Server](https://img.shields.io/badge/SQL%20Server-TypeORM-CC2927?style=for-the-badge&logo=microsoftsqlserver&logoColor=white)](./tripblogger_api)
+[![Redis](https://img.shields.io/badge/Redis-BullMQ-DC382D?style=for-the-badge&logo=redis&logoColor=white)](./tripblogger_api)
 
-Chi tiết: [`tripblogger_app/README.md`](./tripblogger_app/README.md).
+<br/>
 
-## Seed user demo
+```text
+  ┌─────────────┐     JWT / REST / WS      ┌──────────────────┐
+  │  Expo App   │ ◄──────────────────────► │  NestJS API      │
+  │  map·plan   │                          │  /api · sockets  │
+  └──────┬──────┘                          └────────┬─────────┘
+         │ shared                                  │
+         ▼                                         ▼
+  itinerary-engine                          SQL Server + Redis
+```
 
-Sau `seed:user`, có thể dùng tài khoản đã định nghĩa trong [`tripblogger_api/src/scripts/seed-user.ts`](./tripblogger_api/src/scripts/seed-user.ts) (email/password cập nhật theo script; mật khẩu tối thiểu khớp rule API).
+</div>
 
-## Production Migration Checklist
+---
 
-Danh sách này dùng khi chuyển từ local/dev sang production, đặc biệt cho phần upload ảnh, server, bảo mật và vận hành.
+## Điểm nổi bật
 
-### 1) Hạ tầng server
+| | |
+|:--|:--|
+| **Plan builder** | Timeline theo ngày, stop sheet, map fly-along, reorder bằng drag |
+| **Map & places** | OSRM · Overpass · Photon · Nominatim + Redis cache |
+| **Social feed** | Posts realtime qua Socket.IO |
+| **Auth** | JWT access/refresh + Google OAuth |
+| **Media** | Upload Multer · Sharp WebP · Vision Camera (dev build) |
+| **Monorepo** | npm workspaces · shared `@tripblogger/itinerary-engine` |
 
-- Tách riêng môi trường: `dev`, `staging`, `production` (không dùng chung DB/Redis).
-- Chuẩn bị máy chủ cho:
-  - API NestJS (process manager hoặc container).
-  - SQL Server production.
-  - Redis production.
-  - Reverse proxy (Nginx/Caddy) trước API.
-- Cấu hình domain + TLS (HTTPS bắt buộc).
+Chi tiết stack có bằng chứng trong repo: [`TECH_STACK.md`](./TECH_STACK.md)
 
-### 2) Biến môi trường production
+---
 
-- API (`tripblogger_api/.env` trên server):
-  - `NODE_ENV=production`
-  - `PORT`
-  - `DB_*`
-  - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (khóa mạnh, không tái sử dụng khóa dev)
-  - `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`
-  - `REDIS_*`
-  - `ADMIN_SECRET`
-  - `GOOGLE_OAUTH_AUDIENCES`
-- App (`tripblogger_app/.env` khi build):
-  - `EXPO_PUBLIC_API_BASE_URL=https://<your-domain>/api`
-  - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` theo môi trường.
+## Kiến trúc
 
-### 3) Database migration + seed
+**Services (2026-10):** Traefik gateway + Core API + Trip Service + Geo Service + SeaweedFS (ảnh). Toàn bộ chạy bằng Docker, không dùng dịch vụ trả phí. Tiến độ sống: [`docs/PROGRESS.md`](docs/PROGRESS.md). Runbook: [`docs/runbooks/compose-up.md`](docs/runbooks/compose-up.md).
 
-- Chạy migration trước khi mở traffic:
-  - `cd tripblogger_api && npm run migration:run`
-- Chỉ seed dữ liệu hệ thống cần thiết ở production (roles/statuses), tránh seed user demo.
-- Kiểm tra index/constraint sau migration, đảm bảo bảng auth/session/profile đúng schema.
+```mermaid
+flowchart LR
+  App[Expo app] --> Traefik["Traefik :3000"]
+  Traefik -->|map places locations saved checkins| Geo[Geo]
+  Traefik -->|trips| Trip[Trip]
+  Traefik -->|api còn lại, socket.io| Core[Core]
+  Traefik -->|GET /uploads| Seaweed[(SeaweedFS S3)]
+  Core -->|PUT ảnh| Seaweed
+  Core --> DbCore[(tripblogger)]
+  Geo --> DbGeo[(tripblogger_geo)]
+  Trip --> DbTrip[(tripblogger_trips)]
+  Geo -->|outbox, Redis Streams| Trip
+  Geo -.->|tuỳ chọn| Typesense
+  Geo -->|public hoặc tự host| Photon
+  Trip -->|JWKS và table-legs| Geo
+  Geo -->|JWKS| Core
+  Trip -->|JWKS| Core
+```
 
-### 4) Upload ảnh avatar (rất quan trọng)
+```
+tripblogger/
+├── tripblogger_api/            # Core: auth, users, posts, commerce, uploads, socket
+├── services/geo-service/       # search, map, locations, saved, check-in
+├── services/trip-service/      # lịch trình và /trips/budget
+├── packages/                   # contracts, auth JWKS, events, itinerary-engine
+├── infra/traefik/              # cửa trước, một URL cho app
+├── tripblogger_app/            # Expo, vẫn gọi http://host:3000/api
+├── docker-compose.yml          # profile infra + apps
+└── .github/workflows/ci.yml    # test và docker build
+```
 
-- Hiện tại avatar lưu local tại `uploads/avatars` và serve qua `/uploads/*`.
-- Với production:
-  - Gắn volume/persistent disk cho thư mục `uploads` (không lưu ephemeral disk).
-  - Thiết lập quota + theo dõi dung lượng đĩa.
-  - Bật backup thư mục uploads định kỳ.
-  - Chặn upload file không hợp lệ (mime, size) ở API (đã có validate cơ bản).
-- `.gitignore` đã bỏ qua `**/uploads/` để không làm phình repo.
-- Khuyến nghị trung hạn: chuyển sang object storage (S3/Cloudinary) để scale và CDN tốt hơn.
+---
 
-### 5) Build và deploy
+## Yêu cầu
 
-- API:
-  - `npm ci`
-  - `npm run build`
-  - chạy `node dist/main.js` (qua PM2/systemd/container).
-- App Expo:
-  - build profile production (Android/iOS) với env production.
-  - xác nhận app gọi đúng domain API production.
-- Reverse proxy:
-  - route `/api/*` vào API service.
-  - route `/uploads/*` vào static assets API hoặc mount trực tiếp từ proxy.
+- **Node.js** LTS (20+)
+- **npm** (workspaces)
+- **Microsoft SQL Server**
+- **Redis** (map cache + BullMQ — full `start:dev` cần Redis)
 
-### 6) Bảo mật production
+---
 
-- Không bật Swagger/public debug trừ khi cần và có auth.
-- Bật HTTPS-only, HSTS ở proxy.
-- Rotate secrets định kỳ (JWT secrets, admin secret, DB password).
-- Giới hạn CORS theo domain app thật.
-- Giám sát login/refresh thất bại bất thường và rate-limit endpoint auth.
+## Quick start
 
-### 7) Quan sát hệ thống và backup
+App luôn gọi **một** base URL `http://localhost:3000/api`.
 
-- Bật logging tập trung cho API (request ID, error tracking).
-- Theo dõi: CPU/RAM, latency, error rate, DB connection pool, Redis health, disk usage của uploads.
-- Backup:
-  - SQL Server backup tự động + kiểm tra restore định kỳ.
-  - Backup thư mục uploads + kiểm tra phục hồi.
+### Khởi động hàng ngày
 
-### 8) Smoke test sau release
+Khi Docker, `.env.compose` và dữ liệu đã có sẵn:
 
-- Đăng ký/đăng nhập/refresh/logout trên ít nhất 2 thiết bị.
-- Chỉnh profile:
-  - đổi display name
-  - upload avatar từ thư viện/camera
-  - xóa avatar
-- Đóng/mở app xác nhận session còn hiệu lực cho đến khi refresh token hết hạn.
-- Kiểm tra URL avatar truy cập được từ mạng ngoài (không chỉ localhost).
+```powershell
+cd D:\Work\Projects\tripblogger
+docker compose --env-file .env.compose --profile infra --profile apps up -d
+```
+
+Đợi Core, Geo và Trip healthy, rồi mở app. Trên web, trong cửa sổ Metro nhấn `w`.
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_app
+npm run start
+```
+
+- API: `http://localhost:3000/api/health`
+- Web: `http://localhost:8081`
+- Traefik: `http://localhost:8080`
+
+`/api/map` và `/api/trips` cần đăng nhập (không có token sẽ 401). Seed user: username `much`, mật khẩu `12345678`. Địa điểm seed nằm ở Đà Nẵng, không nằm trong bán kính 2 km quanh Sài Gòn.
+
+### Lần đầu
+
+Có hai cách chạy.
+
+### A. Một process (hành vi cũ)
+
+`GEO_DELEGATE` và `TRIP_DELEGATE` để trống. Core tự phục vụ map, location và trip, kể cả `GET/PUT /api/trips/budget`.
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_api
+copy .env.example .env
+npm run migration:run
+npm run seed:all
+npm run start:dev
+```
+
+API: **`http://localhost:3000/api`**. Redis phải chạy nếu bật map cache và BullMQ.
+
+### B. Ba service sau Traefik
+
+Traefik giữ cổng 3000 (cùng vai trò cửa trước như API Gateway trong bài AWS 07). `/api/map|places|locations|saved-locations|checkins` → Geo, `/api/trips` → Trip, phần còn lại của `/api` và `/socket.io` → Core, `GET /uploads/*` → SeaweedFS (ảnh không nằm trong database).
+
+```powershell
+cd D:\Work\Projects\tripblogger
+copy .env.compose.example .env.compose
+node infra/jwt/generate-dev-keys.js
+npm run secrets:init
+docker compose --env-file .env.compose --profile infra --profile apps up -d --build
+npm run e2e
+```
+
+`secrets:init` sinh secret ngẫu nhiên vào `.env.compose` (không ghi biến môi trường ra máy), xem [`docs/runbooks/secrets.md`](docs/runbooks/secrets.md). Profile tuỳ chọn: `obs` (Prometheus, Grafana, Jaeger), `search` (Typesense), `geocoder` (Photon tự host), `tools` (k6: `npm run load:smoke`). Backup: `npm run backup`, xem [`docs/runbooks/backup.md`](docs/runbooks/backup.md).
+
+Migration của cả ba service tự chạy khi container khởi động. Seed của Core chạy một lần từ máy host, đọc `tripblogger_api/.env` (file này đã có, không cần `$env:`):
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_api
+npm run seed:all
+```
+
+Copy dữ liệu sang Geo và Trip chạy trong container. Container đã nhận biến từ `docker-compose.yml` và `.env.compose`, không ghi biến ra máy:
+
+```powershell
+cd D:\Work\Projects\tripblogger
+docker compose --env-file .env.compose exec geo node /app/node_modules/ts-node/dist/bin.js --transpile-only src/import/migrate-locations.ts
+docker compose --env-file .env.compose exec trip node /app/node_modules/ts-node/dist/bin.js --transpile-only src/import/migrate-from-core.ts
+```
+
+Mặc định `PHOTON_URL` để trống: Geo dùng Photon công khai (`photon.komoot.io`) và cache 7 ngày trong Redis. Muốn tự host thì import index Việt Nam theo [`docs/runbooks/import-osm-vietnam.md`](docs/runbooks/import-osm-vietnam.md), bật profile `geocoder` và đặt `PHOTON_URL=http://photon:2322`. Typesense mặc định tắt (`TYPESENSE_HOST=` trống) vì bị segfault trên kernel WSL 6.18; khi tắt, Geo tìm kiếm bằng SQL.
+
+Kiểm tra: `http://localhost:3000/api/health` và dashboard Traefik `http://localhost:8080`.
+
+### App
+
+```powershell
+cd D:\Work\Projects\tripblogger\tripblogger_app
+copy .env.example .env
+npm install
+npm run start
+```
+
+`.env` cần `EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/api`. Nhấn `w` để mở web. Trình duyệt rộng từ 1100px dùng thanh trên và bố cục hai cột. Dưới 720px giữ giao diện điện thoại. Ở giữa là tablet.
+
+Trên thiết bị thật, app tự đổi `localhost` sang IP Metro khi development. Máy ảo dùng `localhost`. Camera trên web xin quyền của máy đang mở trình duyệt, qua `localhost` hoặc HTTPS.
+
+| Package | README |
+|---------|--------|
+| API | [`tripblogger_api/README.md`](./tripblogger_api/README.md) |
+| App | [`tripblogger_app/README.md`](./tripblogger_app/README.md) |
+
+---
+
+## Stack nhanh
+
+<div align="center">
+
+| Layer | Tech |
+|:------|:-----|
+| **App** | Expo 54 · React 19 · RN 0.81 · Expo Router · Reanimated · Zustand · TanStack Query |
+| **API** | NestJS 11 · TypeORM · mssql · Passport JWT · Helmet · Throttler · Sharp |
+| **Realtime** | Socket.IO |
+| **Jobs** | BullMQ + Redis |
+| **Storage** | SQL Server · Redis (AOF, Streams) · SeaweedFS (S3 tự host cho ảnh) |
+| **Observability** | Prometheus · Grafana · Jaeger (OTLP) — profile `obs` |
+| **Shared** | `@tripblogger/itinerary-engine` (pure TS) |
+
+</div>
+
+---
+
+<details>
+<summary><strong>Production migration checklist</strong> (mở rộng)</summary>
+
+### 1) Hạ tầng
+
+- Tách `dev` / `staging` / `production` (không dùng chung DB/Redis)
+- API + SQL Server + Redis + reverse proxy (Nginx/Caddy) + TLS
+
+### 2) Env production
+
+**API:** `NODE_ENV`, `PORT`, `DB_*`, `JWT_*`, `REDIS_*`, `ADMIN_SECRET`, `GOOGLE_OAUTH_AUDIENCES`  
+**App (build):** `EXPO_PUBLIC_API_BASE_URL=https://<domain>/api`, Google client id theo môi trường
+
+### 3) DB
+
+```bash
+cd tripblogger_api && npm run migration:run
+```
+
+Chỉ seed roles/statuses cần thiết — tránh seed user demo.
+
+### 4) Upload ảnh
+
+- Compose: Core ghi vào SeaweedFS qua S3 API (`STORAGE_DRIVER=s3`), Traefik phục vụ `GET /uploads/*`; chạy API riêng lẻ thì mặc định lưu `uploads/` trên đĩa
+- Volume `seaweedfs_data` được `npm run backup` đóng gói cùng database
+
+### 5) Deploy
+
+```bash
+# API
+npm ci && npm run build && node dist/main.js
+
+# App: Expo production build với env production
+```
+
+Proxy: `/api/*` → API · `/uploads/*` → SeaweedFS (chỉ GET/HEAD)
+
+### 6) Bảo mật
+
+- HTTPS + HSTS · CORS theo domain thật · rotate secrets · rate-limit auth
+- Không mở Swagger/debug public trừ khi có auth
+
+### 7) Observability & backup
+
+- Metrics, alert, trace: profile `obs` · `npm run backup` (SQL Server + SeaweedFS) · `npm run restore` để kiểm tra
+
+### 8) Smoke test
+
+- Login/refresh trên ≥2 thiết bị · profile/avatar · session sau cold start · URL avatar từ mạng ngoài
+
+</details>
+
+---
 
 ## Git & bảo mật
 
-- **Không commit** `.env`, file chứa mật khẩu, keystore hay token.
-- `.gitignore` gốc đã loại **`node_modules`**, **`__pycache__`**, **`.expo`**, **IDE (`.vscode`, `.idea`, `.cursor`)** và các pattern secret phổ biến.
+- **Không commit** `.env`, keystore, token
+- `.gitignore` đã loại `node_modules`, `.expo`, IDE folders, pattern secret phổ biến
 
-Nếu team muốn đồng bộ một phần cấu hình Cursor/rules, chỉ có thể thêm tay: `git add -f đường-dẫn-file`.
+---
 
-## License
+## Docs thêm
 
-Đặt theo policy dự án của bạn (chưa gắn license mặc định trong repo).
+| File | Nội dung |
+|------|----------|
+| [`TECH_STACK.md`](./TECH_STACK.md) | Công nghệ / version có bằng chứng trong repo |
+| [`docs/TRIP_FEATURE_SPEC.md`](./docs/TRIP_FEATURE_SPEC.md) | Đặc tả trip planning |
+| [`docs/PROJECT_STRUCTURE.md`](./docs/PROJECT_STRUCTURE.md) | Bản đồ cấu trúc |
+
+---
+
+<div align="center">
+
+<svg width="320" height="36" viewBox="0 0 320 36" xmlns="http://www.w3.org/2000/svg">
+  <text x="160" y="24" text-anchor="middle"
+        font-family="ui-monospace, Menlo, monospace" font-size="13" fill="#5A8A7A">
+    made for the road ahead
+    <animate attributeName="opacity" values="0.45;1;0.45" dur="3s" repeatCount="indefinite"/>
+  </text>
+</svg>
+
+<br/>
+
+<sub>License theo policy dự án (chưa gắn mặc định trong repo).</sub>
+
+</div>

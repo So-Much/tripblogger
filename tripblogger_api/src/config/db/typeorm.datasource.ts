@@ -33,6 +33,10 @@ import { OrderProductEntity } from '../../modules/commerce/entities/order-produc
 import { PaymentEntity } from '../../modules/commerce/entities/payment.entity';
 import { ShipmentEntity } from '../../modules/commerce/entities/shipment.entity';
 import { ProductRatingEntity } from '../../modules/commerce/entities/product-rating.entity';
+import { LocationEntity } from '../../modules/locations/entities/location.entity';
+import { LocationTypeEntity } from '../../modules/locations/entities/location-type.entity';
+import { LocationReviewEntity } from '../../modules/locations/entities/location-review.entity';
+import { SavedLocationEntity } from '../../modules/locations/entities/saved-location.entity';
 
 export default new DataSource({
   type: 'mssql',
@@ -81,6 +85,10 @@ export default new DataSource({
     PaymentEntity,
     ShipmentEntity,
     ProductRatingEntity,
+    LocationEntity,
+    LocationTypeEntity,
+    LocationReviewEntity,
+    SavedLocationEntity,
   ],
   migrations: ['src/migrations/*.ts'],
   synchronize: false,

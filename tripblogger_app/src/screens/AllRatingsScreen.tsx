@@ -6,6 +6,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useI18n } from '@/src/i18n';
 import { commerceService } from '@/src/services/api/commerce.service';
@@ -59,17 +60,18 @@ export function AllRatingsScreen() {
           )}
           <View style={{ flex: 1 }}>
             <ThemedText type="defaultSemiBold">{item.displayName ?? '—'}</ThemedText>
-            <ThemedText style={styles.small}>
-              {'★'.repeat(item.score)}
-              {'☆'.repeat(5 - item.score)}
-            </ThemedText>
+            <View style={styles.starRow}>
+              {Array.from({ length: item.score }).map((_, i) => (
+                <IconSymbol key={i} name="star.fill" size={14} color={tint} />
+              ))}
+            </View>
           </View>
         </View>
         {item.review ? <ThemedText style={{ marginTop: 8 }}>{item.review}</ThemedText> : null}
         <ThemedText style={styles.small}>{item.createdAt}</ThemedText>
       </View>
     ),
-    [border],
+    [border, tint],
   );
 
   if (!productId) {
@@ -120,6 +122,7 @@ const styles = StyleSheet.create({
   list: { padding: 12, gap: 10, paddingBottom: 32 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 4 },
   row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  starRow: { flexDirection: 'row', gap: 2, marginTop: 4 },
   avatar: { width: 40, height: 40, borderRadius: 20 },
   ph: { backgroundColor: '#2223' },
   small: { fontSize: 12, opacity: 0.75, marginTop: 4 },

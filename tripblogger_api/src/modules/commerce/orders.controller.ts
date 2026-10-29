@@ -9,8 +9,10 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { IdempotencyInterceptor } from '@tripblogger/observability';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StatusesGuard } from '../../common/guards/statuses.guard';
@@ -33,6 +35,7 @@ export class OrdersController {
 
   @Post('checkout')
   @UseGuards(JwtAuthGuard, RolesGuard, StatusesGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Roles('MEMBER', 'GUEST')
   @RequiredStatuses('ACTIVE')
   checkout(@Req() req: AuthedRequest, @Body() dto: CheckoutDto) {

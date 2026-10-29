@@ -66,7 +66,18 @@ export class AddressesService {
       where: { addressId: id, status: In(['PENDING', 'CONFIRMED', 'SHIPPING']) },
     });
     if (active > 0) throw new BadRequestException('Address is used by an active order');
+    const wasDefault = entity.isDefault;
     await this.addrRepo.remove(entity);
+    if (wasDefault) {
+      const next = await this.addrRepo.findOne({
+        where: { userId },
+        order: { createdAt: 'DESC' },
+      });
+      if (next) {
+        next.isDefault = true;
+        await this.addrRepo.save(next);
+      }
+    }
     return { ok: true as const };
   }
 

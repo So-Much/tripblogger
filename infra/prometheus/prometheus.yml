@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+# /metrics is served on each container's own port and is not routed by Traefik,
+# so it is only reachable inside the compose network.
+scrape_configs:
+  - job_name: services
+    static_configs:
+      - targets: ['core:3000', 'geo:3000', 'trip:3000']
+  - job_name: traefik
+    static_configs:
+      - targets: ['traefik:8080']

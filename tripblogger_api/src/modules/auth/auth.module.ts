@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { JwksController } from './jwks.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { RefreshTokenEntity } from './entities/refresh-token.entity';
 import { UserEntity } from '../users/entities/user.entity';
@@ -27,7 +28,7 @@ import { OAuthIdentityEntity } from './entities/oauth-identity.entity';
       OAuthIdentityEntity,
     ]),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, JwksController],
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })

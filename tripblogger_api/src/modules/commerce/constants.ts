@@ -32,7 +32,7 @@ export const DEFAULT_ANALYTICS_JSON = JSON.stringify({
   ratingDistribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
 });
 
-export const CART_STATUSES = ['ACTIVE', 'INACTIVE', 'MERGED', 'ABANDONED'] as const;
+export const CART_STATUSES = ['ACTIVE', 'CHECKING_OUT', 'INACTIVE', 'MERGED', 'ABANDONED'] as const;
 export type CartStatus = (typeof CART_STATUSES)[number];
 
 export const ORDER_STATUSES = ['PENDING', 'CONFIRMED', 'SHIPPING', 'DELIVERED', 'CANCELLED', 'REFUNDED'] as const;

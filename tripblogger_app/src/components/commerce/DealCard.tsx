@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { memo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { withAlpha } from '@/constants/friendly-commerce';
 import { useCommerceTheme } from '@/hooks/use-commerce-theme';
+import { useClientForm } from '@/src/platform/use-client-form';
 import { CommerceDeal } from '@/src/types/commerce';
 
 interface DealCardProps {
@@ -13,6 +14,10 @@ interface DealCardProps {
 
 function DealCardInner({ deal, onPress }: DealCardProps) {
   const { card, border, cta, textMuted, primary, radius, space } = useCommerceTheme();
+  const form = useClientForm();
+  const { width: windowWidth } = useWindowDimensions();
+  const cardWidth =
+    form === 'phone' ? Math.min(200, Math.max(160, windowWidth - 96)) : form === 'tablet' ? 220 : 248;
 
   return (
     <Pressable
@@ -22,6 +27,7 @@ function DealCardInner({ deal, onPress }: DealCardProps) {
       accessibilityLabel={`${deal.title}. ${deal.priceLabel}`}
       style={({ pressed }) => [
         styles.card,
+        { width: cardWidth, maxWidth: '100%' },
         {
           backgroundColor: card,
           borderColor: border,

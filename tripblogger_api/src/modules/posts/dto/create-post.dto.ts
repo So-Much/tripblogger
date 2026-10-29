@@ -15,6 +15,11 @@ export class LocationDto {
   @IsString()
   @MaxLength(256)
   name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  locationId?: string;
 }
 
 export class CreatePostDto {

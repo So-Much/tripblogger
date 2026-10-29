@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -7,15 +7,14 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { CategoryTabs } from '@/src/components/commerce/CategoryTabs';
 import { ProductList } from '@/src/components/commerce/ProductList';
+import { ShopCategoryStrip } from '@/src/components/commerce/ShopCategoryStrip';
 import {
   ShopFilterSheet,
   countActiveFilters,
   type ShopFilterValues,
 } from '@/src/components/commerce/ShopFilterSheet';
-import { ShopFilterBar } from '@/src/components/commerce/ShopFilterBar';
-import { ShopInlineFilterChips } from '@/src/components/commerce/ShopInlineFilterChips';
+import { ShopSearchToolbar } from '@/src/components/commerce/ShopSearchToolbar';
 import { useMeQuery } from '@/src/hooks/useAuth';
 import { useProductQuickActions } from '@/src/hooks/use-product-quick-actions';
 import { useI18n } from '@/src/i18n';
@@ -42,8 +41,18 @@ export function ShopScreen() {
   const [filters, setFilters] = useState<ShopFilterValues>(DEFAULT_FILTERS);
   const [filterDraft, setFilterDraft] = useState<ShopFilterValues>(DEFAULT_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isMember = meQuery.data?.role === 'MEMBER';
+  const hasSession = Boolean(meQuery.data);
+  const userRole = meQuery.data?.role;
+  const currentUserId = meQuery.data?.id ?? null;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const requireMember = useCallback(() => {
     Alert.alert(t('tabShop'), t('shopMemberRequired'), [
@@ -71,7 +80,7 @@ export function ShopScreen() {
   });
 
   const productsQuery = useInfiniteQuery({
-    queryKey: ['commerce', 'products', 'public', categoryId, filters.productType, filters.sortBy],
+    queryKey: ['commerce', 'products', 'public', categoryId, filters.productType, filters.sortBy, searchQuery],
     queryFn: ({ pageParam }) =>
       commerceService.listPublicProducts({
         limit: 20,
@@ -79,6 +88,7 @@ export function ShopScreen() {
         categoryId,
         productType: filters.productType,
         sortBy: filters.sortBy,
+        search: searchQuery.length >= 2 ? searchQuery : undefined,
       }),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -95,7 +105,7 @@ export function ShopScreen() {
   const cartCountQuery = useQuery({
     queryKey: ['commerce', 'cart'],
     queryFn: () => commerceService.getCart(),
-    enabled: isMember,
+    enabled: hasSession,
     staleTime: 30_000,
   });
 
@@ -120,13 +130,6 @@ export function ShopScreen() {
           <Pressable
             hitSlop={headerHitSlop}
             accessibilityRole="button"
-            accessibilityLabel={t('shopSearch')}
-            onPress={() => router.push('/(tabs)/shop/search')}>
-            <IconSymbol name="magnifyingglass" size={22} color={tint} />
-          </Pressable>
-          <Pressable
-            hitSlop={headerHitSlop}
-            accessibilityRole="button"
             accessibilityLabel={t('wishlistTitle')}
             onPress={() => router.push('/(tabs)/shop/wishlist')}
             style={styles.hdrPad}>
@@ -136,14 +139,14 @@ export function ShopScreen() {
             hitSlop={headerHitSlop}
             accessibilityRole="button"
             accessibilityLabel={
-              isMember && (cartCountQuery.data?.itemCount ?? 0) > 0
+              hasSession && (cartCountQuery.data?.itemCount ?? 0) > 0
                 ? t('cartBadgeA11y', { count: cartCountQuery.data?.itemCount ?? 0 })
                 : t('cartTitle')
             }
             onPress={() => router.push('/(tabs)/shop/cart')}
             style={styles.cartWrap}>
             <IconSymbol name="cart.fill" size={22} color={tint} />
-            {isMember && (cartCountQuery.data?.itemCount ?? 0) > 0 ? (
+            {hasSession && (cartCountQuery.data?.itemCount ?? 0) > 0 ? (
               <View style={[styles.cartBadge, { backgroundColor: danger }]}>
                 <ThemedText style={styles.cartBadgeTxt}>
                   {(cartCountQuery.data?.itemCount ?? 0) > 99 ? '99+' : String(cartCountQuery.data?.itemCount)}
@@ -154,7 +157,7 @@ export function ShopScreen() {
         </View>
       ),
     });
-  }, [navigation, router, tint, danger, t, isMember, cartCountQuery.data?.itemCount]);
+  }, [navigation, router, tint, danger, t, hasSession, cartCountQuery.data?.itemCount]);
 
   const onEndReached = useCallback(() => {
     if (productsQuery.hasNextPage && !productsQuery.isFetchingNextPage) {
@@ -164,28 +167,31 @@ export function ShopScreen() {
 
   const onProductAction = useCallback(
     (action: 'cart' | 'buy' | 'wish', product: ProductDto) => {
-      quickActions.run(action, product.id, isMember);
+      quickActions.run(action, product.id, userRole);
     },
-    [isMember, quickActions],
+    [userRole, quickActions],
   );
 
   const listHeader = (
     <>
-      <CategoryTabs
-        categories={categoriesQuery.data ?? []}
-        selectedId={categoryId}
-        onSelect={setCategoryId}
-        isLoading={categoriesQuery.isLoading}
-      />
-      <ShopInlineFilterChips value={filters} onChange={setFilters} />
-      <ShopFilterBar
-        resultCount={total}
+      <ShopSearchToolbar
+        query={searchInput}
+        onChangeQuery={setSearchInput}
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => {
           setFilterDraft(filters);
           setFilterOpen(true);
         }}
       />
+      <ShopCategoryStrip
+        categories={categoriesQuery.data ?? []}
+        selectedId={categoryId}
+        onSelect={setCategoryId}
+        isLoading={categoriesQuery.isLoading}
+      />
+      <ThemedText style={[styles.resultCount, { color: muted }]}>
+        {t('shopResultCount', { count: total })}
+      </ThemedText>
       {isMember && !isVerifiedSeller ? (
         <Pressable
           style={[styles.verifyBanner, { borderColor: border, backgroundColor: card }]}
@@ -212,7 +218,15 @@ export function ShopScreen() {
           </Pressable>
         </View>
       ) : (
-        <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
+        <View style={[styles.loginPromptCard, { borderColor: border, backgroundColor: card }]}>
+          <ThemedText style={[styles.hint, { color: muted }]}>{t('shopSellMemberRequired')}</ThemedText>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.btn, styles.btnPrimary, { backgroundColor: tint }]}
+            onPress={() => router.push('/login')}>
+            <ThemedText style={[styles.btnPrimaryTxt, { color: onCta }]}>{t('login')}</ThemedText>
+          </Pressable>
+        </View>
       )}
     </>
   );
@@ -233,10 +247,11 @@ export function ShopScreen() {
           onAddToCart={(p) => onProductAction('cart', p)}
           onToggleWishlist={(p) => onProductAction('wish', p)}
           wishlistedIds={wishlistIdsQuery.data}
-          cartQtyByProductId={isMember ? cartQtyByProductId : undefined}
-          actionsDisabled={!isMember}
+          cartQtyByProductId={hasSession ? cartQtyByProductId : undefined}
+          wishlistDisabled={!isMember}
           pendingProductId={quickActions.pending?.productId ?? null}
           pendingAction={quickActions.pending?.action ?? null}
+          currentUserId={currentUserId}
           ListHeaderComponent={listHeader}
           emptyLabel={productsQuery.isError ? t('productEmpty') : t('productEmpty')}
         />
@@ -274,6 +289,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cartBadgeTxt: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  resultCount: { fontSize: 13, paddingHorizontal: 16, paddingBottom: 8 },
   verifyBanner: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 12, borderWidth: 1, gap: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, marginBottom: 8 },
   btn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, minHeight: 44, justifyContent: 'center' },
@@ -281,4 +297,12 @@ const styles = StyleSheet.create({
   btnPrimary: { borderWidth: 0 },
   btnPrimaryTxt: { fontWeight: '700', fontSize: 14 },
   hint: { paddingHorizontal: 16, marginBottom: 8, fontSize: 13 },
+  loginPromptCard: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
 });

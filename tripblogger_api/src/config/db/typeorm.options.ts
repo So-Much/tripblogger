@@ -32,6 +32,16 @@ import { OrderProductEntity } from '../../modules/commerce/entities/order-produc
 import { PaymentEntity } from '../../modules/commerce/entities/payment.entity';
 import { ShipmentEntity } from '../../modules/commerce/entities/shipment.entity';
 import { ProductRatingEntity } from '../../modules/commerce/entities/product-rating.entity';
+import { LocationEntity } from '../../modules/locations/entities/location.entity';
+import { LocationTypeEntity } from '../../modules/locations/entities/location-type.entity';
+import { LocationReviewEntity } from '../../modules/locations/entities/location-review.entity';
+import { LocationMediaEntity } from '../../modules/locations/entities/location-media.entity';
+import { UserCheckinEntity } from '../../modules/locations/entities/user-checkin.entity';
+import { SavedLocationEntity } from '../../modules/locations/entities/saved-location.entity';
+import { TripEntity } from '../../modules/trips/entities/trip.entity';
+import { TripDayEntity } from '../../modules/trips/entities/trip-day.entity';
+import { TripStopEntity } from '../../modules/trips/entities/trip-stop.entity';
+import { TripStopTagEntity } from '../../modules/trips/entities/trip-stop-tag.entity';
 
 export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOptions {
   const instanceName = configService.get<string>('DB_INSTANCE');
@@ -83,8 +93,19 @@ export function getTypeOrmConfig(configService: ConfigService): TypeOrmModuleOpt
       PaymentEntity,
       ShipmentEntity,
       ProductRatingEntity,
+      LocationEntity,
+      LocationTypeEntity,
+      LocationReviewEntity,
+      LocationMediaEntity,
+      UserCheckinEntity,
+      SavedLocationEntity,
+      TripEntity,
+      TripDayEntity,
+      TripStopEntity,
+      TripStopTagEntity,
     ],
     migrations: ['src/migrations/*.ts'],
+    migrationsRun: process.env.NODE_ENV !== 'test' && process.env.DB_MIGRATE_ON_BOOT !== '0',
     synchronize: false,
   };
 }

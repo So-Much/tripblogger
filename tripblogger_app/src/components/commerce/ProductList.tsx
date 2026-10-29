@@ -4,9 +4,12 @@ import {
   FlatList,
   RefreshControl,
   StyleSheet,
+  useWindowDimensions,
   View,
   type ListRenderItem,
 } from 'react-native';
+import { productColumnCount } from '@/src/platform/client-form';
+import { useClientForm } from '@/src/platform/use-client-form';
 import { ThemedText } from '@/components/themed-text';
 import { useCommerceTheme } from '@/hooks/use-commerce-theme';
 import { ProductCard } from '@/src/components/commerce/ProductCard';
@@ -29,11 +32,13 @@ type ProductListProps = {
   wishlistedIds?: Set<string>;
   cartQtyByProductId?: Map<string, number>;
   actionsDisabled?: boolean;
+  wishlistDisabled?: boolean;
   pendingProductId?: string | null;
   pendingAction?: ProductQuickAction | null;
   ListHeaderComponent?: React.ReactElement | null;
   emptyLabel: string;
   numColumns?: 1 | 2;
+  currentUserId?: string | null;
 };
 
 function ProductListInner({
@@ -51,33 +56,43 @@ function ProductListInner({
   wishlistedIds,
   cartQtyByProductId,
   actionsDisabled,
+  wishlistDisabled,
   pendingProductId,
   pendingAction,
   ListHeaderComponent,
   emptyLabel,
   numColumns = 2,
+  currentUserId,
 }: ProductListProps) {
   const { textMuted } = useCommerceTheme();
+  const form = useClientForm();
+  const { width } = useWindowDimensions();
+  const columns = form === 'phone' ? numColumns : productColumnCount(form, width);
 
   const renderItem: ListRenderItem<ProductDto> = useCallback(
-    ({ item }) => (
-      <View style={numColumns === 2 ? styles.col : styles.colFull}>
+    ({ item }) => {
+      const isOwn = Boolean(currentUserId && item.sellerId === currentUserId);
+      return (
+      <View style={{ width: `${100 / columns}%`, paddingHorizontal: 8 }}>
         <ProductCard
           product={item}
+          cardVariant={isOwn ? 'own' : 'marketplace'}
           onPress={() => onPressProduct(item.id)}
           onLongPress={onLongPressProduct ? () => onLongPressProduct(item) : undefined}
-          onBuyNow={onBuyNow ? () => onBuyNow(item) : undefined}
-          onAddToCart={onAddToCart ? () => onAddToCart(item) : undefined}
-          onToggleWishlist={onToggleWishlist ? () => onToggleWishlist(item) : undefined}
+          onBuyNow={!isOwn && onBuyNow ? () => onBuyNow(item) : undefined}
+          onAddToCart={!isOwn && onAddToCart ? () => onAddToCart(item) : undefined}
+          onToggleWishlist={!isOwn && onToggleWishlist ? () => onToggleWishlist(item) : undefined}
           isWishlisted={wishlistedIds?.has(item.id)}
           inCartQty={cartQtyByProductId?.get(item.id)}
           actionsDisabled={actionsDisabled}
+          wishlistDisabled={wishlistDisabled}
           pendingAction={pendingProductId === item.id ? pendingAction ?? null : null}
         />
       </View>
-    ),
+      );
+    },
     [
-      numColumns,
+      columns,
       onPressProduct,
       onLongPressProduct,
       onBuyNow,
@@ -86,17 +101,19 @@ function ProductListInner({
       wishlistedIds,
       cartQtyByProductId,
       actionsDisabled,
+      wishlistDisabled,
       pendingProductId,
       pendingAction,
+      currentUserId,
     ],
   );
 
   return (
     <FlatList
       data={items}
-      key={numColumns}
+      key={columns}
       keyExtractor={(i) => i.id}
-      numColumns={numColumns}
+      numColumns={columns}
       renderItem={renderItem}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.35}

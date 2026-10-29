@@ -1,4 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, Headers, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -7,17 +8,20 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { GuestDto } from './dto/guest.dto';
 import { BanGuestDto } from './dto/ban-guest.dto';
 import { GoogleDto } from './dto/google.dto';
+import { AUTH_THROTTLE } from '../../config/http-security';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @Throttle(AUTH_THROTTLE)
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @Throttle(AUTH_THROTTLE)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -45,6 +49,7 @@ export class AuthController {
   }
 
   @Post('google')
+  @Throttle(AUTH_THROTTLE)
   google(@Body() dto: GoogleDto) {
     return this.authService.googleLogin(dto.idToken, dto.deviceId);
   }

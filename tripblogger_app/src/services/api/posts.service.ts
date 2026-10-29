@@ -53,6 +53,17 @@ export const postsService = {
     return { ...res.data, items: res.data.items.map(normalizePost) };
   },
 
+  async listMineNear(params: {
+    locationId?: string;
+    lat?: number;
+    lng?: number;
+    radiusM?: number;
+    limit?: number;
+  }): Promise<{ items: PostDto[] }> {
+    const res = await apiClient.get<{ items: PostDto[] }>('/posts/mine/near', { params });
+    return { items: (res.data.items ?? []).map(normalizePost) };
+  },
+
   async listMine(params: { limit?: number; cursor?: string; status?: 'DRAFT' | 'PUBLISHED' }): Promise<PaginatedPosts> {
     const res = await apiClient.get<PaginatedPosts>('/posts/mine', {
       params: {
@@ -191,6 +202,8 @@ export const postsService = {
     body.append('kind', kind);
     body.append('file', file as unknown as Blob);
     const res = await apiClient.post<{
+      id?: string;
+      mediaId?: string;
       kind: 'image' | 'video';
       url: string;
       thumbnailUrl?: string;
@@ -208,6 +221,7 @@ export const postsService = {
     });
     return {
       ...res.data,
+      mediaId: res.data.mediaId ?? res.data.id,
       url: toAbsolute(res.data.url) ?? res.data.url,
       thumbnailUrl: toAbsolute(res.data.thumbnailUrl),
       previewUrl: toAbsolute(res.data.previewUrl),

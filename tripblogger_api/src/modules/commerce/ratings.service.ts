@@ -5,6 +5,7 @@ import { ProductRatingEntity } from './entities/product-rating.entity';
 import { OrderProductEntity } from './entities/order-product.entity';
 import { ProductEntity } from './entities/product.entity';
 import { CreateRatingDto, QueryRatingsDto } from './dto/shopping.dto';
+import { sanitizePlainText } from '../../common/utils/html-sanitize';
 import { DEFAULT_ANALYTICS_JSON } from './constants';
 
 @Injectable()
@@ -34,7 +35,7 @@ export class RatingsService {
         userId,
         orderProductId: dto.orderProductId,
         score: dto.score,
-        review: dto.review?.trim() || null,
+        review: sanitizePlainText(dto.review) || null,
       }),
     );
     await this.recalculateProductAnalytics(productId);

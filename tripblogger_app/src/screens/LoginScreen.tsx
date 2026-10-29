@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionPulse } from '@/src/components/feedback/ActionPulse';
 import { PressableScale } from '@/src/components/feedback/PressableScale';
+import { PasswordField } from '@/src/components/forms/PasswordField';
+import { ThemedTextInput } from '@/src/components/forms/ThemedTextInput';
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,14 +25,14 @@ import { apiBaseUrl } from '@/src/services/api/client';
 import { signInWithGoogleIdToken } from '@/src/services/auth/google-auth';
 import { formatApiError } from '@/src/utils/format-api-error';
 import { useI18n } from '@/src/i18n';
+import { clearSessionQueryCache } from '@/src/services/session/session-bootstrap.service';
 import { ensureDeviceId, persistAuthTokens } from '@/src/services/session/session.service';
+import { DEV_TEST_ACCOUNT } from '@/src/constants/dev-test-account';
 
-const loginSchema = z.object({
-  username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+type LoginForm = {
+  username: string;
+  password: string;
+};
 
 export function LoginScreen() {
   const router = useRouter();
@@ -41,30 +42,48 @@ export function LoginScreen() {
   const meQuery = useMeQuery();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successPulse, setSuccessPulse] = useState(0);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const borderColor = useThemeColor({}, 'border');
   const card = useThemeColor({}, 'card');
   const muted = useThemeColor({}, 'textMuted');
   const cta = useThemeColor({}, 'cta');
   const accent = useThemeColor({}, 'accent');
   const textColor = useThemeColor({}, 'text');
+  const onCta = useThemeColor({}, 'onCta');
+
+  const loginSchema = useMemo(
+    () =>
+      z.object({
+        username: z.string().min(3, t('authUsernameMin')),
+        password: z.string().min(8, t('authPasswordMin')),
+      }),
+    [t],
+  );
 
   const { control, handleSubmit } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: 'much',
-      password: '12345678',
+      username: __DEV__ ? DEV_TEST_ACCOUNT.username : '',
+      password: __DEV__ ? DEV_TEST_ACCOUNT.password : '',
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    };
+  }, []);
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
       const deviceId = await ensureDeviceId();
+      clearSessionQueryCache();
       const tokens = await loginMutation.mutateAsync({ ...values, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
       setSuccessPulse((k) => k + 1);
-      setTimeout(() => router.replace('/'), 200);
+      navTimerRef.current = setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('loginFailed')));
     }
@@ -75,11 +94,12 @@ export function LoginScreen() {
     try {
       const idToken = await signInWithGoogleIdToken();
       const deviceId = await ensureDeviceId();
+      clearSessionQueryCache();
       const tokens = await googleLoginMutation.mutateAsync({ idToken, deviceId });
       await persistAuthTokens(tokens);
       await meQuery.refetch();
       setSuccessPulse((k) => k + 1);
-      setTimeout(() => router.replace('/'), 200);
+      navTimerRef.current = setTimeout(() => router.replace('/'), 200);
     } catch (error) {
       setSubmitError(formatApiError(error, t('googleSignInFailed')));
     }
@@ -111,12 +131,10 @@ export function LoginScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('username')}
                     </ThemedText>
-                    <TextInput
+                    <ThemedTextInput
                       accessibilityLabel="Username"
                       autoCapitalize="none"
                       placeholder="your_username"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
                       value={value}
                       onChangeText={onChange}
                     />
@@ -133,15 +151,7 @@ export function LoginScreen() {
                     <ThemedText type="defaultSemiBold" style={styles.label}>
                       {t('password')}
                     </ThemedText>
-                    <TextInput
-                      accessibilityLabel="Password"
-                      secureTextEntry
-                      placeholder="••••••••"
-                      placeholderTextColor={muted}
-                      style={[styles.input, { borderColor, color: textColor }]}
-                      value={value}
-                      onChangeText={onChange}
-                    />
+                    <PasswordField value={value} onChangeText={onChange} accessibilityLabel="Password" />
                     {error ? <ThemedText style={styles.error}>{error.message}</ThemedText> : null}
                   </View>
                 )}
@@ -150,19 +160,29 @@ export function LoginScreen() {
               {submitError ? <ThemedText style={styles.error}>{submitError}</ThemedText> : null}
 
               {__DEV__ ? (
-                <ThemedText style={[styles.devHint, { color: muted }]} selectable>{`API: ${apiBaseUrl}`}</ThemedText>
+                <View style={styles.devHints}>
+                  <ThemedText style={[styles.devHint, { color: muted }]}>
+                    {`Dev: prefilled ${DEV_TEST_ACCOUNT.username} / ${DEV_TEST_ACCOUNT.password}`}
+                  </ThemedText>
+                  <ThemedText style={[styles.devHint, { color: muted }]} selectable>
+                    {`API: ${apiBaseUrl}`}
+                  </ThemedText>
+                </View>
               ) : null}
 
               <ActionPulse pulseKey={successPulse}>
-                <PressableScale style={[styles.signInButton, { backgroundColor: cta }]} onPress={onSubmit}>
-                  <ThemedText type="defaultSemiBold" style={styles.signInText}>
+                <PressableScale
+                  style={[styles.signInButton, { backgroundColor: cta }]}
+                  onPress={onSubmit}
+                  disabled={loginMutation.isPending || googleLoginMutation.isPending}>
+                  <ThemedText type="defaultSemiBold" style={[styles.signInText, { color: onCta }]}>
                     {loginMutation.isPending ? t('signingIn') : t('signIn')}
                   </ThemedText>
                 </PressableScale>
               </ActionPulse>
 
               <PressableScale style={[styles.googleButton, { borderColor }]} onPress={onGoogle} disabled={googleLoginMutation.isPending}>
-                <ThemedText type="defaultSemiBold">{googleLoginMutation.isPending ? 'Connecting…' : t('loginWithGoogle')}</ThemedText>
+                <ThemedText type="defaultSemiBold">{googleLoginMutation.isPending ? t('authConnecting') : t('loginWithGoogle')}</ThemedText>
               </PressableScale>
 
               <Pressable onPress={() => router.push('/register')}>
@@ -237,20 +257,11 @@ const styles = StyleSheet.create({
     opacity: 0.95,
   },
   field: { gap: 4 },
-  input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    minHeight: 48,
-  },
+  devHints: { gap: 2, marginTop: 4, marginBottom: 2 },
   devHint: {
     fontSize: 11,
     lineHeight: 15,
     fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-    marginTop: 4,
-    marginBottom: 2,
     opacity: 0.95,
   },
   signInButton: {
@@ -266,7 +277,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingVertical: 14,
   },
-  signInText: { color: '#fff' },
+  signInText: { fontWeight: '600' },
   skip: {
     paddingVertical: 4,
     textAlign: 'center',

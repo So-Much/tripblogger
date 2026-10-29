@@ -36,11 +36,11 @@ export class PlacesService {
     const cached = this.getCache(key, 24 * 60 * 60 * 1000);
     if (cached) return cached;
 
-    const params = new URLSearchParams({ lat: String(lat), lon: String(lng), limit: String(limit), lang: 'vi' });
+    const params = new URLSearchParams({ lat: String(lat), lon: String(lng), limit: String(limit) });
     const url = `${PHOTON_BASE}/reverse?${params.toString()}`;
-    let results = await this.fetchPhotonFeatures(url, 'photon');
+    let results = await this.fetchPhotonFeatures(url, 'photon', true);
     if (!results.length) {
-      results = await this.reverseNominatim(lat, lng);
+      results = await this.reverseNominatim(lat, lng, true);
     }
     this.setCache(key, results, 24 * 60 * 60 * 1000);
     return results;
@@ -56,13 +56,18 @@ export class PlacesService {
     return results;
   }
 
-  private async fetchPhotonFeatures(url: string, source: PlaceSource): Promise<PlaceResultDto[]> {
+  private async fetchPhotonFeatures(
+    url: string,
+    source: PlaceSource,
+    softFail = false,
+  ): Promise<PlaceResultDto[]> {
     this.throttlePhoton();
     try {
       const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
       if (res.status === 429) throw new HttpException('Places rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
       if (!res.ok) {
         this.logger.warn(`Photon ${res.status} for ${url}`);
+        if (softFail) return [];
         throw new BadGatewayException('Places search unavailable');
       }
       const body = (await res.json()) as {
@@ -77,6 +82,7 @@ export class PlacesService {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       this.logger.error('Photon request failed', e);
+      if (softFail) return [];
       throw new BadGatewayException('Places search unavailable');
     }
   }
@@ -112,7 +118,7 @@ export class PlacesService {
     };
   }
 
-  private async reverseNominatim(lat: number, lng: number): Promise<PlaceResultDto[]> {
+  private async reverseNominatim(lat: number, lng: number, softFail = false): Promise<PlaceResultDto[]> {
     await this.throttleNominatim();
     const params = new URLSearchParams({
       lat: String(lat),
@@ -124,7 +130,10 @@ export class PlacesService {
     try {
       const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
       if (res.status === 429) throw new HttpException('Places rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
-      if (!res.ok) throw new BadGatewayException('Reverse geocode unavailable');
+      if (!res.ok) {
+        if (softFail) return [];
+        throw new BadGatewayException('Reverse geocode unavailable');
+      }
       const body = (await res.json()) as {
         place_id?: number;
         lat?: string;
@@ -156,6 +165,7 @@ export class PlacesService {
     } catch (e) {
       if (e instanceof HttpException) throw e;
       this.logger.error('Nominatim reverse failed', e);
+      if (softFail) return [];
       throw new BadGatewayException('Reverse geocode unavailable');
     }
   }

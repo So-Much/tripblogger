@@ -1,0 +1,20 @@
+entryPoints:
+  web:
+    address: ':3000'
+
+api:
+  dashboard: true
+  insecure: true
+
+providers:
+  docker:
+    exposedByDefault: false
+  file:
+    filename: /etc/traefik/dynamic.yml
+
+metrics:
+  prometheus:
+    addRoutersLabels: true
+
+log:
+  level: INFO

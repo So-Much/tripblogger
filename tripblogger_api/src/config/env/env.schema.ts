@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { assertNoPlaceholderSecrets } from '@tripblogger/observability';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -18,6 +19,13 @@ const envSchema = z.object({
   REDIS_HOST: z.string().default('127.0.0.1'),
   REDIS_PORT: z.coerce.number().default(6379),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
+  GEO_DELEGATE: z.string().optional(),
+  TRIP_DELEGATE: z.string().optional(),
+  JWT_ACCESS_PRIVATE_KEY: z.string().optional(),
+  JWT_ACCESS_PRIVATE_KEY_PATH: z.string().optional(),
+  JWT_ACCESS_PUBLIC_KEY: z.string().optional(),
+  JWT_ACCESS_PUBLIC_KEY_PATH: z.string().optional(),
+  JWT_ACCESS_KID: z.string().default('core-2026-09'),
   LOG_HTTP_PRETTY: z.string().optional(),
   LOG_HTTP_INCLUDE_HEADERS: z.string().optional(),
   LOG_HTTP_INCLUDE_PARAMS: z.string().optional(),
@@ -25,10 +33,27 @@ const envSchema = z.object({
   LOG_HTTP_INCLUDE_COOKIE: z.string().optional(),
   LOG_HTTP_INCLUDE_REQUEST: z.string().optional(),
   LOG_HTTP_INCLUDE_RESPONSE: z.string().optional(),
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().default('uploads'),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
 
 export function validateEnv(config: Record<string, unknown>): AppEnv {
-  return envSchema.parse(config);
+  const env = envSchema.parse(config);
+  if (env.STORAGE_DRIVER === 's3' && (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY || !env.S3_SECRET_KEY)) {
+    throw new Error('STORAGE_DRIVER=s3 needs S3_ENDPOINT, S3_ACCESS_KEY and S3_SECRET_KEY');
+  }
+  assertNoPlaceholderSecrets(config, [
+    'JWT_ACCESS_SECRET',
+    'JWT_REFRESH_SECRET',
+    'ADMIN_SECRET',
+    'DB_PASSWORD',
+    'S3_SECRET_KEY',
+  ]);
+  return env;
 }

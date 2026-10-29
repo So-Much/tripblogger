@@ -5,6 +5,7 @@ import { In, Repository } from 'typeorm';
 import { UserEntity } from './entities/user.entity';
 import { UserStatusEntity } from './entities/user-status.entity';
 import { UserStatusCode } from './enums/status.enum';
+import { sanitizePlainText } from '../../common/utils/html-sanitize';
 import { PostEntity } from '../posts/entities/post.entity';
 import { ProductEntity } from '../commerce/entities/product.entity';
 
@@ -39,13 +40,19 @@ export class UsersService {
 
   async updateMyProfile(
     userId: string,
-    payload: { displayName?: string; avatarUrl?: string | null; email?: string | null },
+    payload: {
+      displayName?: string;
+      avatarUrl?: string | null;
+      email?: string | null;
+      totalTravelBudgetAmount?: number | null;
+      totalTravelBudgetCurrency?: string | null;
+    },
   ) {
     const profile = await this.memberProfilesRepo.findOne({ where: { userId } });
     if (!profile) throw new NotFoundException('Member profile not found');
 
     if (payload.displayName !== undefined) {
-      const nextName = payload.displayName.trim();
+      const nextName = sanitizePlainText(payload.displayName);
       profile.displayName = nextName.length > 0 ? nextName : profile.username;
     }
     if (payload.avatarUrl !== undefined) {
@@ -54,6 +61,21 @@ export class UsersService {
     if (payload.email !== undefined) {
       const trimmed = payload.email?.trim() ?? '';
       profile.email = trimmed.length > 0 ? trimmed : null;
+    }
+    if (payload.totalTravelBudgetAmount !== undefined) {
+      profile.totalTravelBudgetAmount =
+        payload.totalTravelBudgetAmount != null && payload.totalTravelBudgetAmount > 0
+          ? String(payload.totalTravelBudgetAmount)
+          : null;
+      if (payload.totalTravelBudgetAmount == null || payload.totalTravelBudgetAmount <= 0) {
+        profile.totalTravelBudgetCurrency = null;
+      } else if (payload.totalTravelBudgetCurrency !== undefined) {
+        profile.totalTravelBudgetCurrency = payload.totalTravelBudgetCurrency;
+      } else if (!profile.totalTravelBudgetCurrency) {
+        profile.totalTravelBudgetCurrency = 'VND';
+      }
+    } else if (payload.totalTravelBudgetCurrency !== undefined) {
+      profile.totalTravelBudgetCurrency = payload.totalTravelBudgetCurrency;
     }
 
     await this.memberProfilesRepo.save(profile);
@@ -71,21 +93,30 @@ export class UsersService {
   async getMeProfile(userId: string) {
     const user = await this.usersRepo.findOne({
       where: { id: userId },
-      relations: ['role', 'memberProfile', 'statuses'],
+      relations: ['role', 'memberProfile', 'statuses', 'statuses.status'],
     });
     if (!user) throw new NotFoundException('User not found');
-    const statuses = user.statuses.filter((status) => status.isActive).map((status) => status.statusCode as UserStatusCode);
+    const activeStatuses = user.statuses.filter((status) => status.isActive);
+    const statuses = activeStatuses.map((status) => status.statusCode as UserStatusCode);
 
     return {
       id: user.id,
       role: user.role.code,
       statuses,
+      statusDetails: activeStatuses.map((status) => ({
+        code: status.statusCode as UserStatusCode,
+        displayName: status.status?.displayName ?? status.statusCode,
+      })),
       profile: user.memberProfile
         ? {
             username: user.memberProfile.username,
             email: user.memberProfile.email ?? null,
             displayName: user.memberProfile.displayName ?? null,
             avatarUrl: user.memberProfile.avatarUrl ?? null,
+            totalTravelBudgetAmount: user.memberProfile.totalTravelBudgetAmount
+              ? Number(user.memberProfile.totalTravelBudgetAmount)
+              : null,
+            totalTravelBudgetCurrency: user.memberProfile.totalTravelBudgetCurrency ?? null,
           }
         : null,
       createdAt: user.createdAt,
