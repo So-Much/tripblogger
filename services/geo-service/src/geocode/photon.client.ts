@@ -15,7 +15,8 @@ type Cache = {
 
 const CACHE_TTL_S = 7 * 24 * 3600;
 const LOCAL_TIMEOUT_MS = 1500;
-const PUBLIC_TIMEOUT_MS = 4000;
+/** The free public instance often needs >4 s on a cold connection (DNS + TLS from the container). */
+const PUBLIC_TIMEOUT_MS = 8000;
 /** How long a failed base is skipped, so an absent local Photon does not add its timeout to every request. */
 export const PHOTON_COOLDOWN_MS = 60_000;
 

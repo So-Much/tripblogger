@@ -150,9 +150,17 @@ async function main() {
     const lat = (10.7769 + Math.random() / 1000).toFixed(6);
     const lng = (106.7009 + Math.random() / 1000).toFixed(6);
     const path = `/api/map/reverse?lat=${lat}&lng=${lng}`;
-    const t0 = Date.now();
-    const first = await call('GET', path, { headers: { 'Accept-Language': 'vi' } });
+    let t0 = Date.now();
+    let first = await call('GET', path, { headers: { 'Accept-Language': 'vi' } });
+    if (first.status === 503) {
+      t0 = Date.now();
+      first = await call('GET', path, { headers: { 'Accept-Language': 'vi' } });
+    }
     const firstMs = Date.now() - t0;
+    // photon.komoot.io is a third-party free service; its outages must not fail our pipeline.
+    if (first.status === 503 && first.data?.error === 'photon_unavailable') {
+      return 'SKIPPED — public Photon unreachable';
+    }
     const t1 = Date.now();
     const second = await call('GET', path, { headers: { 'Accept-Language': 'vi' } });
     const cachedMs = Date.now() - t1;
