@@ -1,5 +1,5 @@
 // One user walking the main read paths through Traefik. Fails fast if any route is broken.
-import { guestToken, journey } from './lib.js';
+import { guestToken, journey, memberToken } from './lib.js';
 
 export const options = {
   vus: 1,
@@ -11,7 +11,8 @@ export const options = {
 };
 
 export function setup() {
-  return { token: guestToken() };
+  guestToken();
+  return { token: memberToken() };
 }
 
 export default function ({ token }) {

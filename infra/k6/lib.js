@@ -3,6 +3,13 @@ import { check } from 'k6';
 
 export const BASE = __ENV.BASE_URL || 'http://traefik:3000';
 
+function accessToken(res, what) {
+  const body = res.json();
+  const token = body.accessToken || (body.data && body.data.accessToken);
+  if (!token) throw new Error(`No accessToken in ${what} response: ${res.body}`);
+  return token;
+}
+
 /** Guest token from Core; Geo/Trip validate it through Core's JWKS. */
 export function guestToken() {
   const id = `k6-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -10,10 +17,20 @@ export function guestToken() {
     headers: { 'Content-Type': 'application/json' },
   });
   check(res, { 'guest login 2xx': (r) => r.status >= 200 && r.status < 300 });
-  const body = res.json();
-  const token = body.accessToken || (body.data && body.data.accessToken);
-  if (!token) throw new Error(`No accessToken in guest response: ${res.body}`);
-  return token;
+  return accessToken(res, 'guest');
+}
+
+/** Throwaway member: trip routes require role MEMBER, a guest gets 403 there by design. */
+export function memberToken() {
+  const id = `k6_${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
+  const password = 'K6-pass-12345';
+  const res = http.post(
+    `${BASE}/api/auth/register`,
+    JSON.stringify({ username: id, password, confirmPassword: password, deviceId: id }),
+    { headers: { 'Content-Type': 'application/json' } },
+  );
+  check(res, { 'member register 2xx': (r) => r.status >= 200 && r.status < 300 });
+  return accessToken(res, 'register');
 }
 
 export function auth(token) {

@@ -1,7 +1,7 @@
 // Ramp to 20 users. Geo/Trip throttle per client IP (THROTTLE_LIMIT, default 300/min) and k6 is one IP,
 // so raise THROTTLE_LIMIT in .env.compose before a real load run or 429s will show up as failures.
 import { sleep } from 'k6';
-import { guestToken, journey } from './lib.js';
+import { journey, memberToken } from './lib.js';
 
 export const options = {
   stages: [
@@ -17,7 +17,7 @@ export const options = {
 };
 
 export function setup() {
-  return { token: guestToken() };
+  return { token: memberToken() };
 }
 
 export default function ({ token }) {
