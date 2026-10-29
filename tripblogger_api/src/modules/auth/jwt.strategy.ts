@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { loadAccessPublicKey } from './jwt-keys';
+import { loadAccessPrivateKey, loadAccessPublicKey } from './jwt-keys';
 
 export interface JwtPayload {
   sub: string;
@@ -15,6 +15,9 @@ export interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(configService: ConfigService) {
     const pem = loadAccessPublicKey();
+    if (Boolean(pem) !== Boolean(loadAccessPrivateKey())) {
+      throw new Error('JWT access keys must be configured as a pair (private + public) or not at all.');
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
